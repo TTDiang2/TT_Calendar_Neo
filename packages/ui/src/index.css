@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/* ── 扫描范围（重要，别删）─────────────────────────────────────────
+   Tailwind v4 靠「从 CSS 文件往上找 .git」来确定扫描根目录。
+   一旦找不到 .git，它扫描范围会缩错，导致 utilities 层为空
+   —— 页面就会退化成没有排版的纯文字（F12 还看不到任何报错）。
+   这里显式声明，保证三端（web / desktop / mobile）都拿到完整样式。
+   路径相对于本文件所在目录（packages/ui/src）。
+   ---------------------------------------------------------------- */
+@source "./";             /* packages/ui/src 下的全部组件 */
+@source "../../../apps";  /* 各端 app 自己的源码 */
+
+@theme {
+  --color-weekend: #dc2626;
+  --color-accent: #3b82f6;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+.tt-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+  color: #1f2937;
+  transition: border-color 0.15s;
+}
+.tt-input:focus {
+  outline: none;
+  border-color: #60a5fa;
+}
+
+/* 待办新建/切换行进入动画 */
+@keyframes tt-fade-slide-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.tt-row-enter {
+  animation: tt-fade-slide-in 0.25s ease-out;
+}

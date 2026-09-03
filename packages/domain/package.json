@@ -1,0 +1,25 @@
+{
+  "name": "@tt-calendar/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "纯业务逻辑：零 IO 依赖，可在 node / browser / 移动端 webview 任意环境跑",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tt-calendar/contracts": "workspace:*",
+    "lunar-typescript": "^1.8.6",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

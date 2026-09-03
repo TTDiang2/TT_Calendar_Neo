@@ -1,0 +1,38 @@
+{
+  "name": "tt-calendar-neo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TT Calendar Neo — 全栈 TypeScript 日历（桌面 / 移动 / Web 三端同构）",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "build": "pnpm -r run build",
+    "dev:desktop": "pnpm --filter @tt-calendar/desktop dev",
+    "dev:web": "pnpm --filter @tt-calendar/web dev",
+    "tauri": "pnpm --filter @tt-calendar/desktop tauri",
+    "data:inspect": "tsx scripts/data-inspect.ts",
+    "data:reset": "tsx scripts/data-reset.ts",
+    "migrate:legacy": "tsx scripts/migrate-legacy.ts",
+    "gen:types": "tsx scripts/gen-types.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/node": "^22.10.5",
+    "eslint": "^9.18.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^3.0.5"
+  }
+}

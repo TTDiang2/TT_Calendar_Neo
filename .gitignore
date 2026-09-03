@@ -1,0 +1,34 @@
+node_modules/
+dist/
+build/
+target/
+out/
+*.tsbuildinfo
+
+# Tauri
+apps/*/src-tauri/target/
+apps/*/src-tauri/gen/
+
+# SQLite / 运行时数据
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+data/local/
+
+# 日志
+*.log
+logs/
+
+# 编辑器 / 系统
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# 环境变量 / 密钥
+.env
+.env.local
+.env.*.local
+secrets.json

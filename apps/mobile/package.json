@@ -1,0 +1,30 @@
+{
+  "name": "@tt-calendar/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "移动端：Tauri 2 iOS / Android。复用 packages/ui 的响应式布局（底部 Tab + 抽屉）",
+  "scripts": {
+    "dev": "vite",
+    "build": "echo \"apps build 待任务 6 接线后启用\"",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tt-calendar/contracts": "workspace:*",
+    "@tt-calendar/domain": "workspace:*",
+    "@tt-calendar/ui": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^2.2.0",
+    "@tauri-apps/cli": "^2.2.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  }
+}

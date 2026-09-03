@@ -1,0 +1,35 @@
+{
+  "name": "@tt-calendar/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "共享 React 组件：桌面三栏 / 移动底部 Tab + 抽屉 条件渲染，三端复用同一套代码",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tt-calendar/contracts": "workspace:*",
+    "@tt-calendar/domain": "workspace:*",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.469.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@tanstack/react-query": "^5.64.1",
+    "@tauri-apps/api": "^2.2.0",
+    "@tt-calendar/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

@@ -1,0 +1,13 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+# pnpm 10+ 起只允许在此处声明「允许执行 install 脚本」的依赖（package.json 的 pnpm 字段已废弃）。
+# better-sqlite3 是原生模块，必须允许跑构建脚本，否则装完也加载不了（ERR_PNPM_IGNORED_BUILDS）。
+onlyBuiltDependencies:
+  - better-sqlite3
+  - esbuild
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
