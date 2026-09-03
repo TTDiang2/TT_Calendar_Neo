@@ -1,0 +1,25 @@
+{
+  "name": "TT 日历",
+  "short_name": "TT 日历",
+  "description": "个人日历：事件、待办、倒数日、农历、涂色标记",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f9fafb",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/icon-256.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

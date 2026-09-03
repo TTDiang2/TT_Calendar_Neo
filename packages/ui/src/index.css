@@ -27,6 +27,15 @@ html, body, #root {
   html, body, #root { height: 100dvh; }
 }
 
+/* iPhone 刘海/灵动岛安全区：viewport-fit=cover 时内容会顶进刘海，
+   给根容器加上安全区内边距（桌面浏览器这些值为 0，无影响） */
+#root {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  box-sizing: border-box;
+}
+
 /* 触屏设备（无 hover）：把「悬停才显示」的操作按钮改为常显，
    否则编辑/删除等按钮在手机上永远看不见 */
 @media (hover: none) {
