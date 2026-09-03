@@ -133,37 +133,41 @@ jobs:
       - name: 放行 http 数据服务（ATS）
         run: node scripts/patch-ios-ats.mjs
 
-      - name: 手动构建真机 .app（xcodebuild 关签名，可靠出未签名包）
+      # 注意：真机 .ipa 需要代码签名证书，CI(无开发者账号) 无法干净产出；
+      # 本步尝试官方 tauri ios build 出包，失败即诚实报错（不再误打空壳）。
+      # 可靠的未签名真机包请用 docs/ios-build-guide.md 里的「Mac 本机一键脚本」。
+      - name: 构建真机 .app（官方 tauri ios build，CI 下通常因无签名失败）
         working-directory: apps/mobile
         env:
           VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
         run: |
-          set -e
-          # 先构建前端 assets（tauri beforeBuildCommand 在手动 xcodebuild 下不会自动跑）
-          pnpm build
-          SCHEME="tt-calendar-mobile_iOS"
-          WS="src-tauri/gen/apple/tt-calendar-mobile.xcodeproj/project.xcworkspace"
-          DD="src-tauri/gen/apple/build/device-unsigned"
-          # 命令行传 CODE_SIGNING_ALLOWED=NO 优先级最高，真正关掉签名（sed 改 pbxproj 在
-          # 真机 target 上不可靠）。"Build Rust Code" phase 由 xcodebuild 自动触发编译 Rust。
-          xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration release \
-            -sdk iphoneos -derivedDataPath "$DD" \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" CODE_SIGN_STYLE=Manual \
-            build 2>&1 | tail -60
-          echo "xcodebuild 退出码: ${PIPESTATUS[0]}"
-          APP=$(find "$DD" -name '*.app' -type d | head -1)
-          if [ -z "$APP" ]; then
-            echo '未找到 .app 产物，构建失败'
-            find "$DD" -maxdepth 5 -name '*.app' 2>/dev/null || true
-            exit 1
+          set -euo pipefail
+          set +e
+          pnpm tauri ios build --target aarch64 > /tmp/ios_build.log 2>&1
+          code=$?
+          echo "tauri ios build 退出码: $code"
+          echo "--- 日志尾部 ---"
+          tail -40 /tmp/ios_build.log
+          # 有 .app 且非空才算成功；否则失败（不产出空包）
+          APP=$(find src-tauri/gen/apple/build -name '*.app' -type d | head -1)
+          if [ "$code" = "0" ] && [ -n "$APP" ] && [ -n "$(find "$APP" -maxdepth 1 -type f -perm -111 | head -1)" ]; then
+            echo "真机 .app 产物: $APP"
+            exit 0
           fi
-          echo "真机 .app 产物: $APP"
+          echo "真机构建未产出有效 .app（退出码 $code）。"
+          echo "CI 无签名证书，真机出包请改用 docs/ios-build-guide.md 的 Mac 本机脚本。"
+          exit 1
 
       - name: 打包为未签名 .ipa（Payload 结构）
         run: |
+          set -e
           APP=$(find apps/mobile/src-tauri/gen/apple/build -name '*.app' -type d | head -1)
-          rm -rf /tmp/payload Payload
+          if [ -z "$APP" ]; then echo '无 .app'; exit 1; fi
+          # 校验 .app 里确有可执行文件，防止误打空壳
+          EXE=$(find "$APP" -maxdepth 1 -type f -perm -111 | head -1)
+          if [ -z "$EXE" ]; then echo ".app 内无可执行文件，产物无效: $APP"; exit 1; fi
+          echo "可执行: $EXE ($(du -h "$EXE" | cut -f1))"
+          rm -rf Payload
           mkdir -p Payload
           cp -R "$APP" Payload/
           find Payload -type f -exec chmod 644 {} +
