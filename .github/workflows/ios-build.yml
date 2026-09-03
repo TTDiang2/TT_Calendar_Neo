@@ -25,6 +25,7 @@ on:
       - 'apps/mobile/**'
       - 'packages/**'
       - 'scripts/patch-ios-ats.mjs'
+      - 'scripts/ios-install-guide.md'
       - '.github/workflows/ios-build.yml'
 
 jobs:
@@ -90,17 +91,107 @@ jobs:
           path: tt-calendar-ios-sim.zip
           retention-days: 14
 
+  # 真机 .ipa（未签名）：下载后用 Sideloadly 免费签你自己的 Apple ID 装到 iPhone。
+  # 原理：tauri 的 --no-sign 只对桌面生效、对 iOS 无效，故先 sed 关掉 Xcode 签名，
+  #       再用 tauri ios build 构建真机 .app（export 阶段因无签名会以 70 退出，属预期），
+  #       最后手动打成标准 Payload/*.app 的 .ipa。Sideloadly/AltStore 都能吃这种包再自签。
+  device-unsigned:
+    name: 真机包（未签名，Sideloadly 自签）
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装 Rust + iOS 真机编译目标
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: 缓存 Rust 编译产物
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/mobile/src-tauri
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 生成 Xcode 工程
+        working-directory: apps/mobile
+        run: pnpm tauri ios init --ci
+
+      - name: 放行 http 数据服务（ATS）
+        run: node scripts/patch-ios-ats.mjs
+
+      - name: 关闭 Xcode 签名（真机未签名构建）
+        run: |
+          PBX=$(find apps/mobile/src-tauri/gen/apple -name project.pbxproj | head -1)
+          echo "签名配置: $PBX"
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX"
+          sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "";/g' "$PBX"
+          sed -i '' 's/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = "";/g' "$PBX"
+
+      - name: 构建真机 .app（export 阶段因无签名报 70 属预期）
+        working-directory: apps/mobile
+        env:
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+        run: |
+          set +e
+          pnpm tauri ios build --target aarch64 --ci 2>&1 | tail -40
+          code=${PIPESTATUS[0]}
+          # 70 = xcodebuild export 因无签名失败，但 .app 已产出；其它退出码视为真失败
+          APP=$(find src-tauri/gen/apple/build -name '*.app' -type d | head -1)
+          if [ -z "$APP" ]; then
+            echo '未找到 .app 产物，构建失败'
+            find src-tauri/gen/apple/build -maxdepth 4 2>/dev/null || true
+            exit 1
+          fi
+          if [ "$code" != "0" ] && [ "$code" != "70" ]; then
+            echo "构建退出码异常: $code"
+            exit "$code"
+          fi
+          echo "真机 .app 产物: $APP"
+
+      - name: 打包为未签名 .ipa（Payload 结构）
+        run: |
+          APP=$(find apps/mobile/src-tauri/gen/apple/build -name '*.app' -type d | head -1)
+          rm -rf /tmp/payload Payload
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          find Payload -type f -exec chmod 644 {} +
+          find Payload -type d -exec chmod 755 {} +
+          zip -qry "$GITHUB_WORKSPACE/tt-calendar-ios-unsigned.ipa" Payload/
+          rm -rf Payload
+          ls -lh "$GITHUB_WORKSPACE/tt-calendar-ios-unsigned.ipa"
+
+      - name: 上传真机包
+        uses: actions/upload-artifact@v4
+        with:
+          name: tt-calendar-ios-unsigned-ipa
+          path: tt-calendar-ios-unsigned.ipa
+          retention-days: 14
+
+      - name: 附安装说明
+        uses: actions/upload-artifact@v4
+        with:
+          name: sideloadly-说明
+          path: scripts/ios-install-guide.md
+          retention-days: 14
+
 # ─────────────────────────────────────────────────────────────────────────────
-# 真机 .ipa 路线（等你要装到自己 iPhone 时再做）：
-#
-# 1) 免费 Apple ID（7 天有效期，重装即续）：
-#    - 云端继续出「未签名 .ipa」或本工作流的模拟器包不行——真机要签名；
-#    - 最省事：用 Windows 上的 Sideloadly（sideloadly.io）给 .ipa 签你的 Apple ID
-#      并经 USB 装机。需要把上面的构建换成 --target aarch64 + 跳过签名
-#      （xcodebuild 传 CODE_SIGNING_ALLOWED=NO）。
-# 2) 付费开发者账号（$99/年）：
-#    - 在 developer.apple.com 网页上（Windows 浏览器即可）创建证书+描述文件，
-#      存入仓库 Secrets，CI 里直接签名出 .ipa，走 TestFlight 安装，1 年有效。
-#
-# 到时候叫一声，把这段补成正式 job 即可。
+# 真机安装现状
+# ─ 免费路线（已启用，见上方 device-unsigned job）：Cloud 出「未签名 .ipa」，
+#   Windows 用 Sideloadly 免费签你的 Apple ID、USB 装机。7 天有效，重装续。
+# ─ $99 付费路线（要上架 App Store 或给朋友大批量分发时再加正式 job）：
+#   developer.apple.com 建证书+描述文件 → 存仓库 Secrets → CI 直接签名出能走
+#   TestFlight 的 .ipa（1 年有效，Beta 最多 100 台设备）。届时新写一个
+#   device-signed job（不 sed 关签名、改用签名导出）。
 # ─────────────────────────────────────────────────────────────────────────────
