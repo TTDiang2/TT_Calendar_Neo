@@ -8,7 +8,7 @@
     "dev": "vite",
     "dev:server": "node --import tsx server.ts",
     "dev:all": "concurrently -k -n data,web \"pnpm dev:server\" \"pnpm dev\"",
-    "build": "vite build",
+    "build": "node ../../scripts/clean-dist.cjs && vite build",
     "preview": "vite preview",
     "test": "vitest run"
   },

@@ -22,6 +22,8 @@ logs/
 
 # pnpm 临时目录（被安全策略拦截安装时会残留）
 _tmp_*/
+# 构建前移走的旧 dist（clean-dist.cjs 改名，非删除）
+_trash_*/
 
 # 编辑器 / 系统
 .vscode/*

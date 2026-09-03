@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "TT 日历移动端默认权限（仅启用核心 Tauri 能力，暂无自定义 command）",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

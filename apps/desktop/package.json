@@ -6,7 +6,7 @@
   "description": "桌面端：Tauri 2 Windows。Rust 命令层取代 Python sidecar，前端复用 packages/ui",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node ../../scripts/clean-dist.cjs && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "tauri": "tauri"
