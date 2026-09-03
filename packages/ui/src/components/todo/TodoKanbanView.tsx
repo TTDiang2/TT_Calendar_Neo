@@ -183,26 +183,28 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex items-center gap-2 pb-3 flex-shrink-0">
-        <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
-          {DIMS.map((d) => (
-            <button
-              key={d.key}
-              onClick={() => setDim(d.key)}
-              className={clsx(
-                'px-2.5 py-1 text-xs rounded-md transition cursor-pointer',
-                dim === d.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
-              )}
-            >
-              {d.label}
-            </button>
-          ))}
+      <div className="flex items-center gap-2 pb-3 flex-shrink-0 flex-wrap">
+        <div className="overflow-x-auto -mx-1 px-1 max-w-full">
+          <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+            {DIMS.map((d) => (
+              <button
+                key={d.key}
+                onClick={() => setDim(d.key)}
+                className={clsx(
+                  'px-2.5 py-1 text-xs rounded-md transition cursor-pointer whitespace-nowrap',
+                  dim === d.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
+                )}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
         </div>
-        {droppable && <span className="text-xs text-gray-400">拖动卡片到其他列即可改变状态；勾选圆形按钮直接完成</span>}
+        {droppable && <span className="hidden md:inline text-xs text-gray-400">拖动卡片到其他列即可改变状态；勾选圆形按钮直接完成</span>}
       </div>
 
       <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
-        <div className="flex gap-3 h-full min-w-max">
+        <div className="flex gap-2.5 md:gap-3 h-full min-w-max items-stretch">
           {columns.map((c) => (
             <div
               key={c.key}
@@ -215,7 +217,7 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
               onDragLeave={() => overCol === c.key && setOverCol(null)}
               onDrop={() => dropOn(c.key)}
               className={clsx(
-                'w-60 flex flex-col rounded-xl border min-h-0 transition',
+                'w-[82vw] max-w-[300px] md:w-60 flex flex-col rounded-xl border min-h-0 transition',
                 c.tone ?? 'bg-gray-50/60',
                 overCol === c.key ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-200',
               )}
@@ -257,9 +259,9 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
             <div
               className={clsx(
                 'flex flex-col rounded-xl border border-gray-200 bg-emerald-50/50 min-h-0 overflow-hidden',
-                // 折叠=窄边条、展开=整列，宽度动画让过渡自然而非突兀弹开
+                // 折叠=窄边条、展开=整列（手机同主体列等宽，桌面 240），宽度动画让过渡自然而非突兀弹开
                 'transition-all duration-300 ease-in-out',
-                showCompletedCol ? 'w-60' : 'w-11',
+                showCompletedCol ? 'w-[82vw] max-w-[300px] md:w-60' : 'w-11',
               )}
             >
               {showCompletedCol ? (

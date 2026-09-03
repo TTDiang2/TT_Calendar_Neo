@@ -1,6 +1,8 @@
+import { useMemo, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import type { Day, Layer, MonthData } from '../adapt/types'
+import { CalendarClock, ClipboardList, ListTodo, Plus } from 'lucide-react'
+import type { Layer, MonthData, Todo } from '../adapt/types'
 import { COLORING_COLORS, getBusyColors, parseDate, todayStr } from '../adapt/data'
 import { getTodoBusyConfig } from '../adapt/api'
 
@@ -12,22 +14,32 @@ interface Props {
   onDoubleClick: (date: string) => void
 }
 
-const WEEK_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const WEEK_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
-export function DayView({ monthData, layers, selectedDate, onSelect, onDoubleClick }: Props) {
+export function DayView({ monthData, layers, selectedDate: _selectedDate, onSelect, onDoubleClick }: Props) {
   const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
   const day = monthData.days[0]
   if (!day) return <div className="flex-1 flex items-center justify-center text-gray-400">无数据</div>
 
   const { y, m, d } = parseDate(day.date)
-  const dt = new Date(y, m - 1, d)
-  const weekday = WEEK_NAMES[dt.getDay() === 0 ? 6 : dt.getDay() - 1]
+  const weekday = WEEK_NAMES[new Date(y, m - 1, d).getDay()]
   const layerById = new Map(layers.map((l) => [l.layer_id, l]))
+  const today = todayStr()
 
   const visibleEvents = Object.entries(day.events_by_layer)
-    .filter(([lid]) => layerById.get(lid)?.enabled)
+    .filter(([lid]) => {
+      const l = layerById.get(lid)
+      return lid === 'important' || lid === 'schedule' || (l?.enabled ?? false)
+    })
     .flatMap(([, evs]) => evs)
     .sort((a, b) => a.sort_key - b.sort_key)
+
+  const schedules = useMemo(
+    () => [...(day.schedule_items ?? [])].sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')),
+    [day],
+  )
+  const openTodos = useMemo(() => (day.todos ?? []).filter((t) => t.status !== 'completed'), [day])
+  const doneTodos = useMemo(() => (day.todos ?? []).filter((t) => t.status === 'completed'), [day])
 
   const colorLayers: string[] = []
   if (layerById.get('important')?.enabled && day.gradient_bg && day.gradient_bg.toLowerCase() !== '#ffffff') {
@@ -36,104 +48,151 @@ export function DayView({ monthData, layers, selectedDate, onSelect, onDoubleCli
   if (layerById.get('coloring')?.enabled && day.coloring_level != null) {
     colorLayers.push(COLORING_COLORS[day.coloring_level])
   }
-  for (const b of getBusyColors(day, todayStr(), busyConfig)) {
+  for (const b of getBusyColors(day, today, busyConfig)) {
     if (layerById.get(b.id)?.enabled) colorLayers.push(b.color)
   }
-  // 多个染色维度时按优先级取一个做色条（避免多条色条叠加）
   const barColor = colorLayers[0]
 
+  const isEmpty = schedules.length === 0 && visibleEvents.length === 0 && openTodos.length === 0 && doneTodos.length === 0
+
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <div className="flex-1 flex flex-col rounded-lg border overflow-hidden relative">
-        {barColor && (
-          <div
-            className="absolute left-0 top-0 bottom-0 w-1"
-            style={{ backgroundColor: barColor }}
-          />
-        )}
+    <div className="flex-1 flex flex-col min-h-0 gap-2">
+      {/* 头部：日期 / 农历 / 放假 / 染色状态 */}
+      <div
+        className="flex items-center gap-3 px-3 py-2 md:px-4 md:py-3 bg-white rounded-xl border border-gray-200 flex-shrink-0 cursor-pointer"
+        onClick={() => onSelect(day.date)}
+        onDoubleClick={() => onDoubleClick(day.date)}
+      >
         <div
           className={clsx(
-            'px-3 py-2.5 md:px-4 md:py-3 pl-4 md:pl-5 flex items-center justify-between cursor-pointer',
-            day.is_today ? 'bg-blue-500 text-white' : 'bg-gray-100',
+            'w-11 h-11 md:w-14 md:h-14 rounded-xl flex-shrink-0 flex flex-col items-center justify-center text-white shadow-sm',
+            day.is_today ? 'bg-blue-500' : 'bg-gray-300',
           )}
-          onClick={() => onSelect(day.date)}
-          onDoubleClick={() => onDoubleClick(day.date)}
+          style={!day.is_today && barColor ? { backgroundColor: barColor } : undefined}
         >
-          <div className="min-w-0">
-            <p className="text-base md:text-lg font-semibold">{m}月{d}日</p>
-            <p className="text-[11px] md:text-xs opacity-80">{y}年 {weekday}{day.is_weekend ? ' · 周末' : ''}</p>
-          </div>
-          {day.holiday?.name && <span className="text-[10px] md:text-xs bg-purple-500 text-white px-1.5 py-1 rounded flex-shrink-0 ml-1 truncate max-w-[45%]">{day.holiday.name}</span>}
+          <span className="text-[9px] leading-none opacity-90">{m}月</span>
+          <span className="text-xl font-bold leading-tight">{d}</span>
         </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-base md:text-lg font-bold text-gray-800">{y}年{day.is_today ? ' · 今天' : ''}</span>
+            {day.holiday?.name && (
+              <span className="text-[11px] bg-purple-500 text-white px-1.5 py-0.5 rounded">{day.holiday.name}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] md:text-xs text-gray-400 mt-0.5 flex-wrap">
+            <span>{weekday}{day.is_weekend ? ' · 周末' : ''}</span>
+            {day.lunar && <span className="text-gray-300">|</span>}
+            {day.lunar && <span>{day.lunar}</span>}
+          </div>
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDoubleClick(day.date) }}
+          className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-xs md:text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 active:bg-blue-600 flex-shrink-0"
+        >
+          <Plus size={14} /> 新建
+        </button>
+      </div>
 
-        <div className="flex-1 p-3 md:p-4 overflow-y-auto">
-          {day.custom_bg && (
-            <div className="mb-4 flex items-center gap-1">
-              <span className="text-xs text-gray-500 mr-1">标记</span>
-              <span
-                className="px-2 py-0.5 rounded text-[11px] text-white"
-                style={{ backgroundColor: day.custom_bg.color }}
-              >
-                {day.custom_bg.label}
-              </span>
-            </div>
-          )}
-          {day.coloring_level != null && (
-            <div className="mb-4 flex items-center gap-1">
-              <span className="text-xs text-gray-500 mr-1">充实度</span>
-              {COLORING_COLORS.map((c, i) => (
-                <span
-                  key={i}
-                  className={clsx('w-6 h-2 rounded', i === day.coloring_level && 'ring-2 ring-blue-400')}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-            </div>
-          )}
-          {day.schedule_items && day.schedule_items.length > 0 && (
-            <div className="mb-4 space-y-1">
-              {[...day.schedule_items]
-                .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))
-                .map((it) => (
+      {/* 主内容：分区卡片流，纵向铺满、超高可滚 */}
+      <div className="flex-1 min-h-0 overflow-y-auto bg-white rounded-xl border border-gray-200">
+        {isEmpty ? (
+          <div className="h-full flex flex-col items-center justify-center gap-3 py-10">
+            <p className="text-sm text-gray-400">这天还没有安排</p>
+            <button
+              onClick={() => onDoubleClick(day.date)}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-500 text-white rounded-full shadow-sm hover:bg-blue-600 active:bg-blue-600"
+            >
+              <Plus size={15} /> 添加事件
+            </button>
+          </div>
+        ) : (
+          <div className="p-3 md:p-4 flex flex-col gap-3">
+            {schedules.length > 0 && (
+              <Section icon={<CalendarClock size={14} />} title="日程" count={schedules.length}>
+                {schedules.map((it) => (
                   <div
                     key={it.id ?? `${it.title}-${it.start_time}`}
-                    className="flex items-center gap-2 text-sm rounded-md border border-gray-100 px-2 py-1"
+                    className="flex items-center gap-2.5 rounded-lg border border-blue-100 bg-blue-50/40 px-2.5 py-2"
                   >
-                    <span
-                      className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: it.color ?? '#3D6BFB' }}
-                    />
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: it.color ?? '#3D6BFB' }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-800 truncate">{it.title}</p>
+                    </div>
                     {it.start_time && (
-                      <span className="text-xs text-gray-500 tabular-nums flex-shrink-0">
-                        {it.start_time}{it.end_time ? `-${it.end_time}` : ''}
+                      <span className="text-xs font-medium text-blue-600 tabular-nums flex-shrink-0">
+                        {it.start_time}
+                        {it.end_time ? `-${it.end_time}` : ''}
                       </span>
                     )}
-                    <span className="text-gray-800">{it.title}</span>
                   </div>
                 ))}
-            </div>
-          )}
-          {visibleEvents.length === 0 ? (
-            <p className="text-sm text-gray-400">当天无事件</p>
-          ) : (
-            <ul className="space-y-2">
-              {visibleEvents.map((ev) => {
-                const l = layerById.get(ev.layer_id)
-                return (
-                  <li key={ev.id ?? ev.title} className="flex items-start gap-2">
-                    <span className="w-2 h-2 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: ev.color ?? l?.color ?? '#9ca3af' }} />
-                    <div>
-                      <p className="text-sm font-medium">{ev.title}</p>
-                      {l && <p className="text-[11px] text-gray-400">{l.display_name}</p>}
-                      {ev.description && <p className="text-xs text-gray-500 mt-0.5">{ev.description}</p>}
+              </Section>
+            )}
+
+            {visibleEvents.length > 0 && (
+              <Section icon={<ClipboardList size={14} />} title="事件" count={visibleEvents.length}>
+                {visibleEvents.map((ev) => {
+                  const l = layerById.get(ev.layer_id)
+                  return (
+                    <div
+                      key={ev.id ?? ev.title}
+                      className="flex items-start gap-2.5 rounded-lg border border-gray-200 px-2.5 py-2"
+                    >
+                      <span className="w-2 h-2 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: ev.color ?? l?.color ?? '#9ca3af' }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800">{ev.title}</p>
+                        {l && <p className="text-[11px] text-gray-400">{l.display_name}</p>}
+                        {ev.description && <p className="text-xs text-gray-500 mt-1 leading-snug">{ev.description}</p>}
+                      </div>
                     </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
+                  )
+                })}
+              </Section>
+            )}
+
+            {(openTodos.length > 0 || doneTodos.length > 0) && (
+              <Section icon={<ListTodo size={14} />} title="待办" count={openTodos.length + doneTodos.length}>
+                {openTodos.map((t) => <TodoLine key={t.id} todo={t} />)}
+                {doneTodos.map((t) => <TodoLine key={t.id} todo={t} done />)}
+              </Section>
+            )}
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+function Section({ icon, title, count, children }: { icon: ReactNode; title: string; count: number; children: ReactNode }) {
+  return (
+    <section>
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 mb-1.5 px-0.5">
+        <span className="text-gray-400">{icon}</span>
+        {title}
+        <span className="text-[10px] font-normal text-gray-400 bg-gray-100 rounded-full px-1.5">{count}</span>
+      </div>
+      <div className="flex flex-col gap-1.5">{children}</div>
+    </section>
+  )
+}
+
+function TodoLine({ todo, done }: { todo: Todo; done?: boolean }) {
+  const overdue = !done && todo.due_date != null && todo.due_date < todayStr()
+  return (
+    <div className="flex items-center gap-2.5 rounded-lg border border-gray-200 px-2.5 py-2">
+      <span
+        className={clsx(
+          'w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center',
+          done ? 'bg-emerald-500 text-white' : todo.importance === 'high' ? 'bg-red-500 text-white' : 'border border-gray-300',
+        )}
+      />
+      <p className={clsx('text-sm flex-1 min-w-0 truncate', done ? 'text-gray-400 line-through' : 'text-gray-800')}>{todo.title}</p>
+      {!done && todo.due_date && (
+        <span className={clsx('text-[11px] flex-shrink-0', overdue ? 'text-red-500 font-medium' : 'text-gray-400')}>
+          {overdue ? '已过期' : `截止 ${todo.due_date.slice(5)}`}
+        </span>
+      )}
     </div>
   )
 }

@@ -39,10 +39,13 @@ const TODO_MODES: { key: TodoViewMode; label: string }[] = [
 
 export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeChange, onTodoViewChange, onPrev, onNext, onToday, canPrev, canNext, onOpenSearch, onOpenSubscription, onOpenSettings, onOpenLayers }: Props) {
   return (
-    /* 手机竖屏：flex-wrap 换两行 —— 第一行 tab+翻页+标题+操作图标，第二行模式切换（横向滚动）；
-       桌面（md+）：单行，与旧版顺序一致（tab → 翻页/标题 → 模式 → 右侧操作） */
-    <header className="bg-white border-b border-gray-200 flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2 md:px-4 py-1.5 md:py-0 md:h-14 md:flex-nowrap">
-      {/* 顶级 tab：日历 / 待办 */}
+    /* 布局：手机竖屏（<md）flex-wrap 拆三行，每行内容都不再互相挤占：
+         第 1 行 = 顶级 tab（左）+ 全局操作图标（右，靠最右）
+         第 2 行 = 标题/日期导航（独占一行、可截断居中）
+         第 3 行 = 视图模式切换（整行横向滚动）
+       桌面（md+）：md:flex-nowrap 合并回单行，顺序与旧版一致（tab → 标题/导航 → 模式 → 操作） */
+    <header className="bg-white border-b border-gray-200 flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 md:px-4 py-1.5 md:py-0 md:h-14 md:flex-nowrap">
+      {/* 顶级 tab：日历 / 待办（手机独占第 1 行左侧） */}
       <div className="order-1 inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50 md:mr-3 flex-shrink-0">
         <button
           onClick={() => onTopTabChange('calendar')}
@@ -66,41 +69,41 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
 
       {topTab === 'calendar' ? (
         <>
-          {/* 翻页 + 标题（手机上标题 flex-1 可截断） */}
+          {/* 标题 / 日期导航：手机独占整行居中（宽按钮大、标题截断不挤 tab），桌面回原位置 */}
           {mode !== 'countdown' ? (
-            <div className="order-2 flex items-center gap-0.5 md:gap-1 min-w-0 flex-1 md:flex-none">
+            <div className="order-2 w-full md:w-auto md:flex-none justify-center flex items-center gap-0.5 md:gap-1 min-w-0">
               <button
                 onClick={onPrev}
                 disabled={!canPrev}
-                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition flex-shrink-0"
+                className="p-1.5 md:p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition flex-shrink-0 active:bg-gray-100"
                 title={mode === 'year' ? '上一年' : mode === 'week' ? '上一周' : mode === 'day' ? '上一天' : '上一月'}
               >
                 <ChevronLeft size={18} />
               </button>
-              <h1 className="flex-1 min-w-0 truncate text-center text-sm md:text-lg font-semibold text-gray-800 md:min-w-[140px]">{title}</h1>
+              <h1 className="flex-1 min-w-0 truncate text-center text-sm md:text-lg font-semibold text-gray-800 md:flex-none md:min-w-[140px]">{title}</h1>
               <button
                 onClick={onNext}
                 disabled={!canNext}
-                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition flex-shrink-0"
+                className="p-1.5 md:p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition flex-shrink-0 active:bg-gray-100"
                 title={mode === 'year' ? '下一年' : mode === 'week' ? '下一周' : mode === 'day' ? '下一天' : '下一月'}
               >
                 <ChevronRight size={18} />
               </button>
               <button
                 onClick={onToday}
-                className="ml-1 md:ml-2 px-2 md:px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition flex-shrink-0"
+                className="ml-1 md:ml-2 px-2.5 md:px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 active:bg-blue-50 rounded-lg transition flex-shrink-0"
               >
                 今天
               </button>
             </div>
           ) : (
-            <div className="order-2 flex items-center gap-1.5 min-w-0 flex-1 md:flex-none md:min-w-[140px]">
+            <div className="order-2 w-full md:w-auto md:flex-none justify-center flex items-center gap-1.5 min-w-0">
               <ListTodo size={18} className="flex-shrink-0" />
               <h1 className="text-sm md:text-lg font-semibold text-gray-800 truncate">倒数日</h1>
             </div>
           )}
 
-          {/* 模式切换：手机第二行整行滚动，桌面保持原位置 */}
+          {/* 模式切换：手机最后一行整行横滚，桌面保持原位置 */}
           <div className="order-4 md:order-3 w-full md:w-auto md:ml-4 -mx-2 px-2 md:mx-0 md:px-0 overflow-x-auto flex-shrink-0">
             <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
               {MODES.map((m) => (
@@ -108,7 +111,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
                   key={m.key}
                   onClick={() => onModeChange(m.key)}
                   className={clsx(
-                    'px-3 py-1 text-sm rounded-md transition whitespace-nowrap',
+                    'flex-1 md:flex-none px-1.5 md:px-3 py-1 text-sm rounded-md transition whitespace-nowrap',
                     mode === m.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
                   )}
                 >
@@ -118,16 +121,16 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
             </div>
           </div>
 
-          {/* 右侧操作：手机只留图标（搜索框图标化、图层入口），桌面原样 */}
-          <div className="order-3 md:order-4 ml-auto md:ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
+          {/* 右侧操作：手机并入第 1 行（order-1）靠最右，桌面回单行最右 */}
+          <div className="order-1 md:order-4 ml-auto md:ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
             {onOpenLayers && (
-              <button onClick={onOpenLayers} className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition" title="图层">
+              <button onClick={onOpenLayers} className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="图层">
                 <Layers size={18} />
               </button>
             )}
             <button
               onClick={onOpenSearch}
-              className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition"
+              className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition"
               title="搜索事件"
             >
               <Search size={18} />
@@ -139,17 +142,17 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
               <Search size={14} className="mr-2" />
               搜索事件…
             </button>
-            <button onClick={onOpenSubscription} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition" title="订阅">
+            <button onClick={onOpenSubscription} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
               <Rss size={18} />
             </button>
-            <button onClick={onOpenSettings} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition" title="设置">
+            <button onClick={onOpenSettings} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
               <Settings size={18} />
             </button>
           </div>
         </>
       ) : (
         <>
-          <div className="order-2 flex items-center gap-1.5 min-w-0 flex-1 md:flex-none">
+          <div className="order-2 w-full md:w-auto md:flex-none justify-center flex items-center gap-1.5 min-w-0">
             <ListTodo size={18} className="flex-shrink-0" />
             <h1 className="text-sm md:text-lg font-semibold text-gray-800 truncate">待办</h1>
           </div>
@@ -161,7 +164,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
                   key={m.key}
                   onClick={() => onTodoViewChange(m.key)}
                   className={clsx(
-                    'px-3 py-1 text-sm rounded-md transition whitespace-nowrap',
+                    'flex-1 md:flex-none px-1.5 md:px-3 py-1 text-sm rounded-md transition whitespace-nowrap',
                     todoView === m.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
                   )}
                 >
@@ -171,11 +174,11 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
             </div>
           </div>
 
-          <div className="order-3 md:order-4 ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
-            <button onClick={onOpenSubscription} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition" title="订阅">
+          <div className="order-1 md:order-4 ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
+            <button onClick={onOpenSubscription} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
               <Rss size={18} />
             </button>
-            <button onClick={onOpenSettings} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition" title="设置">
+            <button onClick={onOpenSettings} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
               <Settings size={18} />
             </button>
           </div>

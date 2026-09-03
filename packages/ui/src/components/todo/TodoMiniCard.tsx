@@ -84,9 +84,27 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
           </span>
         </div>
 
-        {/* 元信息行：状态/重要性/复杂度/三类日期，条件渲染避免空分隔符堆积 */}
+        {/* 手机精简：只留状态点 + 重要性 + 截止（有过期标红），避免卡片在窄列里又高又乱 */}
         {!done && (
-          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] leading-none text-gray-500">
+          <div className="mt-1 sm:hidden flex items-center gap-1.5 text-[10px] leading-none text-gray-500">
+            <span className="flex items-center gap-0.5">
+              <span className={clsx('w-1.5 h-1.5 rounded-full', STATUS_DOT[todo.status] ?? 'bg-gray-300')} />
+              {STATUS_LABELS[todo.status] ?? todo.status}
+            </span>
+            <span className={clsx(IMPORTANCE_CLS[todo.importance] ?? '')}>
+              {IMPORTANCE_LABELS[todo.importance] ?? todo.importance}
+            </span>
+            {todo.due_date && (
+              <span className={clsx('ml-auto truncate', overdue && 'text-red-600 font-medium')}>
+                {overdue ? `逾期 ${-(din ?? 0)} 天` : `截止 ${shortDate(todo.due_date)}`}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* 桌面 / 横屏：完整元信息（状态点/重要性/复杂度/三类日期，条件渲染避免空分隔符堆积） */}
+        {!done && (
+          <div className="mt-1 hidden sm:flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] leading-none text-gray-500">
             <span className="flex items-center gap-0.5">
               <span className={clsx('w-1.5 h-1.5 rounded-full', STATUS_DOT[todo.status] ?? 'bg-gray-300')} />
               {STATUS_LABELS[todo.status] ?? todo.status}
@@ -108,7 +126,7 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
         )}
 
         {tags.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
+          <div className="mt-1 hidden sm:flex flex-wrap gap-1">
             {tags.map((tag) => (
               <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 leading-none">
                 #{tag}
@@ -117,12 +135,12 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
           </div>
         )}
 
-        {/* 备注预览：单行截断，完整内容在详情面板看 */}
+        {/* 备注预览：单行截断，完整内容在详情面板看（手机看板省略，正文留详情面板） */}
         {todo.body && (
-          <div className="mt-1 text-[10px] text-gray-400 leading-snug truncate">{todo.body}</div>
+          <div className="mt-1 hidden sm:block text-[10px] text-gray-400 leading-snug truncate">{todo.body}</div>
         )}
 
-        {sub && <div className="mt-1 text-[11px] text-gray-400">{sub}</div>}
+        {sub && <div className="mt-1 text-[11px] text-gray-400 sm:truncate">{sub}</div>}
       </button>
     </div>
   )
