@@ -274,8 +274,16 @@ function bad(res: ServerResponse): void {
   send(res, 404, { detail: 'not found' })
 }
 
-// 直接运行：pnpm dev:server  或  node --import tsx apps/web/server.ts
-const dbPath = process.env.CAL_DB_PATH ?? 'E:/TT_Calendar_Neo/data/calendar.db'
-const { port } = startDataServer({ dbPath, port: Number(process.env.PORT ?? 8766) })
+// 直接运行：node --import tsx server.ts [--port 8766] [--db path]
+// 命令行参数优先于环境变量 —— .bat 里 `set PORT=8767` 的引号嵌套很容易写错，
+// 用 --port 传参在 Windows 上更稳。web 用 8766，desktop 用 8767，可同时运行。
+function cliArg(name: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`)
+  return i >= 0 ? process.argv[i + 1] : undefined
+}
+
+const dbPath = cliArg('db') ?? process.env.CAL_DB_PATH ?? 'E:/TT_Calendar_Neo/data/calendar.db'
+const port = Number(cliArg('port') ?? process.env.PORT ?? 8766)
+const { port: listeningPort } = startDataServer({ dbPath, port })
 // eslint-disable-next-line no-console
-console.log(`[data-server] listening on http://127.0.0.1:${port}  db=${dbPath}`)
+console.log(`[data-server] listening on http://127.0.0.1:${listeningPort}  db=${dbPath}`)
