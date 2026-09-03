@@ -10,6 +10,8 @@ export default tseslint.config(
       '**/target/**',
       '**/src-tauri/**',
       '**/.vite/**',
+      '**/_trash_*/**',
+      '**/_tmp_*/**',
     ],
   },
   js.configs.recommended,

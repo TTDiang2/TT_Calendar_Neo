@@ -9,6 +9,18 @@ echo    TT Calendar Neo - 桌面端启动
 echo ==========================================
 echo.
 
+REM ---------- 0. 状态检测：都在跑就别重启，直接提示 ----------
+set "DESK_UP="
+set "DDATA_UP="
+netstat -ano | findstr ":5174" | findstr "LISTENING" >nul && set "DESK_UP=1"
+netstat -ano | findstr ":8767" | findstr "LISTENING" >nul && set "DDATA_UP=1"
+if defined DESK_UP if defined DDATA_UP (
+  echo [提示] 桌面端已在运行，请查看已弹出的原生窗口。
+  echo   若要重新启动：先关掉原生窗口和这个黑窗口，再双击本脚本。
+  timeout /t 6 >nul
+  exit /b 0
+)
+
 REM ---------- 1. 找到 Node ----------
 set "NODE_DIR="
 for /d %%D in ("%USERPROFILE%\.workbuddy\binaries\node\versions\*") do (

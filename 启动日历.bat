@@ -9,15 +9,14 @@ echo    TT Calendar Neo - 一键启动
 echo ==========================================
 echo.
 
-REM ---------- 0. 是否已经在运行 ----------
-set "PORT_BUSY="
-netstat -ano | findstr ":8766" | findstr "LISTENING" >nul
-if not errorlevel 1 set "PORT_BUSY=1"
-netstat -ano | findstr ":5173" | findstr "LISTENING" >nul
-if not errorlevel 1 set "PORT_BUSY=1"
+REM ---------- 0. 状态检测（避免“数据服务活着但网页死了”导致误判已在运行） ----------
+set "WEB_UP="
+set "DATA_UP="
+netstat -ano | findstr ":5173" | findstr "LISTENING" >nul && set "WEB_UP=1"
+netstat -ano | findstr ":8766" | findstr "LISTENING" >nul && set "DATA_UP=1"
 
-if defined PORT_BUSY (
-  echo [提示] 日历服务已经在运行了，直接帮你打开浏览器。
+if defined WEB_UP if defined DATA_UP (
+  echo [提示] 网页与数据服务都已在运行，直接打开浏览器。
   echo.
   start http://localhost:5173
   echo   网址： http://localhost:5173
@@ -28,6 +27,10 @@ if defined PORT_BUSY (
   exit /b 0
 )
 
+REM 只活了部分（僵尸）则清理残留再重启，避免“数据在跑但网页打不开”
+if defined WEB_UP ( for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":5173" ^| findstr "LISTENING"') do taskkill /PID %%P /F >nul 2>&1 )
+if defined DATA_UP ( for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":8766" ^| findstr "LISTENING"') do taskkill /PID %%P /F >nul 2>&1 )
+timeout /t 1 >nul
 REM ---------- 1. 找到 Node ----------
 set "NODE_DIR="
 for /d %%D in ("%USERPROFILE%\.workbuddy\binaries\node\versions\*") do (

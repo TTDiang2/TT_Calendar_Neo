@@ -9,6 +9,18 @@ echo    TT Calendar Neo - 移动端预览启动
 echo ==========================================
 echo.
 
+REM ---------- 0. 状态检测：都在跑就别重启，直接开浏览器 ----------
+set "MOB_UP="
+set "MDATA_UP="
+netstat -ano | findstr ":5175" | findstr "LISTENING" >nul && set "MOB_UP=1"
+netstat -ano | findstr ":8769" | findstr "LISTENING" >nul && set "MDATA_UP=1"
+if defined MOB_UP if defined MDATA_UP (
+  echo [提示] 移动端预览已在运行，直接打开浏览器。
+  start http://localhost:5175
+  timeout /t 6 >nul
+  exit /b 0
+)
+
 REM ---------- 1. 找到 Node ----------
 set "NODE_DIR="
 for /d %%D in ("%USERPROFILE%\.workbuddy\binaries\node\versions\*") do (
