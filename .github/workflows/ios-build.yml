@@ -133,32 +133,30 @@ jobs:
       - name: 放行 http 数据服务（ATS）
         run: node scripts/patch-ios-ats.mjs
 
-      - name: 关闭 Xcode 签名（真机未签名构建）
-        run: |
-          PBX=$(find apps/mobile/src-tauri/gen/apple -name project.pbxproj | head -1)
-          echo "签名配置: $PBX"
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBX"
-          sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "";/g' "$PBX"
-          sed -i '' 's/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = "";/g' "$PBX"
-
-      - name: 构建真机 .app（export 阶段因无签名报 70 属预期）
+      - name: 手动构建真机 .app（xcodebuild 关签名，可靠出未签名包）
         working-directory: apps/mobile
         env:
           VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
         run: |
-          set +e
-          pnpm tauri ios build --target aarch64 --ci 2>&1 | tail -40
-          code=${PIPESTATUS[0]}
-          # 70 = xcodebuild export 因无签名失败，但 .app 已产出；其它退出码视为真失败
-          APP=$(find src-tauri/gen/apple/build -name '*.app' -type d | head -1)
+          set -e
+          # 先构建前端 assets（tauri beforeBuildCommand 在手动 xcodebuild 下不会自动跑）
+          pnpm build
+          SCHEME="tt-calendar-mobile_iOS"
+          WS="src-tauri/gen/apple/tt-calendar-mobile.xcodeproj/project.xcworkspace"
+          DD="src-tauri/gen/apple/build/device-unsigned"
+          # 命令行传 CODE_SIGNING_ALLOWED=NO 优先级最高，真正关掉签名（sed 改 pbxproj 在
+          # 真机 target 上不可靠）。"Build Rust Code" phase 由 xcodebuild 自动触发编译 Rust。
+          xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration release \
+            -sdk iphoneos -derivedDataPath "$DD" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" CODE_SIGN_STYLE=Manual \
+            build 2>&1 | tail -60
+          echo "xcodebuild 退出码: ${PIPESTATUS[0]}"
+          APP=$(find "$DD" -name '*.app' -type d | head -1)
           if [ -z "$APP" ]; then
             echo '未找到 .app 产物，构建失败'
-            find src-tauri/gen/apple/build -maxdepth 4 2>/dev/null || true
+            find "$DD" -maxdepth 5 -name '*.app' 2>/dev/null || true
             exit 1
-          fi
-          if [ "$code" != "0" ] && [ "$code" != "70" ]; then
-            echo "构建退出码异常: $code"
-            exit "$code"
           fi
           echo "真机 .app 产物: $APP"
 
