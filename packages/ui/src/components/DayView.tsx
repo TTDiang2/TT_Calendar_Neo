@@ -53,20 +53,20 @@ export function DayView({ monthData, layers, selectedDate, onSelect, onDoubleCli
         )}
         <div
           className={clsx(
-            'px-4 py-3 pl-5 flex items-center justify-between cursor-pointer',
+            'px-3 py-2.5 md:px-4 md:py-3 pl-4 md:pl-5 flex items-center justify-between cursor-pointer',
             day.is_today ? 'bg-blue-500 text-white' : 'bg-gray-100',
           )}
           onClick={() => onSelect(day.date)}
           onDoubleClick={() => onDoubleClick(day.date)}
         >
-          <div>
-            <p className="text-lg font-semibold">{m}月{d}日</p>
-            <p className="text-xs opacity-80">{y}年 {weekday}{day.is_weekend ? ' · 周末' : ''}</p>
+          <div className="min-w-0">
+            <p className="text-base md:text-lg font-semibold">{m}月{d}日</p>
+            <p className="text-[11px] md:text-xs opacity-80">{y}年 {weekday}{day.is_weekend ? ' · 周末' : ''}</p>
           </div>
-          {day.holiday?.name && <span className="text-xs bg-purple-500 text-white px-2 py-1 rounded">{day.holiday.name}</span>}
+          {day.holiday?.name && <span className="text-[10px] md:text-xs bg-purple-500 text-white px-1.5 py-1 rounded flex-shrink-0 ml-1 truncate max-w-[45%]">{day.holiday.name}</span>}
         </div>
 
-        <div className="flex-1 p-4 overflow-y-auto">
+        <div className="flex-1 p-3 md:p-4 overflow-y-auto">
           {day.custom_bg && (
             <div className="mb-4 flex items-center gap-1">
               <span className="text-xs text-gray-500 mr-1">标记</span>

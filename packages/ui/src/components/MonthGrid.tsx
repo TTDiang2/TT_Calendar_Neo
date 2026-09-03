@@ -19,18 +19,19 @@ export function MonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleC
   const [dragOver, setDragOver] = useState<string | null>(null)
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="grid grid-cols-7 gap-1 mb-1">
+      <div className="grid grid-cols-7 gap-1 mb-1 md:mb-1">
         {WEEKDAYS.map((w, i) => (
           <div
             key={w}
-            className={`text-center text-xs font-medium py-1 ${i >= 5 ? 'text-red-400' : 'text-gray-400'}`}
+            className={`text-center text-[11px] md:text-xs font-medium py-1 ${i >= 5 ? 'text-red-400' : 'text-gray-400'}`}
           >
             {w}
           </div>
         ))}
       </div>
+      {/* 手机：让格子按内容高度排列（接近方形），而非被强制拉伸变细长；超高时整月可滚 */}
       <div
-        className="grid grid-cols-7 gap-1 flex-1 overflow-hidden"
+        className="grid grid-cols-7 gap-1 min-h-0 overflow-y-auto"
         onDragEnd={() => setDragOver(null)}
       >
         {monthData.days.map((day: Day, i) => (

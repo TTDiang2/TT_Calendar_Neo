@@ -69,6 +69,23 @@ export default tseslint.config(
     },
   },
   {
+    // Node 脚本（ESM，.mjs，如 scripts/patch-ios-ats.mjs）跑在 Node 里
+    files: ['**/*.mjs'],
+    languageOptions: {
+      sourceType: 'module',
+      ecmaVersion: 2022,
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+        globalThis: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
+    },
+  },
+  {
     // 各端的数据服务（server.ts）同样跑在 Node 里
     files: ['apps/*/server.ts'],
     languageOptions: {

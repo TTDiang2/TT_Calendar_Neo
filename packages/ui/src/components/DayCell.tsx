@@ -105,7 +105,8 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
       }}
       className={clsx(
         'relative p-1 md:p-1.5 rounded-lg border cursor-pointer transition-all flex flex-col gap-0.5 overflow-hidden',
-        maxLabels >= 6 ? 'min-h-[104px] md:min-h-[160px]' : 'min-h-[72px] md:min-h-[104px]',
+        // 手机：格子更方（短于宽 → 视觉方正），避免「太长」；桌面不变
+        maxLabels >= 6 ? 'min-h-[104px] md:min-h-[160px]' : 'min-h-[52px] md:min-h-[104px]',
         'hover:shadow-md hover:-translate-y-0.5',
         day.is_today
           ? 'border-2 border-blue-500'

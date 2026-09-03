@@ -237,8 +237,8 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* 左列表栏 — w-60 对齐日历 Sidebar */}
-      <div className="w-60 bg-white border-r border-gray-200 p-3 overflow-y-auto flex flex-col">
+      {/* 左列表栏 — 桌面（md+）固定列，手机隐藏 */}
+      <div className="hidden md:flex w-60 bg-white border-r border-gray-200 p-3 overflow-y-auto flex flex-col flex-shrink-0">
         <button
           onClick={() => { setSelectedList(null); setSelectedTodoId(null); setManualOrder(null) }}
           className={clsx(
@@ -347,9 +347,36 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
       </div>
 
       {/* 中任务区 */}
-      <div className="flex-1 flex flex-col p-4 overflow-hidden min-w-0">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
+      <div className="flex-1 flex flex-col p-2 md:p-4 overflow-hidden min-w-0">
+        {/* 手机：列表横滑 chips（替代左侧栏），桌面隐藏 */}
+        <div className="md:hidden flex gap-1.5 overflow-x-auto pb-2 mb-1 flex-shrink-0 -mx-1 px-1">
+          <button
+            onClick={() => { setSelectedList(null); setSelectedTodoId(null); setManualOrder(null) }}
+            className={clsx(
+              'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border whitespace-nowrap flex-shrink-0',
+              selectedList === null ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200',
+            )}
+          >
+            <Inbox size={12} /> 全部
+            {stats ? <span className="text-[10px] opacity-80">{stats.incomplete}</span> : null}
+          </button>
+          {lists.map((l) => (
+            <button
+              key={l.id}
+              onClick={() => { setSelectedList(l.id); setSelectedTodoId(null); setManualOrder(null) }}
+              className={clsx(
+                'px-2.5 py-1 text-xs rounded-full border whitespace-nowrap flex-shrink-0',
+                selectedList === l.id ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200',
+              )}
+            >
+              {l.display_name}
+              {counts.get(l.id) ? <span className="ml-1 text-[10px] opacity-80">{counts.get(l.id)}</span> : null}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between gap-2 mb-3 flex-shrink-0 flex-wrap">
+          <div className="flex items-center gap-2 md:gap-3 overflow-x-auto">
             <FilterSelect
               label="排序"
               value={sort}
@@ -365,9 +392,9 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
               />
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer">
-              <Upload size={14} /> CSV 导入
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <label className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer" title="CSV 导入">
+              <Upload size={14} /> <span className="hidden sm:inline">CSV 导入</span>
               <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
             </label>
             <button
@@ -387,14 +414,14 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
                 setSelectedTodoId('__NEW__')
               }}
               disabled={autoList}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
+              className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
             >
               <Plus size={14} /> 新建待办
             </button>
           </div>
         </div>
 
-        {csvResult && <div className="mb-2 text-sm text-gray-500 bg-gray-50 px-3 py-1.5 rounded">{csvResult}</div>}
+        {csvResult && <div className="mb-2 text-sm text-gray-500 bg-gray-50 px-3 py-1.5 rounded flex-shrink-0">{csvResult}</div>}
 
         <div className={viewMode === 'list' ? 'flex-1 overflow-y-auto' : 'flex-1 min-h-0'}>
           {viewMode === 'matrix' ? (

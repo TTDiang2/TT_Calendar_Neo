@@ -43,7 +43,7 @@ export function YearView({ yearData, layers, selectedDate, onSelectDate }: Props
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3">
         {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
           const days = byMonth.get(m) ?? []
           return (

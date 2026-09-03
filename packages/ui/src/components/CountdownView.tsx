@@ -42,10 +42,27 @@ export function CountdownView() {
   const filtered = selectedCategory ? items.filter((i) => i.category === selectedCategory) : items
   const selected = selectedId === 'NEW' ? null : items.find((i) => i.id === selectedId) ?? null
 
+  const catBtn = (c: string, count: number) => (
+    <button
+      key={c}
+      onClick={() => { setSelectedCategory(c); setSelectedId(null) }}
+      className={clsx(
+        'flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-md text-sm mb-0.5',
+        selectedCategory === c ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
+      )}
+    >
+      <span className="flex items-center gap-1.5 truncate">
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CATEGORY_COLORS[c] ?? '#9ca3af' }} />
+        {c}
+      </span>
+      <span className="text-xs text-gray-400">{count}</span>
+    </button>
+  )
+
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* 左分类栏 — w-60 */}
-      <div className="w-60 bg-white border-r border-gray-200 p-3 overflow-y-auto flex flex-col">
+      {/* 左分类栏 — 桌面（md+）固定列 */}
+      <div className="hidden md:flex w-60 bg-white border-r border-gray-200 p-3 overflow-y-auto flex-col flex-shrink-0">
         <button
           onClick={() => { setSelectedCategory(null); setSelectedId(null) }}
           className={clsx(
@@ -56,22 +73,7 @@ export function CountdownView() {
           <span className="flex items-center gap-1.5"><AlarmClock size={14} /> 全部</span>
           <span className="text-xs text-gray-400">{items.length}</span>
         </button>
-        {categories.map((c) => (
-          <button
-            key={c}
-            onClick={() => { setSelectedCategory(c); setSelectedId(null) }}
-            className={clsx(
-              'flex items-center justify-between px-2 py-1.5 rounded-md text-sm mb-0.5',
-              selectedCategory === c ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
-            )}
-          >
-            <span className="flex items-center gap-1.5 truncate">
-              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CATEGORY_COLORS[c] ?? '#9ca3af' }} />
-              {c}
-            </span>
-            <span className="text-xs text-gray-400">{items.filter((i) => i.category === c).length}</span>
-          </button>
-        ))}
+        {categories.map((c) => catBtn(c, items.filter((i) => i.category === c).length))}
         <button
           onClick={() => { setSelectedCategory(null); setSelectedId('NEW') }}
           className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-400 hover:text-gray-600 mt-1"
@@ -81,14 +83,42 @@ export function CountdownView() {
       </div>
 
       {/* 中卡片区 */}
-      <div className="flex-1 flex flex-col p-4 overflow-hidden min-w-0">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold text-gray-800 flex items-center gap-1.5">
-            <CalendarClock size={16} /> 倒数日{selectedCategory ? ` · ${selectedCategory}` : ''}
+      <div className="flex-1 flex flex-col p-3 md:p-4 overflow-hidden min-w-0">
+        {/* 手机：分类横滑 chips（替代左侧栏） */}
+        <div className="md:hidden flex gap-1.5 overflow-x-auto pb-2 -mx-1 px-1 flex-shrink-0">
+          <button
+            onClick={() => { setSelectedCategory(null); setSelectedId(null) }}
+            className={clsx(
+              'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border whitespace-nowrap flex-shrink-0',
+              selectedCategory === null ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200',
+            )}
+          >
+            全部 <span className="text-[10px] opacity-70">{items.length}</span>
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c}
+              onClick={() => { setSelectedCategory(c); setSelectedId(null) }}
+              className={clsx(
+                'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border whitespace-nowrap flex-shrink-0',
+                selectedCategory === c ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200',
+              )}
+            >
+              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: CATEGORY_COLORS[c] ?? '#9ca3af' }} />
+              {c}
+              <span className="text-[10px] opacity-70">{items.filter((i) => i.category === c).length}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between mb-3 flex-shrink-0">
+          <h2 className="text-sm md:text-base font-semibold text-gray-800 flex items-center gap-1.5 min-w-0">
+            <CalendarClock size={15} className="flex-shrink-0" />
+            <span className="truncate">倒数日{selectedCategory ? ` · ${selectedCategory}` : ''}</span>
           </h2>
           <button
             onClick={() => { setSelectedCategory(null); setSelectedId('NEW') }}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex-shrink-0"
           >
             <Plus size={14} /> 新建
           </button>
@@ -117,9 +147,10 @@ export function CountdownView() {
         </div>
       </div>
 
-      {/* 右详情栏 — w-72 */}
+      {/* 桌面（lg+）：右侧详情栏 */}
       <CountdownDetailPanel
         item={selected}
+        variant="panel"
         onClose={() => setSelectedId(null)}
         onSave={(data, id) => {
           if (id) updateMut.mutate({ id, data })
@@ -133,6 +164,30 @@ export function CountdownView() {
           }
         }}
       />
+      {/* 手机（<lg）：点卡片后底部弹层编辑 */}
+      {selected && (
+        <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setSelectedId(null)} />
+          <div className="relative">
+            <CountdownDetailPanel
+              item={selected}
+              variant="sheet"
+              onClose={() => setSelectedId(null)}
+              onSave={(data, id) => {
+                if (id) updateMut.mutate({ id, data })
+                else createMut.mutate(data)
+                setSelectedId(null)
+              }}
+              onDelete={(id) => {
+                if (confirm('删除该倒数日？')) {
+                  deleteMut.mutate(id)
+                  setSelectedId(null)
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -183,7 +238,7 @@ function CountdownCard({ item, selected, onSelect }: { item: CountdownItem; sele
   )
 }
 
-function CountdownDetailPanel({ item, onClose, onSave, onDelete }: {
+function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'panel' }: {
   item: CountdownItem | null
   onClose: () => void
   onSave: (data: {
@@ -197,6 +252,7 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete }: {
     notes: string | null
   }, id?: number) => void
   onDelete: (id: number) => void
+  variant?: 'panel' | 'sheet'
 }) {
   const [name, setName] = useState('')
   const [category, setCategory] = useState('生日')
@@ -233,12 +289,35 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete }: {
   }, [item])
 
   const isNew = !item
+  const sheet = variant === 'sheet'
+
+  // 无选中时：桌面占位提示；手机弹层不显示
+  if (!item) {
+    if (sheet) return null
+    return (
+      <aside className="hidden lg:block w-72 bg-white border-l border-gray-200 p-4 flex-shrink-0">
+        <p className="text-sm text-gray-400">点击卡片查看 / 编辑</p>
+      </aside>
+    )
+  }
 
   return (
-    <aside className="w-72 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+    <aside
+      className={clsx(
+        'bg-white flex flex-col overflow-hidden',
+        sheet
+          ? 'w-full max-h-[72dvh] rounded-t-2xl shadow-[0_-8px_30px_rgba(0,0,0,0.15)]'
+          : 'hidden lg:flex w-72 border-l border-gray-200',
+      )}
+    >
+      {sheet && (
+        <div className="flex justify-center pt-1.5 pb-0.5">
+          <div className="w-10 h-1 rounded-full bg-gray-300" />
+        </div>
+      )}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
         <p className="text-xs text-gray-400 uppercase tracking-wide">{isNew ? '新建倒数日' : '倒数日设置'}</p>
-        <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 text-sm">×</button>
+        <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 text-lg leading-none" title="关闭">×</button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

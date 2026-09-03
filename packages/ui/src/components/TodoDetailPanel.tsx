@@ -174,7 +174,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
 
   if (!todo) {
     return (
-      <aside className="w-72 bg-white border-l border-gray-200 p-4">
+      <aside className="hidden lg:block w-72 bg-white border-l border-gray-200 p-4 flex-shrink-0">
         <p className="text-sm text-gray-400">点击待办查看详情</p>
       </aside>
     )
@@ -209,22 +209,37 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
   }
 
   return (
-    <aside
-      className="w-72 bg-white border-l border-gray-200 flex flex-col overflow-hidden"
-      onKeyDown={(e) => {
-        // Ctrl/Cmd + Enter 直接保存（新建待办时同样生效）
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-          e.preventDefault()
-          if (title.trim() && listId && !savingRef.current) save()
-        }
-      }}
-    >
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <p className="text-xs text-gray-400 uppercase tracking-wide">待办详情</p>
-        <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600" title="关闭">
-          <X size={16} />
-        </button>
-      </div>
+    <>
+      {/* 手机：底部弹层后的遮罩（点空白关闭，桌面隐藏） */}
+      <div
+        className="lg:hidden fixed inset-0 z-[39] bg-black/30"
+        onClick={onClose}
+      />
+      <aside
+        className={clsx(
+          // 单一挂载、响应式：<lg 为固定底部弹层；lg+ 为静态右侧栏
+          'bg-white flex flex-col overflow-hidden',
+          'fixed inset-x-0 bottom-0 z-40 max-h-[75dvh] rounded-t-2xl shadow-[0_-8px_30px_rgba(0,0,0,0.15)]',
+          'pb-[env(safe-area-inset-bottom)]',
+          'lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:rounded-none lg:shadow-none lg:w-72 lg:border-l lg:pb-0',
+        )}
+        onKeyDown={(e) => {
+          // Ctrl/Cmd + Enter 直接保存（新建待办时同样生效）
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault()
+            if (title.trim() && listId && !savingRef.current) save()
+          }
+        }}
+      >
+        <div className="lg:hidden flex justify-center pt-1.5 pb-0.5">
+          <div className="w-10 h-1 rounded-full bg-gray-300" />
+        </div>
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+          <p className="text-xs text-gray-400 uppercase tracking-wide">{todo.id === '' || todo.id === '__NEW__' ? '新建待办' : '待办详情'}</p>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 flex-shrink-0 ml-2" title="关闭">
+            <X size={16} />
+          </button>
+        </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         <textarea
@@ -354,7 +369,8 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
           setNotesModalOpen(false)
         }}
       />
-    </aside>
+      </aside>
+    </>
   )
 })
 
