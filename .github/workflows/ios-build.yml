@@ -1,0 +1,106 @@
+# iOS 云端打包（在本仓库无 Mac 的情况下产出可测试的 iOS App）
+#
+# 原理：GitHub Actions 的 macos runner 自带 Xcode，替我们完成
+#       `tauri ios init`（生成 Xcode 工程）和模拟器构建。
+#
+# 产物：iOS 模拟器版 .app（zip 压缩）。两种用法：
+#   1. Appetize.io（推荐，浏览器直接跑）：把 zip 上传到 https://appetize.io ，
+#      在任意 Windows 浏览器里就能操作这个 iOS App。
+#   2. 有 Mac 时：unzip 后拖进 Xcode 的 Simulator 直接运行。
+#
+# 注意（数据依赖）：App 内数据走内网穿透域名（见 apps/mobile/src/main.tsx 的
+#   API_BASE 默认值）。跑 App 时你的电脑要开着「启动日历.bat / dev:all」和穿透客户端。
+#   穿透域名变了就改 main.tsx 里的默认值，或用仓库 Secrets 里的
+#   VITE_API_BASE 覆盖（见下方 build 步骤）。
+#
+# 真机 .ipa（装到自己 iPhone）需要 Apple 签名，见文件末尾注释。
+
+name: iOS build
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+      - 'scripts/patch-ios-ats.mjs'
+      - '.github/workflows/ios-build.yml'
+
+jobs:
+  simulator:
+    name: 模拟器包（无需签名）
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        # 版本读 package.json 的 packageManager 字段
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装 Rust + iOS 编译目标
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: 缓存 Rust 编译产物
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/mobile/src-tauri
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 生成 Xcode 工程
+        working-directory: apps/mobile
+        run: pnpm tauri ios init --ci
+
+      - name: 放行 http 数据服务（ATS）
+        run: node scripts/patch-ios-ats.mjs
+
+      - name: 构建模拟器版 App
+        working-directory: apps/mobile
+        env:
+          # 可选：在仓库 Settings → Secrets 里配 VITE_API_BASE 即可不改代码换数据地址
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+        run: pnpm tauri ios build --target aarch64-sim --ci
+
+      - name: 压缩 .app 产物
+        run: |
+          APP=$(find apps/mobile/src-tauri/gen/apple/build -name '*.app' -type d | head -1)
+          if [ -z "$APP" ]; then
+            echo '未找到 .app 产物，列出 build 目录以便排障：'
+            find apps/mobile/src-tauri/gen/apple/build -maxdepth 4 || true
+            exit 1
+          fi
+          echo "打包: $APP"
+          (cd "$(dirname "$APP")" && zip -qry "$GITHUB_WORKSPACE/tt-calendar-ios-sim.zip" "$(basename "$APP")")
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: tt-calendar-ios-simulator
+          path: tt-calendar-ios-sim.zip
+          retention-days: 14
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 真机 .ipa 路线（等你要装到自己 iPhone 时再做）：
+#
+# 1) 免费 Apple ID（7 天有效期，重装即续）：
+#    - 云端继续出「未签名 .ipa」或本工作流的模拟器包不行——真机要签名；
+#    - 最省事：用 Windows 上的 Sideloadly（sideloadly.io）给 .ipa 签你的 Apple ID
+#      并经 USB 装机。需要把上面的构建换成 --target aarch64 + 跳过签名
+#      （xcodebuild 传 CODE_SIGNING_ALLOWED=NO）。
+# 2) 付费开发者账号（$99/年）：
+#    - 在 developer.apple.com 网页上（Windows 浏览器即可）创建证书+描述文件，
+#      存入仓库 Secrets，CI 里直接签名出 .ipa，走 TestFlight 安装，1 年有效。
+#
+# 到时候叫一声，把这段补成正式 job 即可。
+# ─────────────────────────────────────────────────────────────────────────────

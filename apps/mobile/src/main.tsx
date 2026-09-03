@@ -5,13 +5,15 @@ import '@tt-calendar/ui/index.css'
 import { App, setBackend, createHttpBackend } from '@tt-calendar/ui'
 import { ErrorBoundary } from '@tt-calendar/ui/components/ErrorBoundary'
 
-// 移动端：数据由 Node sidecar 提供，端口 8769（避开 web 的 8766、桌面的 8767）。
-//   开发模式：页面由 vite(5175) 提供，走相对路径经 vite 代理转发。
-//   打包模式：页面从 tauri:// 加载，且真机上数据走原生 SQLite 桥（见下方说明）。
-//   注意：生产移动端本应改用 tauri-plugin-sql / drizzle-sqlite-proxy 直接读手机本地库，
-//   而非 HTTP sidecar（那是桌面/开发期的权宜方案）。此处先复用 HTTP 保证 dev 预览可跑，
-//   原生存储桥留作下一阶段。
-const API_BASE = import.meta.env.DEV ? '/api' : 'http://127.0.0.1:8769/api'
+// 移动端：数据由 Node 数据服务提供。
+//   开发模式：页面由 vite(5175) 提供，走相对路径经 vite 代理转发到本机 8769。
+//   生产模式（真机/模拟器 App）：127.0.0.1 在手机上指向手机自己，必须指向
+//   电脑的可达地址。默认走内网穿透域名（与 web 8766 同一 SQLite 库）；
+//   穿透域名变了或想换地址时，用环境变量 VITE_API_BASE 覆盖：
+//     cross-env VITE_API_BASE=http://新域名/api pnpm --filter @tt-calendar/mobile build
+const API_BASE = import.meta.env.DEV
+  ? '/api'
+  : ((import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://av12945vy5215.vicp.fun/api')
 
 setBackend(createHttpBackend(API_BASE))
 
