@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useViewData, useCountdown } from './hooks/useApi'
 import { toggleLayer, moveDay, getTodoStats, getTodos, getSyncStatus, getSyncConfig, syncNow, refreshDueSubscriptions } from './adapt/api'
-import { shiftMonthKey, shiftYearKey } from './adapt/data'
+import { shiftMonthKey, shiftYearKey, todayStr } from './adapt/data'
 import type { CalEvent, Layer, MonthData, TopTab, TodoViewMode, ViewMode, YearData } from './adapt/types'
 import { TopBar } from './components/TopBar'
 import { Sidebar, MobileLayersDrawer } from './components/Sidebar'
@@ -46,6 +46,10 @@ interface CtxMenuState {
 export default function App() {
   const [monthKey, setMonthKey] = useState('2026-8')
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  // 日/周视图的「导航游标」：与 selectedDate(详情弹层选中) 解耦。
+  // 过去用 selectedDate 兼任锚点，一旦被关闭详情弹层等操作清空，
+  // 日/周视图就回落 monthKey 当月 1 号（monthKey 在 day/week 下从不更新，默认 2026-8 → 跳回 8.1）。
+  const [dayCursor, setDayCursor] = useState<string | null>(null)
   const [mode, setMode] = useState<ViewMode>('month')
   const [topTab, setTopTab] = useState<TopTab>('calendar')
   const [todoView, setTodoViewState] = useState<TodoViewMode>(() => {
@@ -63,15 +67,31 @@ export default function App() {
   const dragSource = useRef<string | null>(null)
   const qc = useQueryClient()
 
-  // week/day 视图需要具体日期 anchor；selectedDate 为空时用当月 1 号（零填充，backend date.fromisoformat 要求）
+  const isDayWeek = mode === 'week' || mode === 'day'
+  const prevIsDayWeek = useRef<boolean | null>(null)
+
+  // 日/周视图锚点：只由 dayCursor 决定（不再受 selectedDate 清空影响）
   const dayAnchor = useMemo(() => {
+    if (dayCursor) return dayCursor
     if (selectedDate) return selectedDate
     const [y, m] = monthKey.split('-').map(Number)
     return `${y}-${String(m).padStart(2, '0')}-01`
-  }, [selectedDate, monthKey])
+  }, [dayCursor, selectedDate, monthKey])
+
+  // 切到 day/week：优先跟随「月视图当前选中日期」，无选中则沿用上次游标/今天，
+  // 避免首屏落到陈旧的 monthKey 当月 1 号（默认 2026-8 → 8.1）
+  useEffect(() => {
+    if (isDayWeek !== prevIsDayWeek.current) {
+      prevIsDayWeek.current = isDayWeek
+      if (isDayWeek) {
+        setDayCursor((c) => selectedDate ?? c ?? todayStr())
+      }
+    }
+  }, [isDayWeek, selectedDate])
+
   const { data: monthData, isLoading } = useViewData(
     mode === 'countdown' ? 'month' : mode,
-    mode === 'week' || mode === 'day' ? dayAnchor : monthKey,
+    isDayWeek ? dayAnchor : monthKey,
   )
   const { data: countdownData } = useCountdown()
 
@@ -192,16 +212,18 @@ export default function App() {
 
   function shiftAnchor(d: Date) {
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    setSelectedDate(iso)
+    setDayCursor(iso)
+    // 同步 monthKey，保证日/周视图翻页后切回月视图月份也对齐
+    setMonthKey(`${d.getFullYear()}-${d.getMonth() + 1}`)
   }
 
   function goToday() {
     const now = new Date()
     const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    setMonthKey(`${now.getFullYear()}-${now.getMonth() + 1}`)
     if (mode === 'week' || mode === 'day') {
       shiftAnchor(now)
     } else {
-      setMonthKey(`${now.getFullYear()}-${now.getMonth() + 1}`)
       setSelectedDate(iso)
     }
   }
