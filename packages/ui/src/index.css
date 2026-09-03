@@ -22,6 +22,22 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
+/* 手机浏览器地址栏伸缩时用 dvh 保持满高（桌面无影响） */
+@supports (height: 100dvh) {
+  html, body, #root { height: 100dvh; }
+}
+
+/* 触屏设备（无 hover）：把「悬停才显示」的操作按钮改为常显，
+   否则编辑/删除等按钮在手机上永远看不见 */
+@media (hover: none) {
+  .group .group-hover\:opacity-100 {
+    opacity: 1;
+  }
+}
+
+/* 去掉移动端点击灰色高亮 */
+* { -webkit-tap-highlight-color: transparent; }
+
 /* 滚动条美化 */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }

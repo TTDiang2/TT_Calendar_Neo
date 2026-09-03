@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, CheckCircle2, Clock, Palette, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { CalendarDays, CalendarPlus, CheckCircle2, Clock, Palette, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import type { CalEvent, Day, Layer } from '../adapt/types'
 import { COLORING_COLORS, parseDate, TODO_BUSY_PREDICT_COLORS, TODO_BUSY_DONE_COLORS } from '../adapt/data'
@@ -13,10 +13,17 @@ interface Props {
   onSetColoring: (date: string) => void
   onAddDot: (date: string) => void
   onAddColor: (date: string) => void
+  /** 新建事件入口（手机没有双击新建，桌面也顺带受益） */
+  onAddEvent?: (date: string) => void
+  /** panel=桌面右侧栏（lg+）；sheet=手机底部弹层 */
+  variant?: 'panel' | 'sheet'
+  /** sheet 模式的关闭回调 */
+  onClose?: () => void
 }
 
-export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetColoring, onAddDot, onAddColor }: Props) {
+export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetColoring, onAddDot, onAddColor, onAddEvent, variant = 'panel', onClose }: Props) {
   const qc = useQueryClient()
+  const sheet = variant === 'sheet'
   const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
   const delMut = useMutation({
     mutationFn: (id: number) => deleteEvent(id),
@@ -47,8 +54,9 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
   })
 
   if (!day) {
+    if (sheet) return null
     return (
-      <aside className="w-72 bg-white border-l border-gray-200 p-4 overflow-y-auto">
+      <aside className="hidden lg:block w-72 bg-white border-l border-gray-200 p-4 overflow-y-auto">
         <p className="text-sm text-gray-400">点击日期查看详情</p>
       </aside>
     )
@@ -66,7 +74,19 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
   const layerName = (lid: string) => layers.find((l) => l.layer_id === lid)?.display_name ?? lid
 
   return (
-    <aside className="w-72 bg-white border-l border-gray-200 p-4 overflow-y-auto">
+    <aside
+      className={clsx(
+        'bg-white overflow-y-auto',
+        sheet
+          ? 'w-full max-h-[72dvh] rounded-t-2xl shadow-[0_-8px_30px_rgba(0,0,0,0.15)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
+          : 'hidden lg:block w-72 border-l border-gray-200 p-4',
+      )}
+    >
+      {sheet && (
+        <div className="flex justify-center -mt-2 mb-1">
+          <div className="w-10 h-1 rounded-full bg-gray-200" />
+        </div>
+      )}
       <div className="flex items-center justify-between mb-3">
         <div>
           <p className="text-[11px] text-gray-400">已选日期</p>
@@ -79,9 +99,26 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
             {day.is_today && <span className="ml-2 text-blue-500 text-xs">今天</span>}
           </p>
         </div>
+        {sheet && onClose && (
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md text-lg flex-shrink-0"
+            title="关闭"
+          >
+            ×
+          </button>
+        )}
       </div>
 
       <div className="flex gap-1 mb-4">
+        {onAddEvent && (
+          <button
+            onClick={() => onAddEvent(day.date)}
+            className="flex-1 flex items-center justify-center gap-1 text-xs text-white py-1.5 rounded-md bg-blue-500 hover:bg-blue-600"
+          >
+            <CalendarPlus size={12} /> 事件
+          </button>
+        )}
         <button
           onClick={() => onAddDot(day.date)}
           className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"

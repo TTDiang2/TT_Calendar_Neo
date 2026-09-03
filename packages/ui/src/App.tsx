@@ -5,7 +5,7 @@ import { toggleLayer, moveDay, getTodoStats, getTodos, getSyncStatus, getSyncCon
 import { shiftMonthKey, shiftYearKey } from './adapt/data'
 import type { CalEvent, Layer, MonthData, TopTab, TodoViewMode, ViewMode, YearData } from './adapt/types'
 import { TopBar } from './components/TopBar'
-import { Sidebar } from './components/Sidebar'
+import { Sidebar, MobileLayersDrawer } from './components/Sidebar'
 import { MonthGrid } from './components/MonthGrid'
 import { WeekView } from './components/WeekView'
 import { DayView } from './components/DayView'
@@ -59,6 +59,7 @@ export default function App() {
   const [dialog, setDialog] = useState<DialogState>(null)
   const [exitSync, setExitSync] = useState<{ state: 'syncing' } | { state: 'failed'; error: string } | null>(null)
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
+  const [mobileLayersOpen, setMobileLayersOpen] = useState(false)
   const dragSource = useRef<string | null>(null)
   const qc = useQueryClient()
 
@@ -279,7 +280,7 @@ export default function App() {
     <div className="h-full flex flex-col bg-gray-50">
       {exitSync && (
         <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-xl px-8 py-6 w-[360px] text-center">
+          <div className="bg-white rounded-2xl shadow-xl px-8 py-6 w-[360px] max-w-[calc(100vw-2rem)] text-center">
             {exitSync.state === 'syncing' ? (
               <>
                 <div className="mx-auto mb-3 w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -342,6 +343,7 @@ export default function App() {
         onOpenSearch={() => setDialog({ kind: 'search' })}
         onOpenSubscription={() => setDialog({ kind: 'subscription' })}
         onOpenSettings={() => setDialog({ kind: 'settings' })}
+        onOpenLayers={() => setMobileLayersOpen(true)}
       />
       <ReminderBanner onJumpToTodo={() => setTopTab('todo')} />
       <div className="flex-1 flex overflow-hidden">
@@ -356,7 +358,7 @@ export default function App() {
               onToggle={toggleLayerFn}
               countdown={countdownData?.text ?? '…'}
             />
-            <main className="flex-1 flex flex-col p-4 min-w-0">
+            <main className="flex-1 flex flex-col p-2 md:p-4 min-w-0">
               {isLoading || !monthData ? (
                 <div className="flex-1 flex items-center justify-center text-gray-400">加载中…</div>
               ) : mode === 'year' ? (
@@ -404,19 +406,55 @@ export default function App() {
               )}
             </main>
             {mode !== 'year' && (
-              <DetailPanel
-                day={selectedDay}
-                layers={layers}
-                onEditEvent={openEvent}
-                onEditSchedule={(d) => setDialog({ kind: 'schedule', date: d })}
-                onSetColoring={(d) => setDialog({ kind: 'coloring', date: d })}
-                onAddDot={(d) => setDialog({ kind: 'dot', date: d })}
-                onAddColor={(d) => setDialog({ kind: 'color', date: d })}
-              />
+              <>
+                {/* 桌面（lg+）：右侧详情栏 */}
+                <DetailPanel
+                  day={selectedDay}
+                  layers={layers}
+                  onEditEvent={openEvent}
+                  onEditSchedule={(d) => setDialog({ kind: 'schedule', date: d })}
+                  onSetColoring={(d) => setDialog({ kind: 'coloring', date: d })}
+                  onAddDot={(d) => setDialog({ kind: 'dot', date: d })}
+                  onAddColor={(d) => setDialog({ kind: 'color', date: d })}
+                  onAddEvent={openEvent}
+                />
+                {/* 手机（<lg）：点选日期后从底部弹出详情 */}
+                {selectedDay && (
+                  <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end">
+                    <div
+                      className="absolute inset-0 bg-black/30"
+                      onClick={() => setSelectedDate(null)}
+                    />
+                    <div className="relative">
+                      <DetailPanel
+                        variant="sheet"
+                        day={selectedDay}
+                        layers={layers}
+                        onEditEvent={openEvent}
+                        onEditSchedule={(d) => setDialog({ kind: 'schedule', date: d })}
+                        onSetColoring={(d) => setDialog({ kind: 'coloring', date: d })}
+                        onAddDot={(d) => setDialog({ kind: 'dot', date: d })}
+                        onAddColor={(d) => setDialog({ kind: 'color', date: d })}
+                        onAddEvent={openEvent}
+                        onClose={() => setSelectedDate(null)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
       </div>
+
+      {/* 手机：图层抽屉（顶栏「图层」按钮唤出） */}
+      <MobileLayersDrawer
+        open={mobileLayersOpen}
+        onClose={() => setMobileLayersOpen(false)}
+        layers={layers}
+        onToggle={toggleLayerFn}
+        countdown={countdownData?.text ?? '…'}
+      />
 
       {ctxMenu && (
         <ContextMenu

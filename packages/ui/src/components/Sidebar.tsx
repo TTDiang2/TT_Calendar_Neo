@@ -13,7 +13,38 @@ interface Props {
   countdown: string
 }
 
+/* 桌面：固定左侧栏（md+ 才显示，手机上由 App 渲染 MobileLayersDrawer） */
 export function Sidebar({ layers, onToggle, countdown }: Props) {
+  return (
+    <aside className="hidden md:flex w-60 bg-white border-r border-gray-200 p-4 overflow-y-auto flex-col">
+      <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} />
+    </aside>
+  )
+}
+
+/* 手机：左侧滑出抽屉（点顶栏「图层」按钮唤出） */
+export function MobileLayersDrawer({ open, onClose, layers, onToggle, countdown }: Props & { open: boolean; onClose: () => void }) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 md:hidden">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <aside className="absolute inset-y-0 left-0 w-[290px] max-w-[85vw] bg-white shadow-xl p-4 pt-3 overflow-y-auto flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">图层</h2>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md text-lg"
+          >
+            ×
+          </button>
+        </div>
+        <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} />
+      </aside>
+    </div>
+  )
+}
+
+function LayerTree({ layers, onToggle, countdown }: Props) {
   const qc = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
@@ -65,7 +96,7 @@ export function Sidebar({ layers, onToggle, countdown }: Props) {
   }
 
   return (
-    <aside className="w-60 bg-white border-r border-gray-200 p-4 overflow-y-auto flex flex-col">
+    <div className="flex flex-col flex-1 min-h-0">
       <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">导航</h2>
 
       <div className="flex flex-col gap-2 mb-4">
@@ -181,7 +212,7 @@ export function Sidebar({ layers, onToggle, countdown }: Props) {
       </div>
 
       {showCreate && <CreateLayerDialog onClose={() => setShowCreate(false)} onCreated={onCreated} />}
-    </aside>
+    </div>
   )
 }
 

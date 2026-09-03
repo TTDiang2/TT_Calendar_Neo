@@ -104,8 +104,8 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
         onDrop(day.date)
       }}
       className={clsx(
-        'relative p-1.5 rounded-lg border cursor-pointer transition-all flex flex-col gap-0.5 overflow-hidden',
-        maxLabels >= 6 ? 'min-h-[160px]' : 'min-h-[104px]',
+        'relative p-1 md:p-1.5 rounded-lg border cursor-pointer transition-all flex flex-col gap-0.5 overflow-hidden',
+        maxLabels >= 6 ? 'min-h-[104px] md:min-h-[160px]' : 'min-h-[72px] md:min-h-[104px]',
         'hover:shadow-md hover:-translate-y-0.5',
         day.is_today
           ? 'border-2 border-blue-500'
@@ -134,7 +134,7 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
       <div className="flex items-center justify-between">
         <span
           className={clsx(
-            'text-sm font-semibold',
+            'text-xs md:text-sm font-semibold',
             day.is_today && 'bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs',
           )}
           style={day.is_today ? undefined : (() => {
@@ -173,7 +173,7 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
             {visibleEvents.slice(0, maxLabels).map((ev, i) => (
               <span
                 key={ev.id ?? i}
-                className="text-[10px] truncate leading-tight"
+                className={clsx('text-[10px] truncate leading-tight', i > 0 && 'hidden md:block')}
                 style={{ color: last ? labelColor : '#6b7280' }}
                 title={ev.title}
               >
@@ -181,7 +181,7 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
               </span>
             ))}
             {visibleEvents.length > maxLabels && (
-              <span className="text-[10px]" style={{ color: last ? labelColor : '#9ca3af' }}>+{visibleEvents.length - maxLabels}</span>
+              <span className="text-[10px] hidden md:block" style={{ color: last ? labelColor : '#9ca3af' }}>+{visibleEvents.length - maxLabels}</span>
             )}
           </div>
         )
@@ -201,7 +201,7 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
                   {first.start_time ? `${first.start_time} ${first.title}` : first.title}
                 </span>
                 {sorted.length > 1 && (
-                  <span className="text-[10px]" style={{ color: labelColor }}>+{sorted.length - 1} 项日程</span>
+                  <span className="text-[10px] hidden md:block" style={{ color: labelColor }}>+{sorted.length - 1} 项日程</span>
                 )}
               </>
             )

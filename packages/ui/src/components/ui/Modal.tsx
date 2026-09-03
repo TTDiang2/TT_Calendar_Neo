@@ -18,7 +18,7 @@ export function Modal({
     >
       <div
         className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh]"
-        style={{ width }}
+        style={{ width, maxWidth: 'calc(100vw - 2rem)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
