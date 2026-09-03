@@ -31,7 +31,9 @@ on:
 jobs:
   simulator:
     name: 模拟器包（无需签名）
-    runs-on: macos-14
+    # macos-15：默认 Xcode 16，能打开 tauri(2.11) 生成的 Xcode 16 格式工程(objectVersion 77)；
+    # macos-14 默认 Xcode 15.4 打不开会报 "future Xcode project file format"
+    runs-on: macos-15
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -97,7 +99,7 @@ jobs:
   #       最后手动打成标准 Payload/*.app 的 .ipa。Sideloadly/AltStore 都能吃这种包再自签。
   device-unsigned:
     name: 真机包（未签名，Sideloadly 自签）
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
