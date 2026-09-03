@@ -36,7 +36,46 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.js', '**/*.cjs'],
+    files: ['**/*.js'],
     languageOptions: { sourceType: 'module' },
+  },
+  {
+    // Node 脚本（如 scripts/make-icon.cjs）跑在 Node 里、用 CommonJS，
+    // 需要 Node 全局对象；否则 require/process/Buffer 会被当成未定义。
+    files: ['**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      ecmaVersion: 2022,
+      globals: {
+        require: 'readonly',
+        module: 'writable',
+        exports: 'writable',
+        process: 'readonly',
+        Buffer: 'readonly',
+        console: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        URL: 'readonly',
+        globalThis: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/no-var-requires': 'off',
+    },
+  },
+  {
+    // 各端的数据服务（server.ts）同样跑在 Node 里
+    files: ['apps/*/server.ts'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        __dirname: 'readonly',
+      },
+    },
   },
 )
