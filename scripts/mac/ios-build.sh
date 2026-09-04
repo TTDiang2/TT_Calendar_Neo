@@ -47,6 +47,12 @@ rustup target add aarch64-apple-ios aarch64-apple-ios-sim 2>/dev/null || true
 
 # ---------- 1. 前端依赖 ----------
 echo "[1/3] 安装依赖..."
+# pnpm 11 会在 build 前复检依赖并想清理 node_modules；非交互终端(Xcode build phase /
+# CI)下会中止：ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY。
+# 注意：tauri 的 iOS「Build Rust Code」phase 里调的 pnpm 跑在 Xcode 进程上下文，
+# 不继承 shell 环境，且 pnpm 只认 cwd 的 .npmrc 与 ~/.npmrc → 必须写 global(~/.npmrc)。
+pnpm config set --global confirm-modules-purge false
+pnpm config set --global verify-deps-before-run false
 pnpm install --prefer-offline
 
 # ---------- 2. 生成 iOS Xcode 工程（首次必需；重复跑会幂等） ----------

@@ -68,8 +68,16 @@ jobs:
         with:
           workspaces: apps/mobile/src-tauri
 
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
+      # pnpm 11 会在 build 前复检依赖并想清理 node_modules，无 TTY 时直接中止：
+      #   ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
+      # tauri 的 iOS「Build Rust Code」phase 内部会调 pnpm，于是构建被打断。
+      # 坑点：那个 pnpm 跑在 **Xcode build phase** 里，不继承这里的 env，而 pnpm 又不向上
+      # 递归找 .npmrc（只读 cwd 和 ~/.npmrc）。所以必须写进 ~/.npmrc(global) 才生效。
+      - name: 安装依赖（含 pnpm 无头全局配置）
+        run: |
+          pnpm config set --global confirm-modules-purge false
+          pnpm config set --global verify-deps-before-run false
+          pnpm install --frozen-lockfile
 
       - name: 生成 Xcode 工程
         working-directory: apps/mobile
@@ -133,8 +141,16 @@ jobs:
         with:
           workspaces: apps/mobile/src-tauri
 
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
+      # pnpm 11 会在 build 前复检依赖并想清理 node_modules，无 TTY 时直接中止：
+      #   ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
+      # tauri 的 iOS「Build Rust Code」phase 内部会调 pnpm，于是构建被打断。
+      # 坑点：那个 pnpm 跑在 **Xcode build phase** 里，不继承这里的 env，而 pnpm 又不向上
+      # 递归找 .npmrc（只读 cwd 和 ~/.npmrc）。所以必须写进 ~/.npmrc(global) 才生效。
+      - name: 安装依赖（含 pnpm 无头全局配置）
+        run: |
+          pnpm config set --global confirm-modules-purge false
+          pnpm config set --global verify-deps-before-run false
+          pnpm install --frozen-lockfile
 
       - name: 生成 Xcode 工程
         working-directory: apps/mobile
