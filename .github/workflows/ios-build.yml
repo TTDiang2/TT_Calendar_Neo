@@ -109,7 +109,7 @@ jobs:
           xcodebuild build \
             -project "$PROJ" \
             -scheme "$SCHEME" \
-            -configuration Release \
+            -configuration release \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$DD" \
@@ -238,7 +238,7 @@ jobs:
           xcodebuild build \
             -project "$PROJ" \
             -scheme "$SCHEME" \
-            -configuration Release \
+            -configuration release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$DD" \
