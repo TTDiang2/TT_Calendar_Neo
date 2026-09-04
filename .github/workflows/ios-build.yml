@@ -85,6 +85,12 @@ jobs:
         working-directory: apps/mobile
         run: |
           set -euo pipefail
+          # tauri ios xcode-script 在「Build Rust Code」run-script phase 会读
+          # $TMPDIR/com.<identifier>-server-addr 这个 dev server 地址文件（由 tauri ios dev/build
+          # 创建）；release 构建也会执行该 phase，文件不存在就 panic。预建占位文件即可
+          # （release 下前端走打包资源，该地址内容被忽略，不影响出包）。
+          mkdir -p "${TMPDIR:-/tmp}"
+          printf 'http://localhost:5175' > "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr"
           # tauri ios init 生成的是 .xcodeproj（嵌套的 project.xcworkspace 在内部），不能用 *.xcworkspace
           PROJ=$(find src-tauri/gen/apple -maxdepth 1 -name '*.xcodeproj' | head -1)
           if [ -z "$PROJ" ]; then
@@ -216,6 +222,12 @@ jobs:
         working-directory: apps/mobile
         run: |
           set -euo pipefail
+          # tauri ios xcode-script 在「Build Rust Code」run-script phase 会读
+          # $TMPDIR/com.<identifier>-server-addr 这个 dev server 地址文件（由 tauri ios dev/build
+          # 创建）；release 构建也会执行该 phase，文件不存在就 panic。预建占位文件即可
+          # （release 下前端走打包资源，该地址内容被忽略，不影响出包）。
+          mkdir -p "${TMPDIR:-/tmp}"
+          printf 'http://localhost:5175' > "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr"
           PROJ=$(find src-tauri/gen/apple -maxdepth 1 -name '*.xcodeproj' | head -1)
           if [ -z "$PROJ" ]; then
             echo "找不到 .xcodeproj，列出 gen/apple 排障："
