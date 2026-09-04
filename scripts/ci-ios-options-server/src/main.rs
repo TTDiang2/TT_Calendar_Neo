@@ -13,10 +13,14 @@
 //!
 //! 服务绑定到 127.0.0.1:0（随机端口，和 tauri 的 write_options 一致），并把
 //! `127.0.0.1:<port>` 写入 server-addr 文件（read_options 会自己拼 `ws://`）。
+//!
+//! API 备注（jsonrpsee 0.24）：
+//!   · `register_method` 同步回调签名是 3 参数：Fn(Params, &Context, &Extensions)；
+//!   · 返回值用 serde_json::json! 的 Value 即可（实现了 IntoResponse）；
+//!   · 0.24 没有 `ws` feature，server feature 自带 WebSocket 服务能力。
 
 use jsonrpsee::server::{RpcModule, ServerBuilder};
 use jsonrpsee::types::Params;
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -31,8 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //   vars: HashMap<String, OsString>, config: Vec<ConfigValue>,
     //   target_device: Option<TargetDevice>
     // 这里给最小可用值即可（release 构建不需要 dev 相关字段）。
-    module.register_method("options", |_params: Params<'_>, _ctx: Arc<()>| async {
-        Ok::<_, jsonrpsee::types::ErrorObject<'static>>(serde_json::json!({
+    module.register_method("options", |_params: Params<'_>, _ctx, _ext| {
+        serde_json::json!({
             "dev": false,
             "features": [],
             "args": [],
@@ -40,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "vars": {},
             "config": [],
             "target_device": null
-        }))
+        })
     })?;
 
     let handle = server.start(module);
