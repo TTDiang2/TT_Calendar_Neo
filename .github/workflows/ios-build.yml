@@ -95,7 +95,7 @@ jobs:
           echo "project: $PROJ"
           # 取 iOS scheme（形如 tt-calendar-mobile_iOS），去掉首尾空白
           SCHEME=$(xcodebuild -project "$PROJ" -list 2>/dev/null \
-            | awk '/^Schemes:/{f=1;next} f&&/iOS/{print;exit}' \
+            | awk '/Schemes:/{f=1;next} f&&/iOS/{print;exit}' \
             | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           if [ -z "$SCHEME" ]; then
             echo "找不到 iOS scheme，列出全部 scheme："
@@ -224,7 +224,7 @@ jobs:
           fi
           echo "project: $PROJ"
           SCHEME=$(xcodebuild -project "$PROJ" -list 2>/dev/null \
-            | awk '/^Schemes:/{f=1;next} f&&/iOS/{print;exit}' \
+            | awk '/Schemes:/{f=1;next} f&&/iOS/{print;exit}' \
             | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           if [ -z "$SCHEME" ]; then
             echo "找不到 iOS scheme，列出全部 scheme："
