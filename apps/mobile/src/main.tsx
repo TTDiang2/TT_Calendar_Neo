@@ -4,18 +4,17 @@ import { QueryClient, QueryClientProvider, QueryErrorResetBoundary } from '@tans
 import '@tt-calendar/ui/index.css'
 import { App, setBackend, createHttpBackend } from '@tt-calendar/ui'
 import { ErrorBoundary } from '@tt-calendar/ui/components/ErrorBoundary'
+import { createLocalBackend } from './local/backend'
 
-// 移动端：数据由 Node 数据服务提供。
-//   开发模式：页面由 vite(5175) 提供，走相对路径经 vite 代理转发到本机 8769。
-//   生产模式（真机/模拟器 App）：127.0.0.1 在手机上指向手机自己，必须指向
-//   电脑的可达地址。默认走内网穿透域名（与 web 8766 同一 SQLite 库）；
-//   穿透域名变了或想换地址时，用环境变量 VITE_API_BASE 覆盖：
-//     cross-env VITE_API_BASE=http://新域名/api pnpm --filter @tt-calendar/mobile build
-const API_BASE = import.meta.env.DEV
-  ? '/api'
-  : ((import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://av12945vy5215.vicp.fun/api')
-
-setBackend(createHttpBackend(API_BASE))
+/**
+ * 数据后端选择（数据全本地的落地）：
+ *   1. VITE_API_BASE 显式指定 → HTTP 连电脑数据服务（穿透/局域网，旧模式）
+ *   2. 开发模式（vite 5175）→ 默认走相对路径 /api 经代理连本机 8769，便于
+ *      用电脑上的真实数据调试界面
+ *   3. 生产 App（真机/模拟器）→ 默认手机本地库：Worker 里的 sql.js(WASM)
+ *      SQLite + IndexedDB 快照，离线可用、不依赖电脑在线
+ */
+const HTTP_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? (import.meta.env.DEV ? '/api' : undefined)
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,12 +26,12 @@ const queryClient = new QueryClient({
   },
 })
 
-// sidecar 是随应用一起拉起的，启动要几秒。先等它就绪再渲染，否则一开就是满屏红字。
-async function waitForDataServer(): Promise<boolean> {
+/** sidecar 模式下数据服务要几秒才就绪；先等再渲染，避免一开就是满屏红字 */
+async function waitForDataServer(base: string): Promise<boolean> {
   const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
     try {
-      const r = await fetch(`${API_BASE}/layers`)
+      const r = await fetch(`${base}/layers`)
       if (r.ok) return true
     } catch {
       // 还没起来，继续等
@@ -46,7 +45,16 @@ const root = document.getElementById('root')!
 root.innerHTML =
   '<div class="flex h-screen items-center justify-center text-sm text-gray-500">正在启动数据服务…</div>'
 
-waitForDataServer().then((ready) => {
+async function boot(): Promise<void> {
+  let ready = true
+  if (HTTP_BASE) {
+    setBackend(createHttpBackend(HTTP_BASE))
+    ready = await waitForDataServer(HTTP_BASE)
+  } else {
+    root.innerHTML =
+      '<div class="flex h-screen items-center justify-center text-sm text-gray-500">正在打开本地数据库…</div>'
+    setBackend(await createLocalBackend())
+  }
   root.innerHTML = ''
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
@@ -62,4 +70,6 @@ waitForDataServer().then((ready) => {
   if (!ready) {
     console.warn('[mobile] 数据服务 30 秒内没就绪，界面可能没数据')
   }
-})
+}
+
+void boot()

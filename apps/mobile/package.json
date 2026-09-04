@@ -18,7 +18,8 @@
     "@tt-calendar/domain": "workspace:*",
     "@tt-calendar/ui": "workspace:*",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "sql.js": "^1.14.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
