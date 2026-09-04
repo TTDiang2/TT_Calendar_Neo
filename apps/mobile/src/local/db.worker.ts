@@ -17,7 +17,7 @@
 import { openLocalDb, type LocalDbHandle } from '@tt-calendar/db/local/backend'
 import { GitHubDataRepo } from '@tt-calendar/db/sync/github'
 import { SyncFacade } from '@tt-calendar/db/sync/facade'
-import { runJisiluImport } from '@tt-calendar/db/sources/jisilu'
+import { runJisiluImport, refreshSubscriptionOnBackend, refreshDueOnBackend } from '@tt-calendar/db/sources/jisilu'
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 
 interface CallMsg {
@@ -57,6 +57,13 @@ function methodTable(): Record<string, ((...a: unknown[]) => unknown) | undefine
         end: String(a[1] ?? ''),
         qtypes: a[2] as string[] | undefined,
       }),
+    // 订阅刷新：按 source_key 分发（jisilu 已实装，其余 pending_adaptation）
+    refreshSubscription: (id: unknown) => {
+      const sub = handle!.backend.getSubscriptions().find((s) => s.id === String(id))
+      if (!sub) throw new Error('订阅不存在')
+      return refreshSubscriptionOnBackend(handle!.backend, sub)
+    },
+    refreshDueSubscriptions: () => refreshDueOnBackend(handle!.backend),
   }
 }
 

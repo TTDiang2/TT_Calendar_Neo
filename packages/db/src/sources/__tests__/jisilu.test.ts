@@ -8,7 +8,15 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import { openLocalDb } from '../../local/backend'
-import { fetchJisiluEvents, htmlToPlain, parseJisiluItem, runJisiluImport, tryParseJisiluDate } from '../jisilu'
+import {
+  fetchJisiluEvents,
+  htmlToPlain,
+  parseJisiluItem,
+  refreshDueOnBackend,
+  refreshSubscriptionOnBackend,
+  runJisiluImport,
+  tryParseJisiluDate,
+} from '../jisilu'
 
 const require = createRequire(import.meta.url)
 
@@ -117,6 +125,44 @@ describe('runJisiluImport 端到端', () => {
     expect(evs).toHaveLength(1)
     expect(evs[0]!.title).toBe('尚荣转债申购（更新）')
     expect(evs[0]!.layer_id).toBe('jisilu_CNV')
+
+    h.sqlite.close()
+  })
+
+  it('订阅刷新：jisilu 源拉取并置 active；未知 source_key 返回 pending_adaptation；refresh-due 只刷启用的', async () => {
+    const wasmBinary = readFileSync(require.resolve('sql.js/dist/sql-wasm.wasm'))
+    const h = await openLocalDb({ wasmBinary, autosaveMs: 0, skipLoad: true })
+
+    const payload = JSON.stringify([item({ id: 201, title: '打新日历事件' })])
+    const fetchImpl = (async (url: string | URL | Request) => {
+      if (String(url).includes('qtype=CNV')) return new Response(payload, { status: 200 })
+      return new Response('false', { status: 200 })
+    }) as unknown as typeof fetch
+
+    // jisilu 订阅
+    const jsub = h.backend.createSubscription({ display_name: '集思录日历', source_key: 'jisilu' })
+    expect(jsub.source_key).toBe('jisilu')
+    expect(jsub.status).toBe('pending')
+
+    const r1 = await refreshSubscriptionOnBackend(h.backend, jsub, fetchImpl)
+    expect(r1.ok).toBe(true)
+    expect(r1.inserted).toBeGreaterThan(0)
+    const after = h.backend.getSubscriptions().find((s) => s.id === jsub.id)!
+    expect(after.status).toBe('active')
+    expect(after.last_synced_at).toBeTruthy()
+    expect(h.backend.searchEvents('打新日历事件')).toHaveLength(1)
+
+    // 未适配源
+    const csub = h.backend.createSubscription({ display_name: '自定义源' })
+    const r2 = await refreshSubscriptionOnBackend(h.backend, csub, fetchImpl)
+    expect(r2.ok).toBe(false)
+    expect(r2.error).toContain('pending_adaptation')
+
+    // refresh-due：禁用的订阅不参与
+    h.backend.patchSubscription(csub.id, { enabled: false })
+    const r3 = await refreshDueOnBackend(h.backend, fetchImpl)
+    expect(r3.refreshed.some((r) => r.id === jsub.id)).toBe(true)
+    expect(r3.refreshed.some((r) => r.id === csub.id)).toBe(false)
 
     h.sqlite.close()
   })

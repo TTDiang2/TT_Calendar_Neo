@@ -198,3 +198,81 @@ export async function runJisiluImport(
   const inserted = backend.upsertImportedEvents(events)
   return { inserted, error: errors.length ? errors.join('; ').slice(0, 300) : null }
 }
+
+// ---------------------------------------------------------------------------
+// 订阅刷新（source_key = 'jisilu' 的分发分支；其余 source_key = pending_adaptation，
+// 与 legacy routes.py 的 _refresh_one_subscription 语义一致）
+// ---------------------------------------------------------------------------
+
+export interface SubscriptionLike {
+  id: string
+  source_key: string
+  last_synced_at?: string | null
+  enabled?: number | boolean | null
+  auto_update?: number | boolean | null
+}
+
+export interface RefreshOutcome {
+  id: string
+  ok: boolean
+  inserted?: number
+  error?: string
+}
+
+function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function addDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(y!, (m ?? 1) - 1, d ?? 1)
+  dt.setDate(dt.getDate() + days)
+  return isoDate(dt)
+}
+
+/**
+ * 刷新单个订阅：jisilu 源按「上次成功刷新 → 今天+90 天」增量区间抓取并
+ * upsert；其余 source_key 返回 pending_adaptation（等 agent 现场适配）。
+ */
+export async function refreshSubscriptionOnBackend(
+  backend: SqliteBackend,
+  sub: SubscriptionLike,
+  fetchImpl?: typeof fetch,
+): Promise<RefreshOutcome> {
+  if (sub.source_key !== 'jisilu') {
+    return { id: sub.id, ok: false, error: 'pending_adaptation：该订阅源尚未实装' }
+  }
+  const today = isoDate(new Date())
+  const floor = addDays(today, -180)
+  const last = sub.last_synced_at?.slice(0, 10) ?? ''
+  const start = last && last > floor ? last : floor
+  const end = addDays(today, 90)
+  try {
+    const r = await runJisiluImport(backend, { start, end, fetchImpl })
+    if (r.error) {
+      backend.touchSubscriptionSynced(sub.id, 'error', r.error)
+      return { id: sub.id, ok: false, inserted: r.inserted, error: r.error }
+    }
+    backend.touchSubscriptionSynced(sub.id, 'active')
+    return { id: sub.id, ok: true, inserted: r.inserted }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    backend.touchSubscriptionSynced(sub.id, 'error', msg)
+    return { id: sub.id, ok: false, error: msg }
+  }
+}
+
+/** 到期自动刷新：枚举 enabled && auto_update 的订阅逐个刷新 */
+export async function refreshDueOnBackend(
+  backend: SqliteBackend,
+  fetchImpl?: typeof fetch,
+): Promise<{ refreshed: RefreshOutcome[] }> {
+  const due = backend
+    .getSubscriptions()
+    .filter((s) => s.enabled && s.auto_update)
+  const refreshed: RefreshOutcome[] = []
+  for (const sub of due) {
+    refreshed.push(await refreshSubscriptionOnBackend(backend, sub, fetchImpl))
+  }
+  return { refreshed }
+}

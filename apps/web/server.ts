@@ -12,7 +12,16 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { openDb, SqliteBackend, SyncService, SyncFacade, GitHubDataRepo, runJisiluImport } from '@tt-calendar/db'
+import {
+  openDb,
+  SqliteBackend,
+  SyncService,
+  SyncFacade,
+  GitHubDataRepo,
+  runJisiluImport,
+  refreshSubscriptionOnBackend,
+  refreshDueOnBackend,
+} from '@tt-calendar/db'
 
 export interface DataServerOptions {
   /** SQLite 文件路径 */
@@ -264,17 +273,21 @@ async function handle(
     return bad(res)
   }
 
-  // ----- 订阅（联网可选，占位；读列表用 db 现成方法） -----
+  // ----- 订阅（列表/新建/更新/删除用 db 现成方法；刷新按 source_key 分发） -----
   if (a === 'subscriptions') {
     if (!b) {
       if (method === 'GET') return ok(res, be.getSubscriptions())
-      if (method === 'POST') return send(res, 501, { detail: '订阅新建本轮未接线' })
+      if (method === 'POST') return ok(res, be.createSubscription(body as never))
       return bad(res)
     }
-    if (b === 'refresh-due' && method === 'POST') return ok(res, { refreshed: [] })
+    if (b === 'refresh-due' && method === 'POST') return ok(res, await refreshDueOnBackend(be))
     if (method === 'DELETE') return ok(res, be.deleteSubscription(b))
-    if (method === 'PATCH') return send(res, 501, { detail: '订阅更新本轮未接线' })
-    if (method === 'POST' && c === 'refresh') return send(res, 501, { detail: '订阅刷新本轮未接线' })
+    if (method === 'PATCH') return ok(res, be.patchSubscription(b, body as never))
+    if (method === 'POST' && c === 'refresh') {
+      const sub = be.getSubscriptions().find((s) => s.id === b)
+      if (!sub) return send(res, 404, { detail: '订阅不存在' })
+      return ok(res, await refreshSubscriptionOnBackend(be, sub))
+    }
     return bad(res)
   }
 

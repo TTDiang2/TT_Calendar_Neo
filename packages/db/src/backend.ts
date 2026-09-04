@@ -1088,14 +1088,21 @@ export class SqliteBackend {
     return this.db.select().from(s.subscriptions).orderBy(asc(s.subscriptions.displayName)).all().map(rowToSubscription)
   }
 
-  createSubscription(data: { display_name: string; url?: string; rules_text?: string; auto_update?: boolean }): Subscription {
+  createSubscription(data: {
+    display_name: string
+    url?: string
+    rules_text?: string
+    auto_update?: boolean
+    /** 分发键；缺省按未适配的自定义订阅处理（custom_<id8>） */
+    source_key?: string
+  }): Subscription {
     const id = crypto.randomUUID()
     this.db
       .insert(s.subscriptions)
       .values({
         id,
         displayName: data.display_name,
-        sourceKey: `custom_${id.slice(0, 8)}`,
+        sourceKey: data.source_key ?? `custom_${id.slice(0, 8)}`,
         url: data.url ?? null,
         rulesText: data.rules_text ?? null,
         enabled: 1,
@@ -1105,6 +1112,25 @@ export class SqliteBackend {
       })
       .run()
     return rowToSubscription(this.db.select().from(s.subscriptions).where(eq(s.subscriptions.id, id)).get()!)
+  }
+
+  /**
+   * 刷新后回写订阅状态：成功记 last_synced_at 并置 active；失败置 error
+   * （错误详情随刷新响应返回，不入库——表里没有 last_error 列）。
+   */
+  touchSubscriptionSynced(id: string, status: 'active' | 'error' | 'pending', error?: string): void {
+    const cur = this.db.select().from(s.subscriptions).where(eq(s.subscriptions.id, id)).get()
+    if (!cur) return
+    this.db
+      .update(s.subscriptions)
+      .set({
+        status,
+        lastSyncedAt: status === 'active' ? now() : cur.lastSyncedAt,
+        updatedAt: now(),
+      })
+      .where(eq(s.subscriptions.id, id))
+      .run()
+    void error
   }
 
   patchSubscription(id: string, data: { display_name?: string; enabled?: boolean; auto_update?: boolean }): Subscription | null {
