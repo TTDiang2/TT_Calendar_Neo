@@ -68,15 +68,19 @@ jobs:
         with:
           workspaces: apps/mobile/src-tauri
 
-      # pnpm 11 会在 build 前复检依赖并想清理 node_modules，无 TTY 时直接中止：
+      # pnpm 11 会在 build 前复检依赖并想清理 node_modules，非交互环境直接中止：
       #   ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
-      # tauri 的 iOS「Build Rust Code」phase 内部会调 pnpm，于是构建被打断。
-      # 坑点：那个 pnpm 跑在 **Xcode build phase** 里，不继承这里的 env，而 pnpm 又不向上
-      # 递归找 .npmrc（只读 cwd 和 ~/.npmrc）。所以必须写进 ~/.npmrc(global) 才生效。
+      # tauri 的 iOS「Build Rust Code」phase 内部会调 pnpm，于是整条构建被打断。
+      #
+      # 两个坑（都是踩过的）：
+      #  1) 那个 pnpm 跑在 **Xcode build phase**，不继承这里的 env；且 pnpm 不向上递归找
+      #     .npmrc（只读 cwd 和 ~/.npmrc）→ 仓库根的 .npmrc 无效，必须写 ~/.npmrc。
+      #  2) 别用 `pnpm config set --global`：pnpm 11 会先检查 global bin 是否在 PATH，
+      #     CI 上报 "global bin directory ... is not in PATH" 而失败。直接写文件最可靠。
       - name: 安装依赖（含 pnpm 无头全局配置）
         run: |
-          pnpm config set --global confirm-modules-purge false
-          pnpm config set --global verify-deps-before-run false
+          printf 'confirm-modules-purge=false\nverify-deps-before-run=false\n' >> "$HOME/.npmrc"
+          cat "$HOME/.npmrc"
           pnpm install --frozen-lockfile
 
       - name: 生成 Xcode 工程
@@ -141,15 +145,19 @@ jobs:
         with:
           workspaces: apps/mobile/src-tauri
 
-      # pnpm 11 会在 build 前复检依赖并想清理 node_modules，无 TTY 时直接中止：
+      # pnpm 11 会在 build 前复检依赖并想清理 node_modules，非交互环境直接中止：
       #   ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
-      # tauri 的 iOS「Build Rust Code」phase 内部会调 pnpm，于是构建被打断。
-      # 坑点：那个 pnpm 跑在 **Xcode build phase** 里，不继承这里的 env，而 pnpm 又不向上
-      # 递归找 .npmrc（只读 cwd 和 ~/.npmrc）。所以必须写进 ~/.npmrc(global) 才生效。
+      # tauri 的 iOS「Build Rust Code」phase 内部会调 pnpm，于是整条构建被打断。
+      #
+      # 两个坑（都是踩过的）：
+      #  1) 那个 pnpm 跑在 **Xcode build phase**，不继承这里的 env；且 pnpm 不向上递归找
+      #     .npmrc（只读 cwd 和 ~/.npmrc）→ 仓库根的 .npmrc 无效，必须写 ~/.npmrc。
+      #  2) 别用 `pnpm config set --global`：pnpm 11 会先检查 global bin 是否在 PATH，
+      #     CI 上报 "global bin directory ... is not in PATH" 而失败。直接写文件最可靠。
       - name: 安装依赖（含 pnpm 无头全局配置）
         run: |
-          pnpm config set --global confirm-modules-purge false
-          pnpm config set --global verify-deps-before-run false
+          printf 'confirm-modules-purge=false\nverify-deps-before-run=false\n' >> "$HOME/.npmrc"
+          cat "$HOME/.npmrc"
           pnpm install --frozen-lockfile
 
       - name: 生成 Xcode 工程
