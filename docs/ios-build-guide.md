@@ -3,13 +3,15 @@
 > 目标：在「自己只有 Windows」的前提下，为 iPhone 产出一个能装的 App（.ipa / 模拟器 .app）。
 > 本文件记录：架构、现有 CI、**我们踩过的所有坑与根因**、以及两条可行路线（云端 CI / 借·租一台 Mac 一键跑）。
 
-状态日期：2026-09-03
+状态日期：2026-09-04（✅ 纯 CI 已打通，见下方更新）
 
 ---
 
 ## 0. 一句话结论
 
-**要拿到真机可装的 iOS App，最可靠、最省事的路径是：借/租一台 Mac（或云 Mac），跑仓库里现成的傻瓜化脚本 `scripts/mac/ios-build.sh`，一次点击出包。** 纯 Windows + GitHub Actions 云端 CI 出 iOS 包这条路，被 **Tauri 工具链自身在「无头 CI + 无开发者证书」下的多个问题**卡住（详见 §4），**不是你的代码问题**，反复改 CI 性价比很低。
+> **【2026-09-04 更新】纯 GitHub Actions CI 已经打通！** 上一版「只能借 Mac」的结论已被推翻：通过「jsonrpsee 假 options 服务」绕过了 tauri-cli 的 server-addr panic，CI 全绿（run 33841117021，6 分 43 秒），自动产出真机未签名 .ipa + 模拟器包两个 artifact（见 GitHub Actions 页面下载）。**现在拿包 = 打开 Actions 页 → 最新绿色 run → 下载 artifact**，全程不需要 Mac。
+>
+> ~~以下为 2026-09-03 的旧结论，保留作历史记录~~ 要拿到真机可装的 iOS App，最可靠、最省事的路径是：借/租一台 Mac（或云 Mac），跑仓库里现成的傻瓜化脚本 `scripts/mac/ios-build.sh`，一次点击出包。 纯 Windows + GitHub Actions 云端 CI 出 iOS 包这条路，被 Tauri 工具链自身在「无头 CI + 无开发者证书」下的多个问题卡住（详见 §4），不是你的代码问题，反复改 CI 性价比很低。
 
 ---
 
@@ -43,7 +45,7 @@ apps/mobile   ← 移动端壳 = Tauri 2（iOS + Android 原生壳），UI 来�
 
 ## 3. 两条路线的取舍
 
-### 路线 A：云端 CI（GitHub Actions）—— 卡住，不推荐继续投入
+### 路线 A：云端 CI（GitHub Actions）—— ✅ 2026-09-04 已打通，现在是首选
 仓库有 `.github/workflows/ios-build.yml`，`push 到 main` 即自动触发，含两个 job：
 - `模拟器包`（macos-15）
 - `真机包`（未签名）
@@ -54,7 +56,13 @@ apps/mobile   ← 移动端壳 = Tauri 2（iOS + Android 原生壳），UI 来�
 3. 模拟器构建崩在 `pnpm install` → `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`。同样指向 tauri 在**无 TTY 的 CI** 里跑包管理器的兼容问题。
 4. 无开发者证书时，`tauri ios build` 出**签名**真机包也没有干净通道。
 
-**结论**：这些都不是代码问题，而是 **Tauri iOS 工具链在「GitHub 无头 runner + 无开发者证书」环境下的固有问题**。要继续得降级/改 tauri、或引入证书，投入大、不保证收敛。**如果你坚持走 CI**，模拟器包可当「浏览器预览」，真机包仍建议绕回 Mac。
+**结论（2026-09-04 终局）**：上述 4 个坑后来全部绕过——1/3/4 的根因和方案见 workflow 文件尾注释；第 2 条 server-addr panic 用 **`scripts/ci-ios-options-server`（与 tauri-cli 同版本 jsonrpsee 写的假 options WebSocket 服务）** 解决：xcode-script 无条件要连 options RPC，我们就在 xcodebuild 前把假服务起好、把地址写进它要读的 server-addr 文件，它就能正常走完 Rust 编译。CI 现在全自动出真机未签名 .ipa（可执行 ~7.4M）+ 模拟器包，6-7 分钟一次。
+
+<details><summary>2026-09-03 旧结论（已被推翻，留档）</summary>
+
+这些都不是代码问题，而是 Tauri iOS 工具链在「GitHub 无头 runner + 无开发者证书」环境下的固有问题。要继续得降级/改 tauri、或引入证书，投入大、不保证收敛。如果你坚持走 CI，模拟器包可当「浏览器预览」，真机包仍建议绕回 Mac。
+
+</details>
 
 ### 路线 B：借/租一台 Mac 跑傻瓜化脚本 —— 推荐 ⭐
 - **为什么 Mac 能解决**：本机是**交互式终端（有 TTY）**，规避了 `ERR_PNPM_..._NO_TTY`；`tauri ios build` 在真实 Mac 上是官方测试路径（不是 CI 那种边角场景）；Xcode 版本匹配。
