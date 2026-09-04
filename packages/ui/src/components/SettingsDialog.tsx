@@ -392,7 +392,7 @@ function SyncConfigSection() {
     <section>
       <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">数据同步</h3>
       <p className="text-xs text-gray-400 mb-2">
-        通过你的 GitHub 私有仓库在多台电脑间同步全部数据（待办、涂色、纪念日、配置）。数据明文存于你的仓库；PAT 用 Windows 加密保存、永不上传。配置步骤见 docs/SYNC_SETUP.md。
+        通过你的 GitHub 私有仓库在多台设备间同步全部数据（图层、事件、日程、待办、倒数日、涂色）。数据明文存于你的私有仓库；PAT 仅保存在本机数据库（同步私有键，不进入同步快照），永不上传。配置步骤见 docs/SYNC_SETUP.md。
       </p>
       {decision !== null && (
         <div className="mb-3 p-3 rounded-md bg-amber-50 border border-amber-200 text-sm">
