@@ -30,6 +30,7 @@ on:
       - 'packages/**'
       - 'scripts/patch-ios-ats.mjs'
       - 'scripts/ios-install-guide.md'
+      - 'scripts/ci-ios-options-server/**'
       - '.github/workflows/ios-build.yml'
 
 jobs:
@@ -85,13 +86,31 @@ jobs:
         working-directory: apps/mobile
         run: |
           set -euo pipefail
-          # tauri ios xcode-script 在「Build Rust Code」run-script phase 会读
-          # $TMPDIR/com.<identifier>-server-addr 这个 dev server 地址文件（由 tauri ios dev/build
-          # 创建）；release 构建也会执行该 phase，文件不存在就 panic。预建占位文件即可
-          # （release 下前端走打包资源，该地址内容被忽略，不影响出包）。
-          mkdir -p "${TMPDIR:-/tmp}"
-          printf 'http://localhost:5175' > "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr"
-          # tauri ios init 生成的是 .xcodeproj（嵌套的 project.xcworkspace 在内部），不能用 *.xcworkspace
+          # ── 1) 启动伪造的 tauri options WebSocket 服务 ──────────────────────
+          # tauri ios xcode-script 在「Build Rust Code」phase 会无条件读
+          # $TMPDIR/com.<identifier>-server-addr 并连上去用 JSON-RPC 取 CliOptions；
+          # CI 里没有真实 dev server 会 panic。这里起一个「同版本 jsonrpsee」假服务
+          # （只实现 `options` 方法，返回最小 CliOptions），让 xcode-script 正常走完
+          # 原生编译（头文件/lib 路径都由它自己正确生成）。源码 scripts/ci-ios-options-server，
+          # 原理见文件末尾说明。
+          pushd "$GITHUB_WORKSPACE/scripts/ci-ios-options-server" >/dev/null
+          cargo build --release 2>&1 | tail -8
+          SRV="$GITHUB_WORKSPACE/scripts/ci-ios-options-server/target/release/ci-ios-options-server"
+          popd >/dev/null
+          "$SRV" &
+          SRV_PID=$!
+          trap 'kill $SRV_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            [ -f "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr" ] && break
+            sleep 0.5
+          done
+          if [ ! -f "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr" ]; then
+            echo "options server 未就绪（没写 addr 文件）"; exit 1
+          fi
+          echo "options server 地址: $(cat "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr")"
+
+          # ── 2) 找工程 / scheme（tauri ios init 生成的是 .xcodeproj，嵌套的
+          #       project.xcworkspace 在内部，不能用 *.xcworkspace）──────────────
           PROJ=$(find src-tauri/gen/apple -maxdepth 1 -name '*.xcodeproj' | head -1)
           if [ -z "$PROJ" ]; then
             echo "找不到 .xcodeproj，列出 gen/apple 排障："
@@ -222,12 +241,26 @@ jobs:
         working-directory: apps/mobile
         run: |
           set -euo pipefail
-          # tauri ios xcode-script 在「Build Rust Code」run-script phase 会读
-          # $TMPDIR/com.<identifier>-server-addr 这个 dev server 地址文件（由 tauri ios dev/build
-          # 创建）；release 构建也会执行该 phase，文件不存在就 panic。预建占位文件即可
-          # （release 下前端走打包资源，该地址内容被忽略，不影响出包）。
-          mkdir -p "${TMPDIR:-/tmp}"
-          printf 'http://localhost:5175' > "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr"
+          # ── 1) 启动伪造的 tauri options WebSocket 服务 ──────────────────────
+          # 同模拟器 job：起同版本 jsonrpsee 假服务冒充 dev server 的 options RPC，
+          # 让 tauri ios xcode-script 跳过 WebSocket 依赖、正常编译 Rust。
+          pushd "$GITHUB_WORKSPACE/scripts/ci-ios-options-server" >/dev/null
+          cargo build --release 2>&1 | tail -8
+          SRV="$GITHUB_WORKSPACE/scripts/ci-ios-options-server/target/release/ci-ios-options-server"
+          popd >/dev/null
+          "$SRV" &
+          SRV_PID=$!
+          trap 'kill $SRV_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            [ -f "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr" ] && break
+            sleep 0.5
+          done
+          if [ ! -f "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr" ]; then
+            echo "options server 未就绪（没写 addr 文件）"; exit 1
+          fi
+          echo "options server 地址: $(cat "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr")"
+
+          # ── 2) 找工程 / scheme（tauri ios init 生成的是 .xcodeproj）──────────
           PROJ=$(find src-tauri/gen/apple -maxdepth 1 -name '*.xcodeproj' | head -1)
           if [ -z "$PROJ" ]; then
             echo "找不到 .xcodeproj，列出 gen/apple 排障："
@@ -333,4 +366,13 @@ jobs:
 #   pnpm 看到 CI=true 即跳过清理确认。
 # ─ 直接 xcodebuild + CODE_SIGNING_ALLOWED=NO 产出「未签名 .app」，再手动打成
 #   Payload/*.app 的 .ipa，Sideloadly 在本机自签装机（7 天有效，重装续）。
+#
+# 关于 "Build Rust Code" phase 的 WebSocket 依赖（关键坑）：
+#   tauri ios xcode-script（该 phase 调用的命令）在开头【无条件】连一个 dev-server
+#   WebSocket 取 CliOptions（见 tauri-cli crates/tauri-cli/src/mobile/mod.rs 的
+#   read_options）：读 $TMPDIR/com.<id>-server-addr → ws://<内容> → 调 `options`。
+#   没有任何 env / flag 能跳过它；文件缺失或连不上都 panic。CI 没有真实 dev server，
+#   所以本 workflow 在 xcodebuild 前用 scripts/ci-ios-options-server（同版本 jsonrpsee）
+#   起一个只实现 `options` 方法的假服务，把地址写进那个文件，让 xcode-script 正常
+#   走完 Rust 编译（头文件 / lib 输出路径都由它正确生成）。构建完 trap EXIT 杀掉。
 # ─────────────────────────────────────────────────────────────────────────────

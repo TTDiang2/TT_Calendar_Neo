@@ -1,0 +1,15 @@
+[package]
+name = "ci-ios-options-server"
+version = "0.1.0"
+edition = "2021"
+
+# 仅用于 iOS CI：冒充 `tauri ios dev/build` 起的 options WebSocket 服务。
+# tauri-cli 的 `tauri ios xcode-script`（在 Xcode「Build Rust Code」phase 被调用）
+# 会无条件连这个服务、用 JSON-RPC 取 CliOptions（见 crates/tauri-cli/src/mobile/mod.rs
+# 的 read_options）。CI 没有真实 dev server，所以这里用「同版本 jsonrpsee」起一个
+# 只实现 `options` 方法的假服务，让 xcode-script 正常走完 Rust 编译流程。
+# 版本必须与仓库锁定的 @tauri-apps/cli（tauri-cli 2.11.4 → jsonrpsee 0.24）一致。
+[dependencies]
+jsonrpsee = { version = "0.24", features = ["server", "ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+serde_json = "1"
