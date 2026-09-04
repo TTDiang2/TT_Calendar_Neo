@@ -21,6 +21,7 @@ import {
   runJisiluImport,
   refreshSubscriptionOnBackend,
   refreshDueOnBackend,
+  importTodosCsvOnBackend,
 } from '@tt-calendar/db'
 
 export interface DataServerOptions {
@@ -48,6 +49,13 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   }
 }
 
+/** 读取原始请求体（CSV 导入用，不做 JSON 解析） */
+async function readRawBody(req: IncomingMessage): Promise<string> {
+  let data = ''
+  for await (const chunk of req) data += chunk
+  return data
+}
+
 /** 启动本地数据服务，返回关闭句柄 */
 export function startDataServer(opts: DataServerOptions): { port: number; close: () => Promise<void> } {
   const { db, sqlite } = openDb({ path: opts.dbPath })
@@ -71,10 +79,20 @@ export function startDataServer(opts: DataServerOptions): { port: number; close:
     const url = (req.url ?? '/').split('?')[0]
     const qs = new URLSearchParams((req.url ?? '').split('?')[1] ?? '')
     const method = (req.method ?? 'GET').toUpperCase()
-    const body = (await readBody(req)) as Record<string, unknown> | undefined
-
-    // 路径拆段：/api/view/month/2026/9 -> ['view','month','2026','9']
     const seg = url.replace(/^\/api\//, '').split('/').filter(Boolean)
+
+    // CSV 待办导入：请求体是 text/csv 纯文本（不是 JSON），单独拦截
+    if (seg[0] === 'todo' && seg[1] === 'import' && seg[2] === 'csv' && method === 'POST') {
+      try {
+        const text = await readRawBody(req)
+        send(res, 200, importTodosCsvOnBackend(be, text))
+      } catch (e) {
+        send(res, 500, { detail: e instanceof Error ? e.message : String(e) })
+      }
+      return
+    }
+
+    const body = (await readBody(req)) as Record<string, unknown> | undefined
     try {
       await handle(seg, method, qs, body ?? {}, res, be, facade)
     } catch (e) {

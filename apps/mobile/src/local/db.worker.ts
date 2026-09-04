@@ -18,6 +18,7 @@ import { openLocalDb, type LocalDbHandle } from '@tt-calendar/db/local/backend'
 import { GitHubDataRepo } from '@tt-calendar/db/sync/github'
 import { SyncFacade } from '@tt-calendar/db/sync/facade'
 import { runJisiluImport, refreshSubscriptionOnBackend, refreshDueOnBackend } from '@tt-calendar/db/sources/jisilu'
+import { importTodosCsvOnBackend } from '@tt-calendar/db/sources/csv-todos'
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 
 interface CallMsg {
@@ -64,6 +65,11 @@ function methodTable(): Record<string, ((...a: unknown[]) => unknown) | undefine
       return refreshSubscriptionOnBackend(handle!.backend, sub)
     },
     refreshDueSubscriptions: () => refreshDueOnBackend(handle!.backend),
+    // 待办 CSV 导入：File/Blob 可结构化克隆穿越 postMessage，在 Worker 里读文本
+    importTodosCsv: async (file: unknown) => {
+      if (!(file instanceof Blob)) throw new Error('缺少 CSV 文件')
+      return importTodosCsvOnBackend(handle!.backend, await file.text())
+    },
   }
 }
 

@@ -109,8 +109,8 @@ export async function createLocalBackend(opts: LocalBackendOptions = {}): Promis
     // /countdown 的 HTTP 形态是 { text }，对应 SqliteBackend.getCountdownText
     getCountdown: () => call('getCountdownText', []),
     // 多端同步（getSyncStatus/getSyncConfig/saveSyncConfig/testSync/syncNow/
-    // resolveSync）、集思录导入与订阅刷新均已由 Worker 真实实现，直接透传
-    importTodosCsv: notSupported('待办 CSV 导入'),
+    // resolveSync）、集思录导入、订阅刷新、待办 CSV 导入均已由 Worker 真实
+    // 实现，直接透传
   }
 
   const backend = new Proxy(

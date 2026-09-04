@@ -236,9 +236,13 @@ export function createHttpBackend(apiBase = '/api'): BackendAdapter {
       return del<{ ok: boolean }>(`/todo/${id}`)
     },
     async importTodosCsv(file) {
-      const fd = new FormData()
-      fd.append('file', file)
-      const r = await fetch(`${apiBase}/todo/import/csv`, { method: 'POST', body: fd })
+      // text/csv 纯文本体：Node 数据服务避免解析 multipart
+      const text = await file.text()
+      const r = await fetch(`${apiBase}/todo/import/csv`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/csv' },
+        body: text,
+      })
       return r.json() as Promise<{ inserted: number; lists_created: number; errors: string[] }>
     },
 
