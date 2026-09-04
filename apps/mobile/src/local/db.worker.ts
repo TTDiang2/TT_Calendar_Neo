@@ -52,6 +52,22 @@ function methodTable(): Record<string, ((...a: unknown[]) => unknown) | undefine
   }
 }
 
+/** 已配置同步时的自动同步（启动 / 页面隐藏），静默失败不打扰用户 */
+async function backgroundSync(): Promise<void> {
+  if (!facade) return
+  try {
+    const cfg = facade.getConfig()
+    if (!cfg.repo || !cfg.has_token) return
+    const result = await facade.sync('merge')
+    // 首绑决策必须由用户在设置面板里做，后台自动同步只处理常规合并
+    if (result.result === 'ok') {
+      ctx.postMessage({ type: 'synced', report: result })
+    }
+  } catch {
+    // 后台同步失败（离线/凭据过期等）不打断使用；手动同步时会看到具体错误
+  }
+}
+
 async function onMsg(msg: InMsg): Promise<void> {
   try {
     if (msg.type === 'init') {
@@ -62,10 +78,16 @@ async function onMsg(msg: InMsg): Promise<void> {
         makeRemote: (cfg) => new GitHubDataRepo(cfg),
       })
       ctx.postMessage({ type: 'ready' })
+      // auto_on_start：启动后台自动同步（不阻塞渲染）
+      const cfg = facade.getConfig()
+      if (cfg.repo && cfg.has_token && cfg.auto_on_start) void backgroundSync()
       return
     }
     if (msg.type === 'flush') {
       await handle?.flush()
+      // sync_on_close：页面隐藏时尽力同步一次（不等待完成，能推多少是多少）
+      const cfg = facade?.getConfig()
+      if (cfg?.repo && cfg.has_token && cfg.sync_on_close) void backgroundSync()
       return
     }
     if (msg.type === 'call') {

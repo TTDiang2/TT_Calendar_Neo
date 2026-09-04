@@ -53,7 +53,12 @@ async function boot(): Promise<void> {
   } else {
     root.innerHTML =
       '<div class="flex h-screen items-center justify-center text-sm text-gray-500">正在打开本地数据库…</div>'
-    setBackend(await createLocalBackend())
+    setBackend(
+      await createLocalBackend({
+        // 启动自动同步（auto_on_start）完成后，让 react-query 重新拉取最新数据
+        onSynced: () => void queryClient.invalidateQueries(),
+      }),
+    )
   }
   root.innerHTML = ''
   ReactDOM.createRoot(root).render(

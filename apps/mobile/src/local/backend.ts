@@ -15,12 +15,18 @@ import type { BackendAdapter } from '@tt-calendar/ui'
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void }
 
 interface WorkerMsg {
-  type: 'ready' | 'init-error' | 'result'
+  type: 'ready' | 'init-error' | 'result' | 'synced'
   id?: number
   ok?: boolean
   result?: unknown
   error?: unknown
   message?: string
+  report?: unknown
+}
+
+export interface LocalBackendOptions {
+  /** 后台自动同步完成（Worker 的 auto_on_start）后回调，用于刷新 UI 缓存 */
+  onSynced?: (report: unknown) => void
 }
 
 export class LocalBackendInitError extends Error {
@@ -31,7 +37,7 @@ export class LocalBackendInitError extends Error {
 }
 
 /** 创建本地数据后端；worker 加载完成（快照读入内存）后才 resolve */
-export async function createLocalBackend(): Promise<BackendAdapter> {
+export async function createLocalBackend(opts: LocalBackendOptions = {}): Promise<BackendAdapter> {
   const worker = new Worker(new URL('./db.worker.ts', import.meta.url), { type: 'module' })
 
   const pending = new Map<number, Pending>()
@@ -40,6 +46,10 @@ export async function createLocalBackend(): Promise<BackendAdapter> {
 
   worker.addEventListener('message', (e: MessageEvent) => {
     const msg = e.data as WorkerMsg
+    if (msg.type === 'synced') {
+      opts.onSynced?.(msg.report)
+      return
+    }
     if (msg.type === 'result' && typeof msg.id === 'number') {
       const p = pending.get(msg.id)
       if (!p) return
@@ -103,7 +113,15 @@ export async function createLocalBackend(): Promise<BackendAdapter> {
     importJisilu: async () => ({ inserted: 0, error: '手机本地版暂不支持集思录导入，请在电脑端操作' }),
     importTodosCsv: notSupported('待办 CSV 导入'),
     refreshSubscription: notSupported('订阅刷新'),
-    refreshDueSubscriptions: async () => ({ refreshed: [] }),
+    // 与 legacy routes.py 语义一致：枚举到期的订阅并返回 pending_adaptation
+    refreshDueSubscriptions: async () => {
+      const subs = (await call('getSubscriptions', [])) as { id: string; auto_update?: boolean | number }[]
+      return {
+        refreshed: subs
+          .filter((s) => Boolean(s.auto_update))
+          .map((s) => ({ id: s.id, ok: false, error: 'pending_adaptation：订阅源抓取尚未实装（集思录请在电脑端操作）' })),
+      }
+    },
   }
 
   const backend = new Proxy(
