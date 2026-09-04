@@ -98,12 +98,8 @@ export async function createLocalBackend(): Promise<BackendAdapter> {
   const overrides: Record<string, (...args: unknown[]) => Promise<unknown>> = {
     // /countdown 的 HTTP 形态是 { text }，对应 SqliteBackend.getCountdownText
     getCountdown: () => call('getCountdownText', []),
-    getSyncStatus: async () => ({ configured: false }),
-    getSyncConfig: async () => ({ repo: '', branch: '', auto_on_start: false, sync_on_close: false, has_token: false }),
-    saveSyncConfig: notSupported('多端同步配置'),
-    testSync: notSupported('多端同步测试'),
-    syncNow: notSupported('多端同步'),
-    resolveSync: notSupported('多端同步裁决'),
+    // 多端同步（getSyncStatus/getSyncConfig/saveSyncConfig/testSync/syncNow/
+    // resolveSync）已由 Worker 里的 SyncFacade + GitHub REST 真实实现，直接透传
     importJisilu: async () => ({ inserted: 0, error: '手机本地版暂不支持集思录导入，请在电脑端操作' }),
     importTodosCsv: notSupported('待办 CSV 导入'),
     refreshSubscription: notSupported('订阅刷新'),

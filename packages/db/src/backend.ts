@@ -377,6 +377,7 @@ export class SqliteBackend {
         extraJson: JSON.stringify(ev.extra ?? {}),
         sourceRef: ev.source_ref ?? null,
         sortKey: ev.sort_key ?? 0,
+        syncUid: crypto.randomUUID(),
         updatedAt: now(),
       })
       .returning()

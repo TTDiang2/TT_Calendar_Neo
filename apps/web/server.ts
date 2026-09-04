@@ -12,7 +12,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { openDb, SqliteBackend } from '@tt-calendar/db'
+import { openDb, SqliteBackend, SyncService, SyncFacade, GitHubDataRepo } from '@tt-calendar/db'
 
 export interface DataServerOptions {
   /** SQLite 文件路径 */
@@ -43,6 +43,11 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 export function startDataServer(opts: DataServerOptions): { port: number; close: () => Promise<void> } {
   const { db, sqlite } = openDb({ path: opts.dbPath })
   const be = new SqliteBackend(db)
+  const facade = new SyncFacade({
+    backend: be,
+    svc: new SyncService(db),
+    makeRemote: (cfg) => new GitHubDataRepo(cfg),
+  })
   const port = opts.port ?? 8766
 
   const server = createServer(async (req, res) => {
@@ -62,7 +67,7 @@ export function startDataServer(opts: DataServerOptions): { port: number; close:
     // 路径拆段：/api/view/month/2026/9 -> ['view','month','2026','9']
     const seg = url.replace(/^\/api\//, '').split('/').filter(Boolean)
     try {
-      handle(seg, method, qs, body ?? {}, res, be)
+      await handle(seg, method, qs, body ?? {}, res, be, facade)
     } catch (e) {
       send(res, 500, { detail: e instanceof Error ? e.message : String(e) })
     }
@@ -80,14 +85,15 @@ export function startDataServer(opts: DataServerOptions): { port: number; close:
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function handle(
+async function handle(
   seg: string[],
   method: string,
   qs: URLSearchParams,
   body: Record<string, unknown>,
   res: ServerResponse,
   be: SqliteBackend,
-): void {
+  f: SyncFacade,
+): Promise<void> {
   const [a, b, c, d] = seg // e.g. view/month/2026/9
 
   // ----- 视图 -----
@@ -239,14 +245,15 @@ function handle(
   // ----- 集思录导入（联网可选） -----
   if (a === 'import' && b === 'jisilu') return send(res, 501, { detail: 'jisilu 抓取本轮未接线（联网可选项）', inserted: 0 })
 
-  // ----- 多端同步（联网可选，占位） -----
+  // ----- 多端同步（GitHub 数据仓 REST 通道；手机/PC 同一份 SyncFacade） -----
   if (a === 'sync') {
-    if (b === 'status') return ok(res, { configured: false })
-    if (b === 'config') return ok(res, { repo: '', branch: '', auto_on_start: false, sync_on_close: false, has_token: false })
-    if (b === 'config' && method === 'PUT') return send(res, 501, { detail: '同步配置本轮未接线' })
-    if (b === 'test') return send(res, 501, { detail: '同步测试本轮未接线' })
-    if (b === 'now') return send(res, 501, { detail: '同步本轮未接线' })
-    if (b === 'resolve') return send(res, 501, { detail: '同步裁决本轮未接线' })
+    if (b === 'status') return ok(res, f.getStatus())
+    if (b === 'config' && method === 'GET') return ok(res, f.getConfig())
+    if (b === 'config' && method === 'PUT') return ok(res, f.saveConfig(body as never))
+    if (b === 'test' && method === 'POST') return ok(res, await f.test())
+    if (b === 'now' && method === 'POST') return ok(res, await f.sync('merge'))
+    if (b === 'resolve' && method === 'POST')
+      return ok(res, await f.resolveFirstBind((body?.mode as 'pull_overwrite' | 'merge_push') ?? 'merge_push'))
     return bad(res)
   }
 

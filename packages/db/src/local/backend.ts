@@ -18,6 +18,7 @@ import type Database from 'better-sqlite3'
 import { SqliteBackend } from '../backend'
 import { ensureSchema } from '../migrate'
 import * as schema from '../schema'
+import { SyncService } from '../sync-service'
 
 import { idbGetBytes, idbPutBytes } from './persist'
 import { SqlJsSqlite } from './sqlite-shim'
@@ -46,6 +47,8 @@ export interface OpenLocalDbOptions {
 
 export interface LocalDbHandle {
   backend: SqliteBackend
+  /** 与 backend 同库的同步引擎（纯数据面三方合并），供 SyncFacade 使用 */
+  svc: SyncService
   sqlite: SqlJsSqlite
   /** 立即导出快照并写 IndexedDB */
   flush(): Promise<void>
@@ -96,6 +99,7 @@ export async function openLocalDb(opts: OpenLocalDbOptions = {}): Promise<LocalD
 
   return {
     backend,
+    svc: new SyncService(db),
     sqlite,
     flush: () => {
       dirty = false

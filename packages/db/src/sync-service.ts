@@ -11,12 +11,12 @@
  */
 
 import type { Snapshot, SyncTableName, Tombstones } from '@tt-calendar/contracts'
-import { SYNC_TABLE_NAMES } from '@tt-calendar/contracts'
+import { AUTO_INT_TABLES, SYNC_TABLE_NAMES } from '@tt-calendar/contracts'
 import { firstBindMerge, merge, tombKey, tombstonesByTable } from '@tt-calendar/domain'
 
 import type { Db } from './client'
 import * as s from './schema'
-import { inArray, sql } from 'drizzle-orm'
+import { inArray, isNull, sql } from 'drizzle-orm'
 
 type Row = Record<string, unknown>
 
@@ -38,11 +38,51 @@ const KEY_COLS: Record<string, string> = {
 /** meta 表里永不上传的本机私有键前缀（Python sync/schema.py 约定） */
 const LOCAL_ONLY_META_PREFIX = 'sync.'
 
+/** 自增整型主键表的 drizzle 表引用（导出前回填 sync_uid 用） */
+const AUTO_TABLE_REFS = {
+  events: s.events,
+  schedule_items: s.scheduleItems,
+  countdown: s.countdown,
+  marks: s.marks,
+} as const
+
+/**
+ * drizzle 行（camelCase 属性）→ 快照行（snake_case 列名，Python 协议的线上格式）。
+ * ⚠️ 必须转换：upsertRow / rowKeyOf / tombstoneGuard / domain/merge 都按
+ * snake_case 列读行（sync_uid、display_name、extra_json…）；不转换会让行
+ * 身份塌陷到 id:<pk> 回落、三方合并全面失明（此前 export→import 回路无测试
+ * 才没暴露）。
+ */
+export function rowToWire(table: SyncTableName, row: Row): Row {
+  const out: Row = {}
+  for (const [k, v] of Object.entries(row)) {
+    out[k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)] = v
+  }
+  return out
+}
+
 export class SyncService {
   constructor(private readonly db: Db) {}
 
-  /** 导出本地快照（meta 的 sync.% 私有键剔除） */
+  /**
+   * 存量行回填：sync_uid 为 NULL 的自增表行没有同步身份（byKey 会直接丢弃）。
+   * createScheduleItem/createCountdown 一直有生成，但 createEvent 此前漏了，
+   * 更老的 Python 数据也可能缺 —— 导出前统一补上随机身份。
+   */
+  private backfillSyncUids(): void {
+    for (const name of AUTO_INT_TABLES) {
+      const t = AUTO_TABLE_REFS[name]
+      this.db
+        .update(t)
+        .set({ syncUid: sql`(lower(hex(randomblob(16))))` })
+        .where(isNull(t.syncUid))
+        .run()
+    }
+  }
+
+  /** 导出本地快照（meta 的 sync.% 私有键剔除；行键统一 snake_case） */
   exportSnapshot(): Snapshot {
+    this.backfillSyncUids()
     const snap: Snapshot = {}
     for (const table of SYNC_TABLE_NAMES) {
       snap[table] = this.exportTable(table)
@@ -51,6 +91,11 @@ export class SyncService {
   }
 
   private exportTable(table: SyncTableName): Row[] {
+    const rows = this.exportTableRaw(table)
+    return rows.map((r) => rowToWire(table, r))
+  }
+
+  private exportTableRaw(table: SyncTableName): Row[] {
     switch (table) {
       case 'todo_list':
         return this.db.select().from(s.todoList).all()
