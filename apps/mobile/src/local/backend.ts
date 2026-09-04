@@ -110,7 +110,8 @@ export async function createLocalBackend(opts: LocalBackendOptions = {}): Promis
     getCountdown: () => call('getCountdownText', []),
     // 多端同步（getSyncStatus/getSyncConfig/saveSyncConfig/testSync/syncNow/
     // resolveSync）已由 Worker 里的 SyncFacade + GitHub REST 真实实现，直接透传
-    importJisilu: async () => ({ inserted: 0, error: '手机本地版暂不支持集思录导入，请在电脑端操作' }),
+    // 多端同步（getSyncStatus/getSyncConfig/saveSyncConfig/testSync/syncNow/
+    // resolveSync）与集思录导入已由 Worker 真实实现，直接透传
     importTodosCsv: notSupported('待办 CSV 导入'),
     refreshSubscription: notSupported('订阅刷新'),
     // 与 legacy routes.py 语义一致：枚举到期的订阅并返回 pending_adaptation

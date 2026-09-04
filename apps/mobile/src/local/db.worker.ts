@@ -17,6 +17,7 @@
 import { openLocalDb, type LocalDbHandle } from '@tt-calendar/db/local/backend'
 import { GitHubDataRepo } from '@tt-calendar/db/sync/github'
 import { SyncFacade } from '@tt-calendar/db/sync/facade'
+import { runJisiluImport } from '@tt-calendar/db/sources/jisilu'
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 
 interface CallMsg {
@@ -49,6 +50,13 @@ function methodTable(): Record<string, ((...a: unknown[]) => unknown) | undefine
     syncNow: () => f.sync('merge'),
     resolveSync: (mode: unknown) =>
       f.resolveFirstBind(mode as 'pull_overwrite' | 'merge_push'),
+    // 集思录导入：Worker 里直接抓公开接口（无需登录），与 PC 同一份代码
+    importJisilu: (...a: unknown[]) =>
+      runJisiluImport(handle!.backend, {
+        start: String(a[0] ?? ''),
+        end: String(a[1] ?? ''),
+        qtypes: a[2] as string[] | undefined,
+      }),
   }
 }
 

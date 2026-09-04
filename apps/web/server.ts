@@ -12,7 +12,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { openDb, SqliteBackend, SyncService, SyncFacade, GitHubDataRepo } from '@tt-calendar/db'
+import { openDb, SqliteBackend, SyncService, SyncFacade, GitHubDataRepo, runJisiluImport } from '@tt-calendar/db'
 
 export interface DataServerOptions {
   /** SQLite 文件路径 */
@@ -242,8 +242,15 @@ async function handle(
     return bad(res)
   }
 
-  // ----- 集思录导入（联网可选） -----
-  if (a === 'import' && b === 'jisilu') return send(res, 501, { detail: 'jisilu 抓取本轮未接线（联网可选项）', inserted: 0 })
+  // ----- 集思录导入（GitHub 之外的数据源：直接抓 jisilu 公开接口） -----
+  if (a === 'import' && b === 'jisilu' && method === 'POST') {
+    const r = await runJisiluImport(be, {
+      start: String(body?.start ?? ''),
+      end: String(body?.end ?? ''),
+      qtypes: (body?.qtypes as string[] | undefined) ?? undefined,
+    })
+    return ok(res, r)
+  }
 
   // ----- 多端同步（GitHub 数据仓 REST 通道；手机/PC 同一份 SyncFacade） -----
   if (a === 'sync') {

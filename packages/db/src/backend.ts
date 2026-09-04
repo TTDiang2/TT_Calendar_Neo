@@ -49,7 +49,7 @@ import {
 
 import type { Db } from './client'
 import * as s from './schema'
-import { eq, like, or, sql } from 'drizzle-orm'
+import { and, eq, like, or, sql } from 'drizzle-orm'
 import { asc, desc } from 'drizzle-orm'
 
 // ---------- 行 → 领域类型 映射 ----------
@@ -345,6 +345,75 @@ export class SqliteBackend {
     this.db.delete(s.marks).where(eq(s.marks.layerId, layerId)).run()
     this.tombstone('layer_config', layerId)
     return { ok: true }
+  }
+
+  /**
+   * 幂等建图层：缺失时按给定 layer_id 建立并启用，已存在则不动（不产生墓碑）。
+   * 供外部数据源导入流程补建固定 id 的图层（如 jisilu_<qtype>）。
+   */
+  ensureLayer(spec: {
+    layer_id: string
+    display_name: string
+    color?: string | null
+    sort_order?: number
+    kind?: string
+    group?: string | null
+  }): { created: boolean } {
+    const exists = this.db.select().from(s.layerConfig).where(eq(s.layerConfig.layerId, spec.layer_id)).get()
+    if (exists) return { created: false }
+    this.db
+      .insert(s.layerConfig)
+      .values({
+        layerId: spec.layer_id,
+        displayName: spec.display_name,
+        enabled: 1,
+        color: spec.color ?? null,
+        sortOrder: spec.sort_order ?? 0,
+        configJson: '{}',
+        kind: spec.kind ?? 'dot',
+        groupName: spec.group ?? null,
+        updatedAt: now(),
+      })
+      .run()
+    return { created: true }
+  }
+
+  /**
+   * 导入事件 upsert：按 (layer_id, source_ref) 去重 —— 存在则更新（保留原
+   * sync_uid，不产生墓碑），不存在则新建。返回处理条数。
+   * 用于集思录/订阅类派生数据的「删旧插新」等价物。
+   */
+  upsertImportedEvents(events: (Omit<CalEvent, 'id'> & { id?: number | null })[]): number {
+    let n = 0
+    for (const ev of events) {
+      const existing = ev.source_ref
+        ? this.db
+            .select()
+            .from(s.events)
+            .where(and(eq(s.events.layerId, ev.layer_id), eq(s.events.sourceRef, ev.source_ref)))
+            .get()
+        : undefined
+      if (existing) {
+        this.db
+          .update(s.events)
+          .set({
+            date: ev.date,
+            title: ev.title,
+            description: ev.description ?? null,
+            color: ev.color ?? null,
+            extraJson: JSON.stringify(ev.extra ?? {}),
+            sourceRef: ev.source_ref ?? null,
+            sortKey: ev.sort_key ?? 0,
+            updatedAt: now(),
+          })
+          .where(eq(s.events.id, existing.id))
+          .run()
+      } else {
+        this.createEvent(ev)
+      }
+      n += 1
+    }
+    return n
   }
 
   getLayerSubActions(layerId: string): { qtype: string; sub_action: string }[] {
