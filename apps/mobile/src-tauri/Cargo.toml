@@ -10,6 +10,17 @@ rust-version = "1.77"
 name = "tt_calendar_mobile_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# 关键：cfg(dev) 由是否带 custom-protocol feature 决定（见 tauri/build.rs 的
+# `let dev = !custom_protocol`），与 cargo profile 无关。没有它，任何 cargo
+# 构建（含 CI 里 xcodebuild 的「Build Rust Code」phase）都会把 App 编成 dev
+# 模式：运行时代理到 devUrl（http://localhost:5175），真机上直接报
+# "did you grant local network permissions"。放进 default，让任何构建默认
+# 即生产模式；`tauri ios dev` / `tauri dev` 会自动 --no-default-features
+# 排除它（tauri-cli/src/interface/rust.rs），无需手动干预。
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

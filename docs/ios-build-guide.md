@@ -3,12 +3,25 @@
 > 目标：在「自己只有 Windows」的前提下，为 iPhone 产出一个能装的 App（.ipa / 模拟器 .app）。
 > 本文件记录：架构、现有 CI、**我们踩过的所有坑与根因**、以及两条可行路线（云端 CI / 借·租一台 Mac 一键跑）。
 
-状态日期：2026-09-04（✅ 纯 CI 已打通，见下方更新）
+状态日期：2026-09-13（✅ CI 出包 + 真机可用双达成，见下方更新）
 
 ---
 
 ## 0. 一句话结论
 
+> **【2026-09-13 更新】CI 出的包在真机上可用了！** 2026-09-11 装到 iPhone 的包白屏，报
+> `Failed to request http://localhost:5175/ ... local network permissions`。根因不是权限声明，
+> 而是 **CI 编译 Rust lib 时没带 `tauri/custom-protocol` feature**：tauri 的 build.rs 以
+> `dev = !custom_protocol` 决定运行时形态（与 cargo profile 无关），缺了它 App 就运行在
+> dev 模式——把 tauri:// 的资源请求代理到 devUrl（手机上当然连不通）。修复（双保险 + 守门）：
+> 1. `apps/mobile/src-tauri/Cargo.toml` 的 `[features]` 把 `custom-protocol` 放进 `default`
+>    （`tauri dev/ios dev` 会自动 `--no-default-features` 排除，不影响本地开发）；
+> 2. `scripts/ci-ios-options-server` 返回该 feature（等价官方 `tauri ios build` 的 build_options 注入）；
+> 3. 新增 `scripts/verify-ios-build.mjs`：CI 打包前验证产物（无 dev 标记 + 前端资源已内嵌 + plist 键齐全）。
+> 另：productName 从 `TT 日历` 改为 `TTCalendar`（中文名 + 空格会在签名/侧载环节添乱）；
+> Info.plist 补丁（`scripts/patch-ios-plist.mjs`）增加 `NSLocalNetworkUsageDescription`。
+> 装机方式：**iLoader + SideStore**（用户实测），或 Sideloadly（见 `scripts/ios-install-guide.md`）。
+>
 > **【2026-09-04 更新】纯 GitHub Actions CI 已经打通！** 上一版「只能借 Mac」的结论已被推翻：通过「jsonrpsee 假 options 服务」绕过了 tauri-cli 的 server-addr panic，CI 全绿（run 33841117021，6 分 43 秒），自动产出真机未签名 .ipa + 模拟器包两个 artifact（见 GitHub Actions 页面下载）。**现在拿包 = 打开 Actions 页 → 最新绿色 run → 下载 artifact**，全程不需要 Mac。
 >
 > ~~以下为 2026-09-03 的旧结论，保留作历史记录~~ 要拿到真机可装的 iOS App，最可靠、最省事的路径是：借/租一台 Mac（或云 Mac），跑仓库里现成的傻瓜化脚本 `scripts/mac/ios-build.sh`，一次点击出包。 纯 Windows + GitHub Actions 云端 CI 出 iOS 包这条路，被 Tauri 工具链自身在「无头 CI + 无开发者证书」下的多个问题卡住（详见 §4），不是你的代码问题，反复改 CI 性价比很低。
@@ -26,8 +39,8 @@ apps/mobile   ← 移动端壳 = Tauri 2（iOS + Android 原生壳），UI 来�
 
 关键认知：
 - **iOS App = Tauri 2 原生壳 + WKWebView 里加载上面的 React UI**。所以 UI 全都照常工作，iOS 打包只关心「把壳 + UI 包成 .app/.ipa」。
-- 当前 mobile 壳**数据并不在手机里**——它 `createHttpBackend` 连回 PC（穿透域名）跑数据服务。这属于「数据本地化」的待办，与打包是两回事，别混在一起。打包先解决，数据后续再下沉。
-- bundle id：`com.tt.calendar.mobile`；productName：`TT 日历`（含空格与中文，脚本里务必用引号/`find` 定位，别写死文件名）。
+- 数据默认在手机本地（Worker 里的 sql.js + IndexedDB 快照，离线可用）；若仓库配了 Secrets 的 `VITE_API_BASE`，则改为 HTTP 连电脑数据服务（穿透/局域网）。
+- bundle id：`com.tt.calendar.mobile`；productName：`TTCalendar`（2026-09-13 起全 ASCII，此前是 `TT 日历`，中文+空格在签名/侧载工具链上易出问题）。
 
 ---
 
@@ -155,5 +168,6 @@ bash scripts/mac/ios-cleanup.sh
 | `.github/workflows/ios-build.yml` | 云端 CI（模拟器包可用；真机包受 tauri CI 问题限制） |
 | `scripts/mac/ios-build.sh` | **Mac 一键出未签名真机 .ipa（推荐走这条）** |
 | `scripts/mac/ios-cleanup.sh` | 借 Mac 用完的清理脚本 |
-| `scripts/ios-install-guide.md` | Sideloadly 免费装机说明 |
-| `scripts/patch-ios-ats.mjs` | CI/本机构建后放行 http 数据服务的 ATS 补丁 |
+| `scripts/ios-install-guide.md` | iLoader/SideStore/Sideloadly 免费装机说明 |
+| `scripts/patch-ios-plist.mjs` | CI/本机构建后注入 Info.plist 权限键（ATS 放行 http + 本地网络描述） |
+| `scripts/verify-ios-build.mjs` | CI 打包前验证产物为生产模式（无 dev 标记 / 资源内嵌 / plist 键） |

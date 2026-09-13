@@ -34,11 +34,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //   noise_level: NoiseLevel（"Polite"|"LoudAndProud"|"FranklyQuitePedantic"）,
     //   vars: HashMap<String, OsString>, config: Vec<ConfigValue>,
     //   target_device: Option<TargetDevice>
-    // 这里给最小可用值即可（release 构建不需要 dev 相关字段）。
+    //
+    // features 必须带 `tauri/custom-protocol`（等价于官方 `tauri ios build` 经
+    // build_options() 注入的行为）：tauri 的 build.rs 以 `dev = !custom_protocol`
+    // 决定运行时形态，缺了它 xcode-script 会把 lib 编成 dev 模式——运行时代理
+    // 到 devUrl（http://localhost:5175），真机上白屏报 local network 错误。
+    // 该 feature 经 cargo-mobile2 的 metadata.features() 变成 cargo --features。
     module.register_method("options", |_params: Params<'_>, _ctx, _ext| {
         serde_json::json!({
             "dev": false,
-            "features": [],
+            "features": ["tauri/custom-protocol"],
             "args": [],
             "noise_level": "Polite",
             "vars": {},

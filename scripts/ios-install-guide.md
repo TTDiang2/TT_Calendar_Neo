@@ -1,36 +1,49 @@
-# iOS 真机安装说明（免费 · Sideloadly）
+# iOS 真机安装说明（iLoader + SideStore，免费）
 
-本工程 CI 产出一个**未签名**的真机 .ipa（`tt-calendar-ios-unsigned.ipa`），
-你用免费 Apple ID 在 Windows 上签名后即可装到自己的 iPhone。无需 $99 开发者账号。
+本工程 CI 产出一个**未签名**的真机 .ipa（`tt-calendar-ios-unsigned.ipa`，App 名 `TTCalendar`），
+用免费 Apple ID 自签后即可装到自己的 iPhone。无需 $99 开发者账号。
+
+> 2026-09-13 之前的旧包有「dev 模式白屏」bug（报 `localhost:5175` / local network），
+> 请务必装**最新一次 CI run** 的产物。装完若仍白屏，先确认下载的 run 日期。
 
 ## 你需要
-- 一台 Windows 电脑
-- 一根数据线（接 iPhone）
-- iPhone（iOS 14+）
-- Apple ID（免费即可，用邮箱注册的）
+- 一台 Windows 电脑 + 一根数据线
+- iPhone（iOS 14+）、免费 Apple ID
+- 免费签名的固有限制：**同一 Apple ID 最多 3 个自签 App，7 天有效期**（到期在 SideStore 里刷新即可，数据不丢）
 
-## 步骤
+## 路线 1（推荐，已实测）：iLoader 装 SideStore，再在手机里装 App
 
-### 1. 下载 .ipa
-在 GitHub 仓库的 **Actions → iOS build → 最新一次运行** 页面底部 Artifacts 里，
-下载 `tt-calendar-ios-unsigned-ipa`，解压得到 `tt-calendar-ios-unsigned.ipa`。
+[iLoader](https://github.com/nab138/iloader)（官方渠道只有 GitHub 仓库与 **iloader.app**，谨防假站）
+是 Windows/macOS/Linux 通用的侧载工具，负责把 [SideStore](https://sidestore.io) 装进手机；
+之后装/刷 App 都在手机上完成，不再依赖电脑。
 
-### 2. 下载 Sideloadly
-到 https://sideloadly.io 下载并安装 Windows 版。它免费，用 Apple ID 登录即可（不会自动续费）。
+1. **下载 .ipa**：GitHub 仓库 → Actions → iOS build → 最新绿色 run → 底部 Artifacts
+   下载 `tt-calendar-ios-unsigned-ipa`，解压得到 `tt-calendar-ios-unsigned.ipa`，想办法传到手机（网盘/文件 App 均可）。
+2. **装 SideStore**：iPhone 用数据线连电脑并信任，打开 iLoader → 登录 Apple ID → 安装 SideStore。
+3. **导入配对文件（pairing file）**：按 SideStore 文档（docs.sidestore.io）生成并导入，
+   之后 SideStore 才能在手机上自己签名/无线刷新。
+4. **信任开发者**（首次必做）：设置 → 通用 → VPN 与设备管理 → 你的 Apple ID → 信任。
+5. **装本 App**：iPhone 上打开 SideStore → 「+」→ 选 `tt-calendar-ios-unsigned.ipa` → 等安装完成。
+6. **续签**：到期前打开 SideStore 点刷新（配合它要求的 VPN/无线刷新设置），7 天一续。
 
-### 3. 签名并安装
-1. iPhone 用数据线连电脑，首次信任这台电脑；
-2. 打开 Sideloadly，确认顶部识别到你的 iPhone；
-3. **Apple ID** 一栏填你的免费 Apple ID，勾选「使用 Apple ID 登录」；
-4. 把下载的 `.ipa` **拖进** Sideloadly 窗口（或点中间选择文件）；
-5. 点 **Start**，按提示输入 Apple ID 密码（仅用于签名，若开了双重认证再填一次验证码）；
-6. 等待进度条走完，iPhone 上出现 App 图标。
+## 路线 2（备选）：Sideloadly 直接 USB 签名安装
 
-### 4. 信任开发者（第一次打开必做）
-iPhone 上：**设置 → 通用 → VPN 与设备管理** → 找到你的 Apple ID 那一项 → 点「信任」。
-回到主屏就能打开 App 了。
+1. 到 https://sideloadly.io 装 Windows 版；
+2. 手机连电脑，Sideloadly 里填 Apple ID，把 `.ipa` 拖进去点 Start；
+3. 输密码/双重验证码，等进度完成；
+4. 同样要做第 4 步「信任开发者」。7 天后重跑一次续期。
 
-## 注意
-- **7 天有效期**：免费签名 7 天后 App 会打不开。重开电脑 + 手机，用 Sideloadly 重新 Start 一次即可续上（数据在手机里，不会丢）。
-- **数据地址**：本版 App 内数据仍指向你的 PC 上的数据服务（穿透域名）。跑 App 时电脑要开着数据服务与穿透客户端。等「数据本地化」完成后再更新，即可完全脱离电脑。
-- 装不了 / 报错：看 Sideloadly 下方日志，常见是 Apple ID 密码/双重认证、或未信任电脑。仍不行把日志发我。
+## 装好之后
+
+- **数据在手机本地**（sql.js + IndexedDB），离线可用，不需要电脑开着服务。
+- **GitHub 同步**：App 内 设置 → 同步，填 GitHub PAT 即可多端同步（见 SYNC_SETUP 文档）。
+- **本地网络权限**：新包已声明 `NSLocalNetworkUsageDescription`；只有把数据地址指到局域网 IP
+  时系统才会要这个权限，纯离线/GitHub 同步用不到。
+- **不想装机也能看效果**：把 CI 的另一个产物 `tt-calendar-ios-sim.zip` 传到
+  [Appetize.io](https://appetize.io)，浏览器里就能跑（Windows 上最省事的「iOS 模拟」方案）。
+
+## 装不上 / 白屏排查
+1. 装的是最新 run 的包吗？（旧包白屏报 localhost:5175，是 dev 模式 bug，已修复）
+2. SideStore/Sideloadly 日志里常见：Apple ID 密码错、双重认证、未信任电脑、**3 App 上限已满**。
+3. 首次打开闪退 → 多半是没做「信任开发者」。
+4. 仍不行：把工具日志 + iPhone 型号/iOS 版本发出来。

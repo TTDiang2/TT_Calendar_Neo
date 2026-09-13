@@ -7,11 +7,19 @@
 #   · simulator（模拟器包）：iphonesimulator sdk，无需签名，产物 .zip
 #     → Appetize.io 浏览器跑 / Mac Simulator 跑。
 #   · device-unsigned（真机未签名包）：iphoneos sdk + CODE_SIGNING_ALLOWED=NO
-#     → 未签名 .app → 打成 Payload/*.app 的 .ipa，Sideloadly 免费自签装机。
+#     → 未签名 .app → 打成 Payload/*.app 的 .ipa，iLoader/SideStore/Sideloadly
+#     免费自签装机。
 #
-# 数据依赖：App 内数据走内网穿透域名（apps/mobile/src/main.tsx 的 API_BASE 默认值）。
-#   跑 App 时电脑要开着「启动日历.bat / dev:all」和穿透客户端；域名变了改 main.tsx
-#   默认值，或用仓库 Secrets 的 VITE_API_BASE 覆盖（见 build 步骤）。
+# ⚠️ 生产模式保障（2026-09 白屏事故）：xcode-script 编译 Rust lib 时必须带
+#   `tauri/custom-protocol` feature，否则 tauri 置 cfg(dev)，App 运行时把资源
+#   请求代理到 devUrl（http://localhost:5175），真机上白屏报 local network 错。
+#   现由双保险兜底 + 构建后验证守门：
+#     1) apps/mobile/src-tauri/Cargo.toml [features] default 含 custom-protocol；
+#     2) scripts/ci-ios-options-server 返回该 feature（等价官方 build_options()）；
+#     3) scripts/verify-ios-build.mjs 在打包前验证产物（dev 标记/资源内嵌/plist）。
+#
+# 数据依赖：App 内数据默认手机本地库（sql.js + IndexedDB），离线可用；
+#   若仓库配了 Secrets 的 VITE_API_BASE 则改为 HTTP 连电脑数据服务（见 build 步骤）。
 #
 # 免费云 Mac = 仓库转 public → GitHub Actions macOS runner 完全免费、不限分钟；
 #   private 仓库每月仅 200 macOS 分钟（10 倍计费率）。
@@ -28,7 +36,8 @@ on:
     paths:
       - 'apps/mobile/**'
       - 'packages/**'
-      - 'scripts/patch-ios-ats.mjs'
+      - 'scripts/patch-ios-plist.mjs'
+      - 'scripts/verify-ios-build.mjs'
       - 'scripts/ios-install-guide.md'
       - 'scripts/ci-ios-options-server/**'
       - '.github/workflows/ios-build.yml'
@@ -79,8 +88,8 @@ jobs:
         working-directory: apps/mobile
         run: pnpm tauri ios init --ci
 
-      - name: 放行 http 数据服务（ATS）
-        run: node scripts/patch-ios-ats.mjs
+      - name: 注入 Info.plist 权限键（ATS + 本地网络）
+        run: node scripts/patch-ios-plist.mjs
 
       - name: 构建模拟器版 App（直接 xcodebuild）
         working-directory: apps/mobile
@@ -171,6 +180,9 @@ jobs:
           echo "模拟器 .app 产物: $APP ($(du -h "$EXE" | cut -f1))"
           printf '%s' "$APP" > "$GITHUB_WORKSPACE/app_path.txt"
 
+      - name: 验证生产模式产物
+        run: node scripts/verify-ios-build.mjs "$(cat app_path.txt)" apps/mobile/dist
+
       - name: 压缩 .app 产物
         run: |
           set -euo pipefail
@@ -189,12 +201,12 @@ jobs:
           path: tt-calendar-ios-sim.zip
           retention-days: 14
 
-  # 真机 .ipa（未签名）：下载后用 Sideloadly 免费签你自己的 Apple ID 装到 iPhone。
+  # 真机 .ipa（未签名）：下载后用 iLoader/SideStore/Sideloadly 免费签自己的 Apple ID 装到 iPhone。
   # 做法：tauri ios init 生成工程 → 直接 xcodebuild build 关掉签名
   #       （CODE_SIGNING_ALLOWED=NO）→ 产出「未签名 .app」→ 手动打成
-  #       Payload/*.app 的 .ipa。Sideloadly/AltStore 在本机自签装机（7 天有效）。
+  #       Payload/*.app 的 .ipa。iLoader/SideStore/Sideloadly 在本机自签装机（7 天有效）。
   device-unsigned:
-    name: 真机包（未签名，Sideloadly 自签）
+    name: 真机包（未签名，iLoader/SideStore/Sideloadly 自签）
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -234,8 +246,8 @@ jobs:
         working-directory: apps/mobile
         run: pnpm tauri ios init --ci
 
-      - name: 放行 http 数据服务（ATS）
-        run: node scripts/patch-ios-ats.mjs
+      - name: 注入 Info.plist 权限键（ATS + 本地网络）
+        run: node scripts/patch-ios-plist.mjs
 
       - name: 构建未签名真机 .app（直接 xcodebuild 关签名）
         working-directory: apps/mobile
@@ -320,6 +332,9 @@ jobs:
           echo "真机 .app 产物: $APP ($(du -h "$EXE" | cut -f1))"
           printf '%s' "$APP" > "$GITHUB_WORKSPACE/app_path.txt"
 
+      - name: 验证生产模式产物
+        run: node scripts/verify-ios-build.mjs "$(cat app_path.txt)" apps/mobile/dist
+
       - name: 打包为未签名 .ipa（Payload 结构）
         run: |
           set -euo pipefail
@@ -350,7 +365,7 @@ jobs:
       - name: 附安装说明
         uses: actions/upload-artifact@v4
         with:
-          name: sideloadly-说明
+          name: ios-install-guide
           path: scripts/ios-install-guide.md
           retention-days: 14
 
@@ -365,7 +380,7 @@ jobs:
 #   `CI=true npm_config_confirm_modules_purge=false ...` 作为 build setting 传入，
 #   pnpm 看到 CI=true 即跳过清理确认。
 # ─ 直接 xcodebuild + CODE_SIGNING_ALLOWED=NO 产出「未签名 .app」，再手动打成
-#   Payload/*.app 的 .ipa，Sideloadly 在本机自签装机（7 天有效，重装续）。
+#   Payload/*.app 的 .ipa，iLoader/SideStore/Sideloadly 在本机自签装机（7 天有效，重装续）。
 #
 # 关于 "Build Rust Code" phase 的 WebSocket 依赖（关键坑）：
 #   tauri ios xcode-script（该 phase 调用的命令）在开头【无条件】连一个 dev-server
