@@ -9,17 +9,20 @@
  * 必须沿原型链收集函数属性。
  */
 
-import { openLocalDb, type LocalDbHandle } from '@tt-calendar/db/local/backend'
+import { openLocalDb, indexedDbStorage, type LocalDbHandle, type SnapshotStorage } from '@tt-calendar/db/local/backend'
 import { GitHubDataRepo } from '@tt-calendar/db/sync/github'
 import { SyncFacade } from '@tt-calendar/db/sync/facade'
 import { runJisiluImport, refreshSubscriptionOnBackend, refreshDueOnBackend } from '@tt-calendar/db/sources/jisilu'
 import { importTodosCsvOnBackend } from '@tt-calendar/db/sources/csv-todos'
+import './polyfills'
 
 export interface CoreInitOptions {
   /** wasm 二进制（主线程取好后传进来，避免 Worker 里再对 tauri:// 发请求） */
   wasmBinary?: ArrayBuffer
   /** wasm 资源地址（由 initSqlJs 自己 fetch；主线程 / 测试场景用） */
   wasmUrl?: string
+  /** 快照存储；缺省 IndexedDB（浏览器）。测试可注入内存实现 */
+  storage?: SnapshotStorage
 }
 
 type MethodFn = (...args: unknown[]) => unknown
@@ -27,6 +30,7 @@ type MethodFn = (...args: unknown[]) => unknown
 export class LocalDbCore {
   private handle: LocalDbHandle | null = null
   private facade: SyncFacade | null = null
+  private table: Record<string, MethodFn> | null = null
   private readonly onSynced?: (report: unknown) => void
 
   constructor(onSynced?: (report: unknown) => void) {
@@ -34,7 +38,13 @@ export class LocalDbCore {
   }
 
   async init(opts: CoreInitOptions): Promise<void> {
-    this.handle = await openLocalDb({ wasmBinary: opts.wasmBinary, wasmUrl: opts.wasmUrl })
+    // storage 必须显式接上：不传 = 纯内存库，所有数据随进程消失。
+    // 这里是浏览器层（Worker / 主线程回退共用），默认 IndexedDB 快照持久化。
+    this.handle = await openLocalDb({
+      wasmBinary: opts.wasmBinary,
+      wasmUrl: opts.wasmUrl,
+      storage: opts.storage ?? indexedDbStorage,
+    })
     this.facade = new SyncFacade({
       backend: this.handle.backend,
       svc: this.handle.svc,
@@ -75,12 +85,15 @@ export class LocalDbCore {
     return await fn.apply(handle.backend, args)
   }
 
-  /** 方法面 = SqliteBackend 原型链全部方法 + 同步编排层 / 导入 / 刷新入口 */
+  /** 方法面 = SqliteBackend 原型链全部方法 + 同步编排层 / 导入 / 刷新入口（缓存） */
   private methodTable(): Record<string, MethodFn> {
+    if (this.table) return this.table
     const handle = this.handle!
     const facade = this.facade!
     const be = handle.backend as unknown as Record<string, unknown>
-    const table: Record<string, MethodFn> = {}
+    // null 原型：防止 'constructor'/'toString'/'valueOf' 这类名字被
+    // Object.prototype 兜住，越权返回后端本体或原生函数
+    const table: Record<string, MethodFn> = Object.create(null)
     for (
       let proto = handle.backend;
       proto && proto !== Object.prototype;
@@ -121,6 +134,7 @@ export class LocalDbCore {
         return importTodosCsvOnBackend(handle.backend, await file.text())
       },
     })
+    this.table = table
     return table
   }
 }

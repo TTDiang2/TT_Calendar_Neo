@@ -5,6 +5,17 @@ import '@tt-calendar/ui/index.css'
 import { App, setBackend, createHttpBackend } from '@tt-calendar/ui'
 import { ErrorBoundary } from '@tt-calendar/ui/components/ErrorBoundary'
 import { createLocalBackend } from './local/backend'
+import { bootLog } from './boot-log'
+
+// 启动期兜底诊断：任何未捕获 rejection / 脚本错误都必须留痕上屏，
+// 否则真机上就是一张没有线索的白屏（2026-09-13 卡点排查教训）
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e.reason as { stack?: string; message?: string } | null
+  bootLog('未捕获 rejection:', (r && (r.stack || r.message)) || String(e.reason))
+})
+window.addEventListener('error', (e) => {
+  bootLog('脚本错误:', e.message, `@${e.filename}:${e.lineno}:${e.colno}`)
+})
 
 /**
  * 数据后端选择（数据全本地的落地）：
@@ -45,6 +56,85 @@ const root = document.getElementById('root')!
 root.innerHTML =
   '<div class="flex h-screen items-center justify-center text-sm text-gray-500">正在启动数据服务…</div>'
 
+/** 异形错误（DOMException 等 WebKit 常抛的对象可能不是 Error 实例）也要保住 name/message/stack */
+function renderErr(err: unknown): { message: string; stack: string } {
+  if (err instanceof Error) {
+    return { message: `${err.name}: ${err.message}`, stack: err.stack ?? '' }
+  }
+  const e = err as { name?: string; message?: string; stack?: string } | null
+  if (e && typeof e === 'object') {
+    return { message: `${e.name ?? typeof err}: ${e.message ?? String(err)}`, stack: e.stack ?? '' }
+  }
+  return { message: String(err), stack: '' }
+}
+
+/** IndexedDB 实际可写性探针（部分 WebView「能 open 不能写」，只看 typeof 不够） */
+function idbWriteProbe(): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false
+    const done = (v: boolean): void => {
+      if (!settled) {
+        settled = true
+        void indexedDB.deleteDatabase('__probe__')
+        resolve(v)
+      }
+    }
+    setTimeout(() => done(false), 3000)
+    try {
+      const req = indexedDB.open('__probe__', 1)
+      req.onupgradeneeded = () => {
+        req.result.createObjectStore('kv')
+      }
+      req.onerror = () => done(false)
+      req.onsuccess = () => {
+        const db = req.result
+        let tx: IDBTransaction
+        try {
+          tx = db.transaction('kv', 'readwrite')
+        } catch {
+          db.close()
+          done(false)
+          return
+        }
+        try {
+          tx.objectStore('kv').put('1', 'probe')
+        } catch {
+          db.close()
+          done(false)
+          return
+        }
+        tx.oncomplete = () => {
+          db.close()
+          done(true)
+        }
+        tx.onerror = () => {
+          db.close()
+          done(false)
+        }
+        tx.onabort = () => {
+          db.close()
+          done(false)
+        }
+      }
+    } catch {
+      done(false)
+    }
+  })
+}
+
+/** 环境探针：真机报错截图一次带齐所有未知运行时项（tauri:// 的安全上下文/IDB 状态） */
+async function probeEnvironment(): Promise<string> {
+  const checks: [string, string][] = [
+    ['href', location.href],
+    ['isSecureContext', String(globalThis.isSecureContext)],
+    ['crypto.randomUUID', typeof globalThis.crypto?.randomUUID],
+    ['Worker', typeof Worker],
+    ['indexedDB', typeof indexedDB],
+  ]
+  checks.push(['idb write', (await idbWriteProbe()) ? 'ok' : 'FAIL'])
+  return checks.map(([k, v]) => `${k}: ${v}`).join('\n')
+}
+
 async function boot(): Promise<void> {
   try {
     await bootInner()
@@ -53,18 +143,28 @@ async function boot(): Promise<void> {
     // 否则真机上就是一张永远停在启动文案的"白屏"，无从排查。
     // 动态内容一律 textContent，避免把错误文本当 HTML 注进去。
     console.error('[mobile] 启动失败', err)
+    const { message, stack } = renderErr(err)
+    let env = ''
+    try {
+      env = await probeEnvironment()
+    } catch {
+      env = 'probe: failed'
+    }
     const box = document.createElement('div')
     box.className = 'flex h-screen flex-col items-center justify-center gap-3 p-6 text-center'
     const title = document.createElement('div')
     title.className = 'text-sm font-medium text-red-600'
     title.textContent = '启动失败，请截图反馈'
-    const message = document.createElement('div')
-    message.className = 'max-w-full text-xs text-red-500'
-    message.textContent = err instanceof Error ? err.message : String(err)
+    const messageEl = document.createElement('div')
+    messageEl.className = 'max-w-full text-xs text-red-500'
+    messageEl.textContent = message
     const pre = document.createElement('pre')
     pre.className = 'max-w-full overflow-auto whitespace-pre-wrap text-left text-xs leading-5 text-gray-500'
-    pre.textContent = err instanceof Error ? err.stack ?? '' : ''
-    box.append(title, message, pre)
+    pre.textContent = stack
+    const envEl = document.createElement('pre')
+    envEl.className = 'max-w-full overflow-auto whitespace-pre-wrap text-left text-xs leading-5 text-gray-400'
+    envEl.textContent = env
+    box.append(title, messageEl, pre, envEl)
     root.innerHTML = ''
     root.append(box)
   }
@@ -78,14 +178,22 @@ async function bootInner(): Promise<void> {
   } else {
     root.innerHTML =
       '<div class="flex h-screen items-center justify-center text-sm text-gray-500">正在打开本地数据库…</div>'
-    setBackend(
-      await createLocalBackend({
-        // 启动自动同步（auto_on_start）完成后，让 react-query 重新拉取最新数据
-        onSynced: () => void queryClient.invalidateQueries(),
-      }),
-    )
+    bootLog('awaiting createLocalBackend')
+    try {
+      setBackend(
+        await createLocalBackend({
+          // 启动自动同步（auto_on_start）完成后，让 react-query 重新拉取最新数据
+          onSynced: () => void queryClient.invalidateQueries(),
+        }),
+      )
+    } catch (err) {
+      bootLog(' createLocalBackend THREW:', err instanceof Error ? err.stack : String(err))
+      throw err
+    }
+    bootLog('createLocalBackend resolved')
   }
   root.innerHTML = ''
+  bootLog('root cleared; React render start')
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
@@ -97,6 +205,7 @@ async function bootInner(): Promise<void> {
       </QueryClientProvider>
     </React.StrictMode>,
   )
+  bootLog('React render scheduled')
   if (!ready) {
     console.warn('[mobile] 数据服务 30 秒内没就绪，界面可能没数据')
   }

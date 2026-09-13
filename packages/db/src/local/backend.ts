@@ -7,9 +7,12 @@
  *   - 每次写操作后防抖自动保存（默认 300ms）
  *   - flush() 供页面隐藏/关闭时强制落盘
  *
- * 浏览器安全：本文件及其依赖（backend/migrate/schema/domain/contracts）不含
- * better-sqlite3 等任何 Node 原生模块 —— better-sqlite3 只出现在 type import
- * 与 drizzle 驱动的类型声明里，打包时被擦除。
+ * 浏览器安全：本文件经 `drizzle-orm/better-sqlite3` 的泛型入口静态连着
+ * better-sqlite3（drizzle 的 driver.js 顶层 `import Client from "better-sqlite3"`），
+ * 这条运行时 import 不会被类型擦除。浏览器构建必须由打包侧把它挡住 ——
+ * apps/mobile 的 vite resolve.alias 把 better-sqlite3 指向构造即抛错的空壳
+ * （better-sqlite3-stub.ts）：drizzle 只把传入的 SqlJsSqlite 当泛型客户端，
+ * 不会构造原生 Client。不要在没有 alias 的情况下把本文件放进浏览器包。
  */
 
 import { drizzle } from 'drizzle-orm/better-sqlite3'
@@ -21,6 +24,7 @@ import * as schema from '../schema'
 import { SyncService } from '../sync-service'
 
 import { idbGetBytes, idbPutBytes } from './persist'
+import { bootLog } from './boot-log'
 import { SqlJsSqlite } from './sqlite-shim'
 
 /** 快照存储抽象：浏览器默认 IndexedDB；Node 测试注入内存实现 */
@@ -57,14 +61,19 @@ export interface LocalDbHandle {
 }
 
 export async function openLocalDb(opts: OpenLocalDbOptions = {}): Promise<LocalDbHandle> {
+  bootLog('openLocalDb: storage read start')
   const storage = opts.storage
   const bytes = opts.skipLoad || !storage ? null : await storage.get()
+  bootLog('openLocalDb: bytes =', bytes ? bytes.length : 'null')
   const sqlite = await SqlJsSqlite.open({ bytes, wasmUrl: opts.wasmUrl, wasmBinary: opts.wasmBinary })
+  bootLog('openLocalDb: sqlite opened; ensureSchema start')
   sqlite.pragma('foreign_keys = ON')
   ensureSchema(sqlite as unknown as Database.Database)
+  bootLog('openLocalDb: schema done; drizzle start')
 
   const db = drizzle(sqlite as unknown as Database.Database, { schema })
   const backend = new SqliteBackend(db)
+  bootLog('openLocalDb: backend constructed')
 
   // ---- 快照持久化调度 ----
   const autosaveMs = opts.autosaveMs ?? 300

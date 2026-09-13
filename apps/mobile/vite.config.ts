@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -9,10 +10,16 @@ export default defineConfig({
   cacheDir: 'node_modules/.vite-neo',
   plugins: [react(), tailwindcss()],
   clearScreen: false,
-  // 内联 worker（db.worker?worker&inline）配 iife：blob URL + module worker 在
-  // WKWebView 上不可靠，iife 构建的 blob worker 兼容性最好
-  worker: {
-    format: 'iife',
+  resolve: {
+    alias: {
+      // packages/db 经 drizzle-orm/better-sqlite3 静态引用 better-sqlite3
+      // （Node 原生模块），不挡住就会被打进浏览器包并在模块求值阶段抛错 ——
+      // 主包白屏（2026-09-13 真机事故）。实际数据库走 sql.js shim
+      // （SqlJsSqlite），drizzle 只把它当泛型客户端，永远不构造原生 Client，
+      // 一个构造即抛错的空壳足以让打包图变干净。仅影响 mobile 构建，Node
+      // 侧（desktop 数据服务/测试）不受 alias 影响照用真模块。
+      'better-sqlite3': fileURLToPath(new URL('./src/local/better-sqlite3-stub.ts', import.meta.url)),
+    },
   },
   server: {
     port: 5175,

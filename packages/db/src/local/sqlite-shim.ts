@@ -16,6 +16,7 @@
 
 import initSqlJs from 'sql.js'
 import type { Database as SqlJsDatabase, SqlValue } from 'sql.js'
+import { bootLog } from './boot-log'
 
 /** sql.js 绑定值归一化：undefined → null（其余类型 sql.js 自带映射） */
 function norm(v: unknown): SqlValue {
@@ -48,10 +49,12 @@ export class SqlJsSqlite {
   static async open(
     opts: { bytes?: Uint8Array | null; wasmUrl?: string; wasmBinary?: ArrayBuffer | Uint8Array } = {},
   ): Promise<SqlJsSqlite> {
+    bootLog('sqlite-shim: initSqlJs start')
     const config: Record<string, unknown> = {}
     if (opts.wasmUrl) config.locateFile = () => opts.wasmUrl
     if (opts.wasmBinary) config.wasmBinary = opts.wasmBinary
     const SQL = await initSqlJs(config as Parameters<typeof initSqlJs>[0])
+    bootLog('sqlite-shim: initSqlJs done')
     return new SqlJsSqlite(new SQL.Database(opts.bytes ?? undefined))
   }
 
@@ -83,6 +86,10 @@ export class SqlJsSqlite {
     const stmt = this.handle.prepare(sql)
     const db = this.handle
     const notify = () => this.onchange?.()
+    // 写语句才触发 onchange（快照调度）：drizzle 的 INSERT..RETURNING 走
+    // raw().get()/.all() 而不是 run()，漏掉这条路径就会「写成功但永不
+    // 自动落盘」（2026-09-13 真机丢数据事故根因）
+    const isWrite = /^\s*(insert|update|delete|replace)\b/i.test(sql)
 
     // sql.js 的 bind 自带 reset 语义；这里统一先 reset（清绑定+回到第一行）再绑
     const begin = (params: unknown[]): void => {
@@ -99,6 +106,8 @@ export class SqlJsSqlite {
         while (stmt.step()) {
           // 写语句没有结果行；循环到结束确保语句执行完毕
         }
+        // sql.js 要求 COMMIT 时没有处于进行中的语句，必须复位
+        stmt.reset()
         const changes = db.getRowsModified()
         const rid = db.exec('SELECT last_insert_rowid() AS id')
         const lastInsertRowid = (rid[0]?.values[0]?.[0] ?? 0) as number | bigint
@@ -111,13 +120,18 @@ export class SqlJsSqlite {
         begin(params)
         const rows: Record<string, unknown>[] = []
         while (stmt.step()) rows.push(stmt.getAsObject())
+        stmt.reset()
+        if (isWrite) notify()
         return rows
       },
 
       // 返回首行或 undefined，等价 better-sqlite3 .get()
       get(...params: unknown[]) {
         begin(params)
-        return stmt.step() ? (stmt.getAsObject() as Record<string, unknown>) : undefined
+        const row = stmt.step() ? (stmt.getAsObject() as Record<string, unknown>) : undefined
+        stmt.reset()
+        if (isWrite) notify()
+        return row
       },
 
       // 原始值数组形态（drizzle 的 values()/带字段映射的 get() 走这里）
@@ -127,11 +141,16 @@ export class SqlJsSqlite {
             begin(params)
             const rows: unknown[][] = []
             while (stmt.step()) rows.push(Array.from(stmt.get()))
+            stmt.reset()
+            if (isWrite) notify()
             return rows
           },
           get(...params: unknown[]) {
             begin(params)
-            return stmt.step() ? Array.from(stmt.get()) : undefined
+            const row = stmt.step() ? Array.from(stmt.get()) : undefined
+            stmt.reset()
+            if (isWrite) notify()
+            return row
           },
         }
       },
@@ -141,10 +160,15 @@ export class SqlJsSqlite {
   /**
    * 等价 better-sqlite3 db.transaction(fn)：返回一个包装函数，
    * 调用时 BEGIN → fn(...) → COMMIT，异常 ROLLBACK。
-   * drizzle 会话以 nativeTx['deferred'](tx) 的形式调用它。
+   * drizzle 会话取返回值后按 behavior 调 .deferred()/.immediate()/.exclusive()，
+   * 内存库三者语义一致（sql.js 单连接同步执行）。
    */
-  transaction<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
-    return (...args: A) => {
+  transaction<A extends unknown[], R>(fn: (...args: A) => R): ((...args: A) => R) & {
+    deferred: (...args: A) => R
+    immediate: (...args: A) => R
+    exclusive: (...args: A) => R
+  } {
+    const run = (...args: A): R => {
       this.exec('BEGIN')
       try {
         const r = fn(...args)
@@ -159,5 +183,6 @@ export class SqlJsSqlite {
         throw e
       }
     }
+    return Object.assign(run, { deferred: run, immediate: run, exclusive: run })
   }
 }
