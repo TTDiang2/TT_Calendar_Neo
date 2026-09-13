@@ -16,7 +16,7 @@ import { firstBindMerge, merge, tombKey, tombstonesByTable } from '@tt-calendar/
 
 import type { Db } from './client'
 import * as s from './schema'
-import { inArray, isNull, sql } from 'drizzle-orm'
+import { eq, inArray, isNull, sql } from 'drizzle-orm'
 
 type Row = Record<string, unknown>
 
@@ -169,10 +169,26 @@ export class SyncService {
             localTombs,
           )
 
-    this.applySnapshot(result.upsert, result.deletes)
-    this.writeTombstones(result.tombstones)
+    this.applySnapshotInTx(result.upsert, result.deletes, result.tombstones)
 
     return { report: { ...result.report }, merged: result.data, tombstones: result.tombstones }
+  }
+
+  /**
+   * 落库必须整体原子：applySnapshot 与 writeTombstones 分离提交的话，
+   * 中途崩溃会把「合并后的行」配上「被清空的墓碑表」留下 —— 被删行复活、
+   * 墓碑丢失。better-sqlite3 与 sql.js shim 都是单连接同步执行，
+   * 同连接后续语句天然参与本事务。
+   */
+  private applySnapshotInTx(
+    upsert: Snapshot,
+    deletes: Partial<Record<SyncTableName, string[]>>,
+    tombstones: Tombstones,
+  ): void {
+    this.db.transaction(() => {
+      this.applySnapshot(upsert, deletes)
+      this.writeTombstones(tombstones)
+    })
   }
 
   /** 把 upsert/deletes 差集落到库里 */
@@ -189,6 +205,25 @@ export class SyncService {
         this.deleteRows(table, delKeys)
       }
     }
+  }
+
+  /**
+   * 自增表本地行定位：行身份是 sync_uid，不是自增 id。
+   *
+   * ⚠️ 不能按 id upsert：快照行携带的 id 是「产生它的那台设备」的本地自增值，
+   * 与本机 id 空间无关。按 id 冲突会把远端行串写成本地无关行（同 id 不同
+   * sync_uid），或让同一 sync_uid 出现重复行（同 sync_uid 不同 id）。
+   * 正确语义：sync_uid 命中 → 按本地 id 更新；未命中 → 新插入，id 交给本机
+   * 自增（不采纳远端 id，避免占用/碰撞本机自增序列）。
+   */
+  private localIdBySyncUid(
+    table: 'events' | 'schedule_items' | 'countdown' | 'marks',
+    syncUid: string | null,
+  ): number | undefined {
+    if (!syncUid) return undefined
+    const t = AUTO_TABLE_REFS[table]
+    const r = this.db.select({ id: t.id }).from(t).where(eq(t.syncUid, syncUid)).get()
+    return r?.id ?? undefined
   }
 
   private upsertRow(table: SyncTableName, row: Row): void {
@@ -302,126 +337,92 @@ export class SyncService {
           .onConflictDoUpdate({ target: s.coloring.date, set: { level: num(row.level) ?? 0, updatedAt: str(row.updated_at) } })
           .run()
         break
-      case 'events':
-        this.db
-          .insert(s.events)
-          .values({
-            id: num(row.id) ?? undefined,
-            layerId: String(row.layer_id ?? ''),
-            source: String(row.source ?? 'migrated'),
-            date: String(row.date),
-            title: String(row.title ?? ''),
-            description: str(row.description),
-            color: str(row.color),
-            extraJson: typeof row.extra_json === 'string' ? row.extra_json : row.extra ? JSON.stringify(row.extra) : null,
-            sourceRef: str(row.source_ref),
-            sortKey: num(row.sort_key) ?? 0,
-            createdAt: str(row.created_at),
-            updatedAt: str(row.updated_at),
-            syncUid: str(row.sync_uid),
-          })
-          .onConflictDoUpdate({
-            target: s.events.id,
-            set: {
-              title: String(row.title ?? ''),
-              description: str(row.description),
-              color: str(row.color),
-              updatedAt: str(row.updated_at),
-            },
-          })
-          .run()
+      case 'events': {
+        const values = {
+          layerId: String(row.layer_id ?? ''),
+          source: String(row.source ?? 'migrated'),
+          date: String(row.date),
+          title: String(row.title ?? ''),
+          description: str(row.description),
+          color: str(row.color),
+          extraJson: typeof row.extra_json === 'string' ? row.extra_json : row.extra ? JSON.stringify(row.extra) : null,
+          sourceRef: str(row.source_ref),
+          sortKey: num(row.sort_key) ?? 0,
+          createdAt: str(row.created_at),
+          updatedAt: str(row.updated_at),
+          syncUid: str(row.sync_uid),
+        }
+        const localId = this.localIdBySyncUid('events', values.syncUid)
+        if (localId !== undefined) {
+          this.db.update(s.events).set(values).where(eq(s.events.id, localId)).run()
+        } else {
+          this.db.insert(s.events).values(values).run()
+        }
         break
-      case 'schedule_items':
-        this.db
-          .insert(s.scheduleItems)
-          .values({
-            id: num(row.id) ?? undefined,
-            date: String(row.date),
-            startTime: str(row.start_time),
-            endTime: str(row.end_time),
-            title: String(row.title ?? ''),
-            color: str(row.color),
-            sortOrder: num(row.sort_order) ?? 0,
-            createdAt: str(row.created_at),
-            updatedAt: str(row.updated_at),
-            category: str(row.category) ?? 'work',
-            syncUid: str(row.sync_uid),
-          })
-          .onConflictDoUpdate({
-            target: s.scheduleItems.id,
-            set: {
-              title: String(row.title ?? ''),
-              startTime: str(row.start_time),
-              endTime: str(row.end_time),
-              color: str(row.color),
-              sortOrder: num(row.sort_order) ?? 0,
-              category: str(row.category) ?? 'work',
-              updatedAt: str(row.updated_at),
-            },
-          })
-          .run()
+      }
+      case 'schedule_items': {
+        const values = {
+          date: String(row.date),
+          startTime: str(row.start_time),
+          endTime: str(row.end_time),
+          title: String(row.title ?? ''),
+          color: str(row.color),
+          sortOrder: num(row.sort_order) ?? 0,
+          createdAt: str(row.created_at),
+          updatedAt: str(row.updated_at),
+          category: str(row.category) ?? 'work',
+          syncUid: str(row.sync_uid),
+        }
+        const localId = this.localIdBySyncUid('schedule_items', values.syncUid)
+        if (localId !== undefined) {
+          this.db.update(s.scheduleItems).set(values).where(eq(s.scheduleItems.id, localId)).run()
+        } else {
+          this.db.insert(s.scheduleItems).values(values).run()
+        }
         break
-      case 'countdown':
-        this.db
-          .insert(s.countdown)
-          .values({
-            id: num(row.id) ?? undefined,
-            name: String(row.name ?? ''),
-            category: str(row.category) ?? '其他',
-            baseDate: String(row.base_date ?? ''),
-            repeatYearly: num(row.repeat_yearly) ?? 0,
-            milestoneRule: str(row.milestone_rule),
-            neverExpire: num(row.never_expire) ?? 0,
-            notes: str(row.notes),
-            color: str(row.color),
-            sortOrder: num(row.sort_order) ?? 0,
-            createdAt: str(row.created_at),
-            updatedAt: str(row.updated_at),
-            syncUid: str(row.sync_uid),
-            repeatType: str(row.repeat_type) ?? 'solar',
-          })
-          .onConflictDoUpdate({
-            target: s.countdown.id,
-            set: {
-              name: String(row.name ?? ''),
-              category: str(row.category) ?? '其他',
-              baseDate: String(row.base_date ?? ''),
-              repeatYearly: num(row.repeat_yearly) ?? 0,
-              milestoneRule: str(row.milestone_rule),
-              neverExpire: num(row.never_expire) ?? 0,
-              notes: str(row.notes),
-              color: str(row.color),
-              sortOrder: num(row.sort_order) ?? 0,
-              repeatType: str(row.repeat_type) ?? 'solar',
-              updatedAt: str(row.updated_at),
-            },
-          })
-          .run()
+      }
+      case 'countdown': {
+        const values = {
+          name: String(row.name ?? ''),
+          category: str(row.category) ?? '其他',
+          baseDate: String(row.base_date ?? ''),
+          repeatYearly: num(row.repeat_yearly) ?? 0,
+          milestoneRule: str(row.milestone_rule),
+          neverExpire: num(row.never_expire) ?? 0,
+          notes: str(row.notes),
+          color: str(row.color),
+          sortOrder: num(row.sort_order) ?? 0,
+          createdAt: str(row.created_at),
+          updatedAt: str(row.updated_at),
+          syncUid: str(row.sync_uid),
+          repeatType: str(row.repeat_type) ?? 'solar',
+        }
+        const localId = this.localIdBySyncUid('countdown', values.syncUid)
+        if (localId !== undefined) {
+          this.db.update(s.countdown).set(values).where(eq(s.countdown.id, localId)).run()
+        } else {
+          this.db.insert(s.countdown).values(values).run()
+        }
         break
-      case 'marks':
-        this.db
-          .insert(s.marks)
-          .values({
-            id: num(row.id) ?? undefined,
-            layerId: String(row.layer_id ?? ''),
-            date: String(row.date ?? ''),
-            level: num(row.level),
-            note: str(row.note),
-            createdAt: str(row.created_at),
-            updatedAt: str(row.updated_at),
-            syncUid: str(row.sync_uid),
-          })
-          .onConflictDoUpdate({
-            target: s.marks.id,
-            set: {
-              level: num(row.level),
-              note: str(row.note),
-              updatedAt: str(row.updated_at),
-              syncUid: str(row.sync_uid),
-            },
-          })
-          .run()
+      }
+      case 'marks': {
+        const values = {
+          layerId: String(row.layer_id ?? ''),
+          date: String(row.date ?? ''),
+          level: num(row.level),
+          note: str(row.note),
+          createdAt: str(row.created_at),
+          updatedAt: str(row.updated_at),
+          syncUid: str(row.sync_uid),
+        }
+        const localId = this.localIdBySyncUid('marks', values.syncUid)
+        if (localId !== undefined) {
+          this.db.update(s.marks).set(values).where(eq(s.marks.id, localId)).run()
+        } else {
+          this.db.insert(s.marks).values(values).run()
+        }
         break
+      }
       case 'subscriptions':
         this.db
           .insert(s.subscriptions)

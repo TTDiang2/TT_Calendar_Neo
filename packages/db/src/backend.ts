@@ -187,10 +187,22 @@ function rowToSubscription(r: SubRowT): Subscription {
   }
 }
 
+/**
+ * 本地墙钟 + UTC 偏移（`YYYY-MM-DD HH:MM:SS±HH:MM`）。
+ *
+ * LWW 三方合并与墓碑裁决都按 updated_at/deleted_at 字符串比较，而比较发生在
+ * 多台设备之间：纯本地时间（旧格式）在跨时区设备上会系统性错判新旧 ——
+ * UTC+8 设备 20:00 的编辑永远压过 UTC 设备同刻的 12:00。带偏移后同一时刻
+ * 各设备生成的时间序一致；偏移固定挂在秒后缀上，与旧格式行在不同编辑时刻
+ * 的比较也不受影响（日期时间主体逐位可比，偏移只在同秒时参与）。
+ */
 function now(): string {
   const d = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  const offMin = -d.getTimezoneOffset()
+  const sign = offMin >= 0 ? '+' : '-'
+  const off = `${sign}${p(Math.floor(Math.abs(offMin) / 60))}:${p(Math.abs(offMin) % 60)}`
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}${off}`
 }
 
 // ---------- Backend ----------

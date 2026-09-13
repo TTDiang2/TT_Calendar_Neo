@@ -245,7 +245,11 @@ export class SyncFacade {
           remote_rows: rowCountOf(current?.snapshot ?? {}),
         }
       } catch (e) {
-        if (e instanceof Error && e.name === 'SyncConflictError' && attempt < 3) continue
+        if (e instanceof Error && e.name === 'SyncConflictError' && attempt < 3) {
+          // 非快进冲突：别人先推了。退避一下再重拉重并，避免冲突风暴下打满 API 配额。
+          await new Promise((r) => setTimeout(r, 300 * attempt))
+          continue
+        }
         this.backend.setMeta(K_LAST_AT, this.now())
         this.backend.setMeta(K_LAST_OK, '0')
         throw e

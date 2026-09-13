@@ -34,7 +34,7 @@ importers:
         version: 8.69.0(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@10.2.2)(typescript@5.9.3)
       vitest:
         specifier: ^3.0.5
-        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@25.0.1(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@7.2.0)(tsx@4.23.13)
+        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@25.0.1(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)
 
   apps/desktop:
     dependencies:
@@ -222,6 +222,9 @@ importers:
       drizzle-orm:
         specifier: ^0.38.3
         version: 0.38.4(@types/better-sqlite3@7.6.13)(@types/react@19.2.18)(@types/sql.js@1.4.11)(better-sqlite3@11.10.0)(react@19.2.8)(sql.js@1.14.2)
+      p-retry:
+        specifier: ^8.0.1
+        version: 8.0.1
       sql.js:
         specifier: ^1.14.2
         version: 1.14.2
@@ -2204,6 +2207,10 @@ packages:
     resolution: {integrity: sha512-xelSayHH36ZgE7ZWhli7pW34hNbNl8Ojv5KVmkJD4hBdD3th8Tfk9vYasLM+mXWOZhFkgZfxhLSnrwRr4elSSg==}
     engines: {node: '>=0.10.0'}
 
+  is-network-error@1.3.2:
+    resolution: {integrity: sha512-PhBY86zaxNZUuWP6h13Vu5oFe0XY6/UlKzQnYFELzGVHygP3MxmvTfYSG7GN3aIab/iWudSMgjSnG9Dq+nHrgA==}
+    engines: {node: '>=16'}
+
   is-potential-custom-element-name@1.0.1:
     resolution: {integrity: sha512-bCYeRA2rVibKZd+s2625gGnGF/t7DSqDs4dP7CrLA1m7jKWz6pps0LpYLJN8Q64HtmPKJ1hrN3nzPNKFEKOUiQ==}
 
@@ -2436,6 +2443,10 @@ packages:
   p-locate@5.0.0:
     resolution: {integrity: sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==}
     engines: {node: '>=10'}
+
+  p-retry@8.0.1:
+    resolution: {integrity: sha512-NAigyu8hfvJe7MsS18mnc4is0MZtau3QMdBklaJKK23oBQb6occO3UPM3vHmTckW8KhfyjMZaUOqdTFEYliHgg==}
+    engines: {node: '>=22'}
 
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
@@ -4481,6 +4492,8 @@ snapshots:
     dependencies:
       is-extglob: 2.1.1
 
+  is-network-error@1.3.2: {}
+
   is-potential-custom-element-name@1.0.1: {}
 
   isexe@2.0.0: {}
@@ -4677,6 +4690,10 @@ snapshots:
   p-locate@5.0.0:
     dependencies:
       p-limit: 3.1.0
+
+  p-retry@8.0.1:
+    dependencies:
+      is-network-error: 1.3.2
 
   parent-module@1.0.1:
     dependencies:
@@ -5001,27 +5018,6 @@ snapshots:
       - tsx
       - yaml
 
-  vite-node@3.2.4(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(supports-color@7.2.0)(tsx@4.23.13):
-    dependencies:
-      cac: 6.7.14
-      debug: 4.4.3(supports-color@7.2.0)
-      es-module-lexer: 1.7.0
-      pathe: 2.0.3
-      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13)
-    transitivePeerDependencies:
-      - '@types/node'
-      - jiti
-      - less
-      - lightningcss
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - supports-color
-      - terser
-      - tsx
-      - yaml
-
   vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13):
     dependencies:
       esbuild: 0.25.12
@@ -5061,48 +5057,6 @@ snapshots:
       tinyrainbow: 2.0.0
       vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13)
       vite-node: 3.2.4(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@types/node': 22.20.1
-      jsdom: 25.0.1(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - jiti
-      - less
-      - lightningcss
-      - msw
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - supports-color
-      - terser
-      - tsx
-      - yaml
-
-  vitest@3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@25.0.1(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@7.2.0)(tsx@4.23.13):
-    dependencies:
-      '@types/chai': 5.2.3
-      '@vitest/expect': 3.2.7
-      '@vitest/mocker': 3.2.7(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13))
-      '@vitest/pretty-format': 3.2.7
-      '@vitest/runner': 3.2.7
-      '@vitest/snapshot': 3.2.7
-      '@vitest/spy': 3.2.7
-      '@vitest/utils': 3.2.7
-      chai: 5.3.3
-      debug: 4.4.3(supports-color@7.2.0)
-      expect-type: 1.4.0
-      magic-string: 0.30.21
-      pathe: 2.0.3
-      picomatch: 4.0.7
-      std-env: 3.10.0
-      tinybench: 2.9.0
-      tinyexec: 0.3.2
-      tinyglobby: 0.2.17
-      tinypool: 1.1.1
-      tinyrainbow: 2.0.0
-      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13)
-      vite-node: 3.2.4(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(supports-color@7.2.0)(tsx@4.23.13)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.20.1

@@ -270,4 +270,106 @@ describe('SyncFacade 端到端（假远端）', () => {
   it('rowCountOf 汇总各表行数', () => {
     expect(rowCountOf({ todo: [{ id: 'a' }], events: [{ id: 1 }, { id: 2 }] })).toBe(3)
   })
+
+  it('跨设备自增 id 空间无关：远端行不得按 id 串写本地行（回归）', async () => {
+    const wasmBinary = readFileSync(require.resolve('sql.js/dist/sql-wasm.wasm'))
+    const fr = fakeRemote()
+    const pc = await openLocalDb({ wasmBinary, autosaveMs: 0, skipLoad: true })
+    const phone = await openLocalDb({ wasmBinary, autosaveMs: 0, skipLoad: true })
+    const pcF = makeFacade(pc, fr.remote)
+    const phoneF = makeFacade(phone, fr.remote)
+    pcF.saveConfig({ repo: 'u/d', branch: 'main', token: 't', auto_on_start: false, sync_on_close: false })
+    phoneF.saveConfig({ repo: 'u/d', branch: 'main', token: 't', auto_on_start: false, sync_on_close: false })
+
+    // PC 的事件 A：在 PC 库里自增 id = 1
+    const layer = pc.backend.createLayer({ display_name: 'L' })
+    pc.backend.createEvent({
+      layer_id: layer.layer_id,
+      source: 'manual',
+      date: '2026-10-01',
+      title: 'PC事件A',
+      color: null,
+      description: null,
+      source_ref: null,
+      sort_key: 0,
+      extra: {},
+    })
+    await pcF.sync()
+
+    // 手机在拉取之前已有自己的事件 B：在手机库里也是自增 id = 1，但 sync_uid 不同
+    const phoneLayer = phone.backend.createLayer({ display_name: 'L' })
+    phone.backend.createEvent({
+      layer_id: phoneLayer.layer_id,
+      source: 'manual',
+      date: '2026-10-02',
+      title: '手机事件B',
+      color: null,
+      description: null,
+      source_ref: null,
+      sort_key: 0,
+      extra: {},
+    })
+    // 首绑 merge_push：A 下行到手机 —— 不得按 id=1 串写掉 B
+    expect(await phoneF.sync()).toMatchObject({ result: 'needs_decision' })
+    const r = await phoneF.resolveFirstBind('merge_push')
+    expect(r.result).toBe('ok')
+
+    const phoneEvs = phone.svc.exportSnapshot()['events'] ?? []
+    expect(phoneEvs).toHaveLength(2)
+    expect(phoneEvs.map((e) => String(e.title)).sort()).toEqual(['PC事件A', '手机事件B'])
+    expect(new Set(phoneEvs.map((e) => String(e.sync_uid))).size).toBe(2)
+    expect(new Set(phoneEvs.map((e) => Number(e.id))).size).toBe(2)
+    // 下行行的时间戳带 UTC 偏移（跨时区 LWW 可比）
+    expect(String(phoneEvs.find((e) => e.title === 'PC事件A')?.updated_at)).toMatch(/[+-]\d{2}:\d{2}$/)
+
+    // PC 再同步：B 上行，A 保持原内容
+    await pcF.sync()
+    const pcEvs = pc.svc.exportSnapshot()['events'] ?? []
+    expect(pcEvs).toHaveLength(2)
+    const pcA = pcEvs.find(
+      (e) => String(e.sync_uid) === String(phoneEvs.find((e) => e.title === 'PC事件A')?.sync_uid),
+    )
+    expect(pcA?.title).toBe('PC事件A')
+    pc.sqlite.close()
+    phone.sqlite.close()
+  })
+
+  it('同一 sync_uid 的编辑互通且不产生重复行', async () => {
+    const wasmBinary = readFileSync(require.resolve('sql.js/dist/sql-wasm.wasm'))
+    const fr = fakeRemote()
+    const pc = await openLocalDb({ wasmBinary, autosaveMs: 0, skipLoad: true })
+    const phone = await openLocalDb({ wasmBinary, autosaveMs: 0, skipLoad: true })
+    const pcF = makeFacade(pc, fr.remote)
+    const phoneF = makeFacade(phone, fr.remote)
+    pcF.saveConfig({ repo: 'u/d', branch: 'main', token: 't', auto_on_start: false, sync_on_close: false })
+    phoneF.saveConfig({ repo: 'u/d', branch: 'main', token: 't', auto_on_start: false, sync_on_close: false })
+
+    const layer = pc.backend.createLayer({ display_name: 'L' })
+    pc.backend.createEvent({
+      layer_id: layer.layer_id,
+      source: 'manual',
+      date: '2026-10-01',
+      title: '原标题',
+      color: null,
+      description: null,
+      source_ref: null,
+      sort_key: 0,
+      extra: {},
+    })
+    await pcF.sync()
+    expect(await phoneF.sync()).toMatchObject({ result: 'needs_decision' })
+    await phoneF.resolveFirstBind('pull_overwrite')
+
+    // 手机改标题 → 两轮同步后 PC 看到新标题，且没有重复行
+    const mine = phone.backend.searchEvents('原标题')[0]!
+    phone.backend.updateEvent(mine.id!, { title: '手机改的标题' })
+    await phoneF.sync()
+    await pcF.sync()
+
+    const pcEvs = pc.svc.exportSnapshot()['events'] ?? []
+    expect(pcEvs).toHaveLength(1)
+    expect(String(pcEvs[0]!.title)).toBe('手机改的标题')
+    pc.sqlite.close()
+    phone.sqlite.close()
+  })
 })

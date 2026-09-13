@@ -13,6 +13,8 @@
  * 由调用方（SyncFacade）重拉重并重试。
  */
 
+import pRetry, { AbortError } from 'p-retry'
+
 import type { Snapshot, Tombstones } from '@tt-calendar/contracts'
 
 const API_ROOT = 'https://api.github.com'
@@ -62,6 +64,11 @@ function fromBase64(b64: string): Uint8Array {
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 
+/** 可重试的瞬时失败：网络错误 / 5xx / 429（422 冲突、4xx 语义错误不在此列） */
+function isTransientStatus(status: number): boolean {
+  return status === 429 || status >= 500
+}
+
 export class GitHubDataRepo {
   private readonly repo: string
   private readonly branch: string
@@ -74,28 +81,43 @@ export class GitHubDataRepo {
   }
 
   private async api<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await fetch(`${API_ROOT}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'Content-Type': 'application/json',
-        'User-Agent': 'tt-calendar-sync',
+    // 瞬时失败（网络抖动 / 5xx / 429）指数退避重试；非快进 422 等语义错误
+    // 属正常并发路径，交给调用方（SyncFacade）重拉重并，不在这里重试。
+    return pRetry(
+      async () => {
+        // fetch 自身的拒绝（网络抖动）默认就会被 p-retry 重试
+        const res = await fetch(`${API_ROOT}${path}`, {
+          method,
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Content-Type': 'application/json',
+            'User-Agent': 'tt-calendar-sync',
+          },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        })
+        if (!res.ok) {
+          let detail = ''
+          try {
+            detail = (await res.json())?.message ?? ''
+          } catch {
+            // 无响应体，忽略
+          }
+          const msg = `GitHub API ${method} ${path} → ${res.status}${detail ? `：${detail}` : ''}`
+          if (isTransientStatus(res.status)) throw new Error(msg)
+          throw new AbortError(msg)
+        }
+        if (res.status === 204) return undefined as T
+        return (await res.json()) as T
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
-    if (!res.ok) {
-      let detail = ''
-      try {
-        detail = (await res.json())?.message ?? ''
-      } catch {
-        // 无响应体，忽略
-      }
-      throw new Error(`GitHub API ${method} ${path} → ${res.status}${detail ? `：${detail}` : ''}`)
-    }
-    if (res.status === 204) return undefined as T
-    return (await res.json()) as T
+      {
+        retries: 3,
+        minTimeout: 500,
+        maxTimeout: 4000,
+        randomize: true,
+      },
+    )
   }
 
   private async apiMaybe<T>(path: string): Promise<T | null> {
@@ -123,6 +145,11 @@ export class GitHubDataRepo {
       'GET',
       `/repos/${this.repo}/git/trees/${head}?recursive=1`,
     )
+    return this.blobFromTree(tree, path)
+  }
+
+  /** 从指定的 tree 里读 blob（不重新取 head —— 保证多文件来自同一 commit） */
+  private async blobFromTree(tree: { tree: GitTreeEntry[] }, path: string): Promise<Uint8Array | null> {
     const entry = tree.tree.find((t) => t.type === 'blob' && t.path === path)
     if (!entry) return null
     const blob = await this.api<{ content: string; encoding: string }>(
@@ -202,9 +229,16 @@ export class GitHubDataRepo {
   async readData(): Promise<{ snapshot: Snapshot; tombstones: Tombstones; commitSha: string } | null> {
     const head = await this.headSha()
     if (!head) return null
+    // 只取一次 tree：快照与墓碑必须来自同一 commit，否则合并会拿
+    // 「新快照 × 旧墓碑」这类错配输入（此前每次 readBlob 各自取 head 的
+    // TOCTOU 窗口，在并发推送时会撞上）。
+    const tree = await this.api<{ tree: GitTreeEntry[] }>(
+      'GET',
+      `/repos/${this.repo}/git/trees/${head}?recursive=1`,
+    )
     const [snap, tombs] = await Promise.all([
-      this.readBlob(SNAPSHOT_PATH),
-      this.readBlob(TOMBSTONES_PATH),
+      this.blobFromTree(tree, SNAPSHOT_PATH),
+      this.blobFromTree(tree, TOMBSTONES_PATH),
     ])
     const snapshot: Snapshot = snap ? (JSON.parse(textDecoder.decode(snap)) as Snapshot) : {}
     const tombstones: Tombstones = tombs ? (JSON.parse(textDecoder.decode(tombs)) as Tombstones) : {}
