@@ -1,16 +1,26 @@
 /**
  * 手机本地后端（主线程侧）。
  *
- * createLocalBackend() 起一个 db.worker.ts，把 BackendAdapter 的全部本地数据
- * 方法转发进 Worker 里的 SqliteBackend；网络类能力（GitHub 同步、订阅刷新、
- * 集思录导入）手机端暂时没有可靠通路，给出明确的「去电脑端操作」占位语义，
- * 与 Node 数据服务对这些路由的 501 占位保持一致。
+ * createLocalBackend() 把 BackendAdapter 的全部本地数据方法转发给 LocalDbCore
+ * （SqliteBackend + SyncFacade，见 db-core.ts），优先跑在 Worker（db.worker.ts，
+ * 内联 blob，不经 tauri:// 加载脚本），Worker 不可用时整体回退到主线程。
+ * 网络类能力（GitHub 同步、订阅刷新、集思录导入）在 LocalDbCore 里真实实现，
+ * 只有依赖电脑端数据服务的路由给出「去电脑端操作」占位语义。
  *
- * 离线可用性：Worker 从 IndexedDB 加载 SQLite 快照，所有读写在手机本地完成，
- * 不需要电脑在线。数据落盘 = 写操作防抖快照 + 页面隐藏时强制 flush。
+ * 离线可用性：数据从 IndexedDB 快照加载，所有读写本地完成，不需要电脑在线。
+ * 数据落盘 = 写操作防抖快照 + 页面隐藏时强制 flush。
+ *
+ * 为什么 Worker 用内联 blob、wasm 用主线程取二进制再传入：WKWebView 的
+ * tauri:// 自定义协议对「构造 Worker / Worker 内发请求」不可靠（2026-09-13
+ * 真机实测 new Worker('tauri://…') 直接失败，屏幕只剩一行堆栈）。主线程
+ * fetch 资源是可靠的，所以 wasm 在主线程取好 ArrayBuffer 传进 Worker；
+ * Worker 彻底起不来时回退主线程，牺牲一点流畅度换可用性。
  */
 
 import type { BackendAdapter } from '@tt-calendar/ui'
+import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
+import DbWorker from './db.worker?worker&inline'
+import { LocalDbCore } from './db-core'
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void }
 
@@ -25,7 +35,7 @@ interface WorkerMsg {
 }
 
 export interface LocalBackendOptions {
-  /** 后台自动同步完成（Worker 的 auto_on_start）后回调，用于刷新 UI 缓存 */
+  /** 后台自动同步完成（auto_on_start）后回调，用于刷新 UI 缓存 */
   onSynced?: (report: unknown) => void
 }
 
@@ -36,9 +46,45 @@ export class LocalBackendInitError extends Error {
   }
 }
 
-/** 创建本地数据后端；worker 加载完成（快照读入内存）后才 resolve */
-export async function createLocalBackend(opts: LocalBackendOptions = {}): Promise<BackendAdapter> {
-  const worker = new Worker(new URL('./db.worker.ts', import.meta.url), { type: 'module' })
+/** 主线程 fetch 是 tauri:// 环境里唯一可靠的网络路径，wasm 在这里取成二进制 */
+async function fetchWasmBinary(): Promise<ArrayBuffer> {
+  const resp = await fetch(wasmUrl)
+  if (!resp.ok) throw new Error(`加载 sql-wasm 失败：HTTP ${resp.status}（${wasmUrl}）`)
+  return resp.arrayBuffer()
+}
+
+/** 统一的后端代理：method 转发 + 手机端别名（/countdown 的 HTTP 形态是 { text }） */
+function makeBackend(call: (method: string, args: unknown[]) => Promise<unknown>): BackendAdapter {
+  const overrides: Record<string, (...args: unknown[]) => Promise<unknown>> = {
+    getCountdown: () => call('getCountdownText', []),
+  }
+  return new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (typeof prop !== 'string') return undefined
+        const o = overrides[prop]
+        if (o) return o
+        return (...args: unknown[]) => call(prop, args)
+      },
+    },
+  ) as unknown as BackendAdapter
+}
+
+function registerFlush(flush: () => void): void {
+  // 页面隐藏/关闭时强制落盘（自动防抖之外的兜底，防 iOS 直接杀进程）
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flush()
+  })
+  window.addEventListener('pagehide', flush)
+}
+
+/** Worker 正常路径：内联 blob Worker + RPC（装配逻辑在 db.worker.ts/db-core.ts） */
+async function createWorkerBackend(
+  wasmBinary: ArrayBuffer,
+  opts: LocalBackendOptions,
+): Promise<BackendAdapter> {
+  const worker = new DbWorker()
 
   const pending = new Map<number, Pending>()
   let seq = 0
@@ -73,66 +119,69 @@ export async function createLocalBackend(opts: LocalBackendOptions = {}): Promis
     })
 
   // 等 init 握手（快照可能几 MB，给足时间）
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new LocalBackendInitError('15 秒内未就绪')), 15_000)
-    const onReady = (e: MessageEvent): void => {
-      const msg = e.data as WorkerMsg
-      if (msg.type === 'ready') {
-        cleanup()
-        resolve()
-      } else if (msg.type === 'init-error') {
-        cleanup()
-        reject(new LocalBackendInitError(String(msg.message ?? '未知错误')))
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new LocalBackendInitError('15 秒内未就绪')), 15_000)
+      const onReady = (e: MessageEvent): void => {
+        const msg = e.data as WorkerMsg
+        if (msg.type === 'ready') {
+          cleanup()
+          resolve()
+        } else if (msg.type === 'init-error') {
+          cleanup()
+          reject(new LocalBackendInitError(String(msg.message ?? '未知错误')))
+        }
       }
-    }
-    const cleanup = (): void => {
-      clearTimeout(timer)
-      worker.removeEventListener('message', onReady)
-    }
-    worker.addEventListener('message', onReady)
-    worker.postMessage({ type: 'init' })
-  })
+      const cleanup = (): void => {
+        clearTimeout(timer)
+        worker.removeEventListener('message', onReady)
+      }
+      worker.addEventListener('message', onReady)
+      worker.postMessage({ type: 'init', wasmBinary })
+    })
+  } catch (err) {
+    worker.terminate()
+    throw err
+  }
 
-  const call = <T>(method: string, args: unknown[]): Promise<T> => {
+  const call = (method: string, args: unknown[]): Promise<unknown> => {
     if (initError) return Promise.reject(initError)
-    return rawCall<T>({ type: 'call', method, args })
+    return rawCall<unknown>({ type: 'call', method, args })
   }
 
-  // ----- 网络类能力的手机端占位（与数据服务 501 语义一致） -----
-  const notSupported =
-    (what: string) =>
-    async (): Promise<never> => {
-      throw new Error(`${what}需要在电脑端操作（手机本地版暂不支持）`)
-    }
+  registerFlush(() => worker.postMessage({ type: 'flush' }))
+  return makeBackend(call)
+}
 
-  const overrides: Record<string, (...args: unknown[]) => Promise<unknown>> = {
-    // /countdown 的 HTTP 形态是 { text }，对应 SqliteBackend.getCountdownText
-    getCountdown: () => call('getCountdownText', []),
-    // 多端同步（getSyncStatus/getSyncConfig/saveSyncConfig/testSync/syncNow/
-    // resolveSync）、集思录导入、订阅刷新、待办 CSV 导入均已由 Worker 真实
-    // 实现，直接透传
+/** 主线程回退：同一份 LocalDbCore 直接跑在主线程，行为与 Worker 路径一致 */
+async function createMainThreadBackend(
+  wasmBinary: ArrayBuffer,
+  opts: LocalBackendOptions,
+): Promise<BackendAdapter> {
+  const core = new LocalDbCore((report) => opts.onSynced?.(report))
+  try {
+    await core.init({ wasmBinary })
+  } catch (err) {
+    throw new LocalBackendInitError(err instanceof Error ? err.message : String(err))
+  }
+  core.autoSyncOnStart()
+  registerFlush(() => void core.flush())
+  return makeBackend((method, args) => core.call(method, args))
+}
+
+/** 创建本地数据后端；数据库装配完成（快照读入内存）后才 resolve */
+export async function createLocalBackend(opts: LocalBackendOptions = {}): Promise<BackendAdapter> {
+  let wasmBinary: ArrayBuffer
+  try {
+    wasmBinary = await fetchWasmBinary()
+  } catch (err) {
+    throw new LocalBackendInitError(err instanceof Error ? err.message : String(err))
   }
 
-  const backend = new Proxy(
-    {},
-    {
-      get(_target, prop) {
-        if (typeof prop !== 'string') return undefined
-        const o = overrides[prop]
-        if (o) return o
-        return (...args: unknown[]) => call<unknown>(prop, args)
-      },
-    },
-  ) as unknown as BackendAdapter
-
-  // 页面隐藏/关闭时强制落盘（自动防抖之外的兜底，防 iOS 直接杀进程）
-  const flush = (): void => {
-    worker.postMessage({ type: 'flush' })
+  try {
+    return await createWorkerBackend(wasmBinary, opts)
+  } catch (err) {
+    console.warn('[local] Worker 不可用，回退主线程运行本地库：', err)
+    return await createMainThreadBackend(wasmBinary, opts)
   }
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flush()
-  })
-  window.addEventListener('pagehide', flush)
-
-  return backend
 }

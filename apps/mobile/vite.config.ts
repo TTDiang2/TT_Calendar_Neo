@@ -9,6 +9,11 @@ export default defineConfig({
   cacheDir: 'node_modules/.vite-neo',
   plugins: [react(), tailwindcss()],
   clearScreen: false,
+  // 内联 worker（db.worker?worker&inline）配 iife：blob URL + module worker 在
+  // WKWebView 上不可靠，iife 构建的 blob worker 兼容性最好
+  worker: {
+    format: 'iife',
+  },
   server: {
     port: 5175,
     strictPort: true,

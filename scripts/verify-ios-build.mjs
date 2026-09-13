@@ -14,8 +14,9 @@
  *
  * 检查项：
  *   1. 二进制中不得出现 dev 专属代理错误文案；
- *   2. 二进制中必须内嵌前端资源（dist/assets 的文件名，含 index 入口、worker、
- *      sql.js wasm 与 css——本地库能不能起来全看这些）；
+ *   2. dist/assets 里的每个产物文件名都必须内嵌进二进制（index 入口、css、
+ *      sql-wasm wasm 等；db.worker 已内联进主包，可能不再单独成文件，
+ *      所以按「dist 里有什么就查什么」的原则逐个文件核对）；
  *   3. Info.plist 必须含 NSLocalNetworkUsageDescription / NSAppTransportSecurity；
  *   4. 可执行文件名必须是 ASCII（中文名会让签名/侧载工具出问题）。
  *
@@ -66,10 +67,8 @@ const assetsDir = join(distPath, 'assets')
 if (!statSync(assetsDir, { throwIfNoEntry: false })) {
   fail(`前端 dist 不存在: ${assetsDir}（请先构建前端）`)
 }
-const assetNames = readdirSync(assetsDir).filter((n) =>
-  /^index-.*\.js$|^index-.*\.css$|^db\.worker-.*\.js$|^window-.*\.js$|^sql-wasm-.*\.wasm$/.test(n),
-)
-if (assetNames.length === 0) fail(`dist/assets 中未找到入口产物: ${assetsDir}`)
+const assetNames = readdirSync(assetsDir)
+if (assetNames.length === 0) fail(`dist/assets 为空，前端构建产物异常: ${assetsDir}`)
 const missing = assetNames.filter((n) => !bin.includes(Buffer.from(n)))
 if (missing.length > 0) {
   fail(`前端资源未内嵌进二进制（说明走了 dev 模式或资源未打包）: ${missing.join(', ')}`)

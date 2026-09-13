@@ -1,25 +1,19 @@
 /**
- * 本地数据 Worker：在 WebView 的独立线程里装配「sql.js(WASM) + drizzle +
- * SqliteBackend + SyncFacade」，用 RPC 消息向主线程提供与 HttpBackendAdapter
- * 等价的数据面（含 GitHub 数据仓同步）。
+ * 本地数据 Worker：独立线程里跑 LocalDbCore（sql.js + SyncFacade），用 RPC
+ * 消息向主线程提供数据面。装配逻辑在 db-core.ts（主线程回退共用一份）。
  *
- * 为什么放 Worker：
- *   - sql.js 是纯内存同步库，视图聚合/待办忙度重算这类重查询不应阻塞 UI 渲染
- *   - IndexedDB 快照写入 + GitHub REST 同步（async）都在本线程完成，主线程零感知
+ * 为什么 wasm 由主线程传二进制：tauri:// 自定义协议在 WKWebView 的 Worker 里
+ * 不可靠（Worker 脚本/资源请求可能被拒或挂起），主线程 fetch 资源是可靠的，
+ * 取好 ArrayBuffer 随 init 消息传进来，Worker 内零网络请求。
  *
  * 协议：
- *   主 → Worker { type:'init' }                            → { type:'ready' }
- *   主 → Worker { type:'call', id, method, args }          → { type:'result', id, ok, result? / error? }
- *   主 → Worker { type:'flush' }                           → （自动落盘，无回复）
- * Worker 启动即自行从 IndexedDB 加载上次快照；写操作后自动防抖落盘。
+ *   主 → Worker { type:'init', wasmBinary? }      → { type:'ready' } / { type:'init-error', message }
+ *   主 → Worker { type:'call', id, method, args } → { type:'result', id, ok, result? / error? }
+ *   主 → Worker { type:'flush' }                  → （落盘 + sync_on_close，无回复）
+ *   Worker → 主 { type:'synced', report }         → （启动/收尾自动同步成功后）
  */
 
-import { openLocalDb, type LocalDbHandle } from '@tt-calendar/db/local/backend'
-import { GitHubDataRepo } from '@tt-calendar/db/sync/github'
-import { SyncFacade } from '@tt-calendar/db/sync/facade'
-import { runJisiluImport, refreshSubscriptionOnBackend, refreshDueOnBackend } from '@tt-calendar/db/sources/jisilu'
-import { importTodosCsvOnBackend } from '@tt-calendar/db/sources/csv-todos'
-import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
+import { LocalDbCore } from './db-core'
 
 interface CallMsg {
   type: 'call'
@@ -27,96 +21,33 @@ interface CallMsg {
   method: string
   args: unknown[]
 }
-type InMsg = { type: 'init' } | { type: 'flush' } | CallMsg
+type InMsg = { type: 'init'; wasmBinary?: ArrayBuffer } | { type: 'flush' } | CallMsg
 
-// Worker 环境的 self 不带 DOM Window 类型，收窄出需要的三件事
+// Worker 环境的 self 不带 DOM Window 类型，收窄出需要的两件事
 const ctx = self as unknown as {
   addEventListener(type: 'message', listener: (e: MessageEvent) => void): void
   postMessage(msg: unknown): void
 }
 
-let handle: LocalDbHandle | null = null
-let facade: SyncFacade | null = null
-
-/** 方法面 = SqliteBackend 全部方法 + 同步编排层的六个入口 */
-function methodTable(): Record<string, ((...a: unknown[]) => unknown) | undefined> {
-  const be = handle!.backend
-  const f = facade!
-  return {
-    ...be,
-    getSyncStatus: () => f.getStatus(),
-    getSyncConfig: () => f.getConfig(),
-    saveSyncConfig: (cfg: unknown) => f.saveConfig(cfg as Parameters<SyncFacade['saveConfig']>[0]),
-    testSync: () => f.test(),
-    syncNow: () => f.sync('merge'),
-    resolveSync: (mode: unknown) =>
-      f.resolveFirstBind(mode as 'pull_overwrite' | 'merge_push'),
-    // 集思录导入：Worker 里直接抓公开接口（无需登录），与 PC 同一份代码
-    importJisilu: (...a: unknown[]) =>
-      runJisiluImport(handle!.backend, {
-        start: String(a[0] ?? ''),
-        end: String(a[1] ?? ''),
-        qtypes: a[2] as string[] | undefined,
-      }),
-    // 订阅刷新：按 source_key 分发（jisilu 已实装，其余 pending_adaptation）
-    refreshSubscription: (id: unknown) => {
-      const sub = handle!.backend.getSubscriptions().find((s) => s.id === String(id))
-      if (!sub) throw new Error('订阅不存在')
-      return refreshSubscriptionOnBackend(handle!.backend, sub)
-    },
-    refreshDueSubscriptions: () => refreshDueOnBackend(handle!.backend),
-    // 待办 CSV 导入：File/Blob 可结构化克隆穿越 postMessage，在 Worker 里读文本
-    importTodosCsv: async (file: unknown) => {
-      if (!(file instanceof Blob)) throw new Error('缺少 CSV 文件')
-      return importTodosCsvOnBackend(handle!.backend, await file.text())
-    },
-  }
-}
-
-/** 已配置同步时的自动同步（启动 / 页面隐藏），静默失败不打扰用户 */
-async function backgroundSync(): Promise<void> {
-  if (!facade) return
-  try {
-    const cfg = facade.getConfig()
-    if (!cfg.repo || !cfg.has_token) return
-    const result = await facade.sync('merge')
-    // 首绑决策必须由用户在设置面板里做，后台自动同步只处理常规合并
-    if (result.result === 'ok') {
-      ctx.postMessage({ type: 'synced', report: result })
-    }
-  } catch {
-    // 后台同步失败（离线/凭据过期等）不打断使用；手动同步时会看到具体错误
-  }
-}
+let core: LocalDbCore | null = null
 
 async function onMsg(msg: InMsg): Promise<void> {
   try {
     if (msg.type === 'init') {
-      handle = await openLocalDb({ wasmUrl })
-      facade = new SyncFacade({
-        backend: handle.backend,
-        svc: handle.svc,
-        makeRemote: (cfg) => new GitHubDataRepo(cfg),
-      })
+      core = new LocalDbCore((report) => ctx.postMessage({ type: 'synced', report }))
+      await core.init({ wasmBinary: msg.wasmBinary })
       ctx.postMessage({ type: 'ready' })
       // auto_on_start：启动后台自动同步（不阻塞渲染）
-      const cfg = facade.getConfig()
-      if (cfg.repo && cfg.has_token && cfg.auto_on_start) void backgroundSync()
+      core.autoSyncOnStart()
       return
     }
     if (msg.type === 'flush') {
-      await handle?.flush()
-      // sync_on_close：页面隐藏时尽力同步一次（不等待完成，能推多少是多少）
-      const cfg = facade?.getConfig()
-      if (cfg?.repo && cfg.has_token && cfg.sync_on_close) void backgroundSync()
+      await core?.flush()
       return
     }
     if (msg.type === 'call') {
-      if (!handle || !facade) throw new Error('本地数据库尚未初始化')
-      const table = methodTable()
-      const fn = table[msg.method]
-      if (typeof fn !== 'function') throw new Error(`本地后端没有方法 ${msg.method}`)
-      const result = await fn.apply(handle.backend, msg.args)
+      if (!core) throw new Error('本地数据库尚未初始化')
+      const result = await core.call(msg.method, msg.args)
       ctx.postMessage({ type: 'result', id: msg.id, ok: true, result })
     }
   } catch (err) {
