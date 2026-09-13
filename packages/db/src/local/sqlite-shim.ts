@@ -89,7 +89,7 @@ export class SqlJsSqlite {
     // 写语句才触发 onchange（快照调度）：drizzle 的 INSERT..RETURNING 走
     // raw().get()/.all() 而不是 run()，漏掉这条路径就会「写成功但永不
     // 自动落盘」（2026-09-13 真机丢数据事故根因）
-    const isWrite = /^\s*(insert|update|delete|replace)\b/i.test(sql)
+    const isWrite = /^\s*(insert\b|update\b|delete\b|replace\b|with\b)/i.test(sql)
 
     // sql.js 的 bind 自带 reset 语义；这里统一先 reset（清绑定+回到第一行）再绑
     const begin = (params: unknown[]): void => {

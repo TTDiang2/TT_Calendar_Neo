@@ -68,8 +68,10 @@ function makeBackend(call: (method: string, args: unknown[]) => Promise<unknown>
         // 永远挂起（2026-09-13 真机/Chromium 双双卡死「正在打开本地数据库」的根因）。
         if (typeof prop !== 'string') return undefined
         if (prop === 'then' || prop === 'catch' || prop === 'finally') return undefined
-        const o = overrides[prop]
-        if (o) return o
+        // hasOwnProperty.call（不是 Object.hasOwn：那要 Safari 15.4+）：
+        // constructor/toString/valueOf 这类原型链名字不能兜住并返回原生函数
+        // （与 worker 侧 methodTable 的 null 原型同一防线）
+        if (Object.prototype.hasOwnProperty.call(overrides, prop)) return overrides[prop]
         return (...args: unknown[]) => call(prop, args)
       },
     },
@@ -91,16 +93,25 @@ async function createWorkerBackend(
 ): Promise<BackendAdapter> {
   // 不用 Vite 的 ?worker&inline：它的模板在创建后立即 revoke blob URL，在
   // WebKit 上有已知兼容问题（vitejs/vite#20460，7.1 才修）；也不直接用
-  // tauri:// URL 构造 Worker（真机实测失败）。这里主线程 fetch 脚本文本
+  // tauri:// URL 构造 Worker（真机实测失败）。生产：主线程 fetch 脚本文本
   // （可靠路径）自己建 blob，且不 revoke——几百 KB 的常驻换取确定性。
-  bootLog(' fetch worker script')
-  const resp = await fetch(workerUrl)
-  if (!resp.ok) throw new LocalBackendInitError(`加载 worker 脚本失败：HTTP ${resp.status}`)
-  const source = await resp.text()
-  bootLog(' worker script', source.length, 'bytes; create blob worker')
-  const blobUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
-  const worker = new Worker(blobUrl)
-  bootLog(' worker created')
+  // dev：vite 的 ?worker&url 产出带 import 的 ES module，喂给 classic blob
+  // worker 必然语法错误（永远测不到 worker 路径）；dev 走 http 无 tauri://
+  // 限制，直接 module worker 即可（智者 P1-10）。
+  let worker: Worker
+  if (import.meta.env.DEV) {
+    worker = new Worker(workerUrl, { type: 'module' })
+    bootLog('dev module worker created')
+  } else {
+    bootLog('fetch worker script')
+    const resp = await fetch(workerUrl)
+    if (!resp.ok) throw new LocalBackendInitError(`加载 worker 脚本失败：HTTP ${resp.status}`)
+    const source = await resp.text()
+    bootLog('worker script', source.length, 'bytes; create blob worker')
+    const blobUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
+    worker = new Worker(blobUrl)
+    bootLog('worker created')
+  }
 
   const pending = new Map<number, Pending>()
   let seq = 0
@@ -164,7 +175,7 @@ async function createWorkerBackend(
       worker.postMessage({ type: 'init', wasmBinary })
     })
   } catch (err) {
-    bootLog(' handshake failed:', String(err))
+    bootLog('handshake failed:', String(err))
     worker.terminate()
     throw err
   }

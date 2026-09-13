@@ -9,12 +9,22 @@
  * 限制，用它补一个 v4 实现。
  *
  * AbortSignal.timeout 要 Safari 16.4+，App 声明的最低版本是 15.0，这里
- * 补一个最小实现（jisilu 源的请求超时用）。
+ * 补一个最小实现（jisilu 源的请求超时用）；throwIfAborted/reason 要
+ * Safari 15.4+，同批补齐（同步层 p-retry 会调）。
+ *
+ * 整体 try/catch：本文件在模块顶层执行，任何一条赋值在某个 WebView 上抛
+ * TypeError（平台对象不可扩展之类）都会让模块求值失败 → 直接白屏且
+ * bootlog 一行都没有——绝不能让兜底本身变成事故（智者 P1）。
  */
 
-// crypto.randomUUID polyfill（v4，来自 getRandomValues）
-const cryptoOwner = globalThis as { crypto?: Crypto }
-if (typeof cryptoOwner.crypto?.randomUUID !== 'function') {
+type CryptoLike = {
+  randomUUID?: () => string
+  getRandomValues?: (b: Uint8Array) => Uint8Array
+}
+
+function installCryptoPolyfill(): void {
+  const cryptoOwner = globalThis as { crypto?: CryptoLike }
+  if (typeof cryptoOwner.crypto?.randomUUID === 'function') return
   const getRandom =
     cryptoOwner.crypto?.getRandomValues?.bind(cryptoOwner.crypto) ??
     (() => {
@@ -28,23 +38,52 @@ if (typeof cryptoOwner.crypto?.randomUUID !== 'function') {
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
   }
   if (cryptoOwner.crypto) {
-    ;(cryptoOwner.crypto as unknown as { randomUUID?: () => string }).randomUUID = uuidV4
+    ;(cryptoOwner.crypto as { randomUUID?: () => string }).randomUUID = uuidV4
   } else {
-    ;(globalThis as unknown as { crypto: unknown }).crypto = { randomUUID: uuidV4 }
+    ;(globalThis as unknown as { crypto: CryptoLike }).crypto = { randomUUID: uuidV4 }
   }
 }
 
-// AbortSignal.timeout polyfill（Safari 16.4+ 才有）
-const signalOwner = globalThis as unknown as {
-  AbortSignal?: { timeout?: (ms: number) => AbortSignal }
-  AbortController?: typeof AbortController
-}
-if (signalOwner.AbortSignal && typeof signalOwner.AbortSignal.timeout !== 'function' && signalOwner.AbortController) {
-  signalOwner.AbortSignal.timeout = (ms: number): AbortSignal => {
-    const controller = new signalOwner.AbortController!()
-    setTimeout(() => controller.abort(new Error(`timeout ${ms}ms`)), ms)
-    return controller.signal
+function installAbortSignalPolyfills(): void {
+  const owner = globalThis as unknown as {
+    AbortSignal?: (typeof AbortSignal) & { timeout?: (ms: number) => AbortSignal }
+    AbortController?: typeof AbortController
   }
+  // AbortSignal.timeout（Safari 16.4+ 才有）
+  if (
+    owner.AbortSignal &&
+    typeof (owner.AbortSignal as { timeout?: unknown }).timeout !== 'function' &&
+    owner.AbortController
+  ) {
+    owner.AbortSignal.timeout = (ms: number): AbortSignal => {
+      const controller = new owner.AbortController!()
+      setTimeout(() => controller.abort(new Error(`timeout ${ms}ms`)), ms)
+      return controller.signal
+    }
+  }
+  // AbortSignal.prototype.throwIfAborted / signal.reason（Safari 15.4+）
+  const proto = owner.AbortSignal?.prototype as
+    | ({ throwIfAborted?: () => void } & AbortSignal)
+    | undefined
+  if (proto && typeof proto.throwIfAborted !== 'function') {
+    proto.throwIfAborted = function (this: AbortSignal): void {
+      if (this.aborted) {
+        const reason = (this as unknown as { reason?: unknown }).reason
+        throw reason instanceof Error ? reason : new Error(String(reason ?? 'Aborted'))
+      }
+    }
+  }
+}
+
+try {
+  installCryptoPolyfill()
+} catch {
+  // 兜底失败不能拖垮模块求值；真机会在第一次建 UUID 时报出具体错误
+}
+try {
+  installAbortSignalPolyfills()
+} catch {
+  // 同上：没有 timeout/throwIfAborted 时，相关请求路径会自己报错暴露问题
 }
 
 export {}

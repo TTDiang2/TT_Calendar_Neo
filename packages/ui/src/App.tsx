@@ -44,7 +44,13 @@ interface CtxMenuState {
 }
 
 export default function App() {
-  const [monthKey, setMonthKey] = useState('2026-8')
+  // 初始锚点 = 当前月（不能硬编码：三端冷启动都会落在写死的月份上，
+  // 真机验收时极易被误读成「数据没保存/白屏没修好」）。注意 monthKey
+  // 全程使用未补零格式（如 2026-9），与 shiftMonthKey/goToday 一致
+  const [monthKey, setMonthKey] = useState(() => {
+    const n = new Date()
+    return `${n.getFullYear()}-${n.getMonth() + 1}`
+  })
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   // 日/周视图的「导航游标」：与 selectedDate(详情弹层选中) 解耦。
   // 过去用 selectedDate 兼任锚点，一旦被关闭详情弹层等操作清空，

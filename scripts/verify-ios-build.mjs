@@ -75,6 +75,34 @@ if (missing.length > 0) {
 }
 console.log(`[verify-ios] ✅ 前端资源已内嵌（${assetNames.length} 个入口产物）`)
 
+// ── 2.5 产物内容守门（2026-09-13 白屏/丢数据两起事故的教训）──
+// a) better-sqlite3 及其 Node 依赖不得进入任何浏览器包（进了 = 模块求值即崩白屏）
+const jsAssets = assetNames.filter((n) => n.endsWith('.js'))
+const jsTexts = Object.fromEntries(
+  jsAssets.map((n) => [n, readFileSync(join(assetsDir, n), 'utf8')]),
+)
+const nodeMarkers = ['NODE_BINDINGS_ARROW', 'nodePreGyp', 'better_sqlite3', 'cppdb', 'node:fs']
+for (const [name, text] of Object.entries(jsTexts)) {
+  const hit = nodeMarkers.filter((m) => text.includes(m))
+  if (hit.length > 0) fail(`浏览器包含 Node 依赖残留（会白屏）: ${name}: ${hit.join(', ')}`)
+}
+// b) 本地产物必须走本地库分支（VITE_API_BASE secret 一旦存在就会切走 HTTP 模式，
+//    真机就测不到本次修的东西）
+const mainEntry = jsAssets.filter((n) => /^index-/.test(n))
+if (!mainEntry.some((n) => jsTexts[n].includes('awaiting createLocalBackend'))) {
+  fail('主包没有本地库分支（awaiting createLocalBackend）——VITE_API_BASE 是否被注入？')
+}
+// c) worker chunk 必须是无 import/export 的 classic IIFE（fetch+blob 方案的前提）
+const workerEntry = jsAssets.find((n) => /^db\.worker-/.test(n))
+if (!workerEntry) fail('缺少 db.worker-*.js（blob worker 方案的产物）')
+else {
+  const w = jsTexts[workerEntry].trim()
+  if (/^import[\s("']|^export[\s{]/.test(w)) {
+    fail(`worker 产物是 ES module（fetch+blob classic worker 会语法错误）: ${workerEntry}`)
+  }
+}
+console.log('[verify-ios] ✅ 产物内容守门通过（无 Node 残留 / 本地库分支 / classic worker）')
+
 // ── 3. Info.plist 权限键 ──
 for (const key of ['NSLocalNetworkUsageDescription', 'NSAppTransportSecurity']) {
   if (!plistText.includes(key)) fail(`Info.plist 缺少 ${key}（请运行 scripts/patch-ios-plist.mjs）`)

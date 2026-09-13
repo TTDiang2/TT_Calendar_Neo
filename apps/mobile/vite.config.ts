@@ -10,6 +10,12 @@ export default defineConfig({
   cacheDir: 'node_modules/.vite-neo',
   plugins: [react(), tailwindcss()],
   clearScreen: false,
+  // worker 产物必须是 classic IIFE：主线程 fetch 脚本文本 + new Worker(blob)
+  // 的方案（不 revoke，绕开 vitejs/vite#20460）依赖这个默认值，显式写死
+  // 防止配置漂移后真机静默退化成只走主线程回退（智者 P0-4）
+  worker: {
+    format: 'iife',
+  },
   resolve: {
     alias: {
       // packages/db 经 drizzle-orm/better-sqlite3 静态引用 better-sqlite3
