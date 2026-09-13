@@ -68,9 +68,11 @@ function makeBackend(call: (method: string, args: unknown[]) => Promise<unknown>
         // 永远挂起（2026-09-13 真机/Chromium 双双卡死「正在打开本地数据库」的根因）。
         if (typeof prop !== 'string') return undefined
         if (prop === 'then' || prop === 'catch' || prop === 'finally') return undefined
-        // hasOwnProperty.call（不是 Object.hasOwn：那要 Safari 15.4+）：
-        // constructor/toString/valueOf 这类原型链名字不能兜住并返回原生函数
-        // （与 worker 侧 methodTable 的 null 原型同一防线）
+        // Object.prototype 上的名字（constructor/toString/valueOf 等）直接
+        // 返回 undefined：与 worker 侧 methodTable 的 null 原型完全对齐，
+        // 否则 String(backend) 会发起注定失败的 RPC（不挂起但产生噪音）
+        if (Object.prototype.hasOwnProperty.call(Object.prototype, prop)) return undefined
+        // hasOwnProperty.call（不是 Object.hasOwn：那要 Safari 15.4+）
         if (Object.prototype.hasOwnProperty.call(overrides, prop)) return overrides[prop]
         return (...args: unknown[]) => call(prop, args)
       },

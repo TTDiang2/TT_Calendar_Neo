@@ -16,9 +16,17 @@ export function bootLog(...parts: unknown[]): void {
     .join(' ')
   console.log('[boot]', line)
   if (typeof document === 'undefined') return
-  const el = document.getElementById('bootlog')
-  if (!el) return
+  let el = document.getElementById('bootlog')
+  if (!el) {
+    // 与 apps/mobile 侧 boot-log 同款样式；主线程回退场景下本文件可能先于
+    // 应用侧创建该元素，样式必须保持一致（不吞点击、不遮挡半屏）
+    el = document.createElement('pre')
+    el.id = 'bootlog'
+    el.className =
+      'pointer-events-none fixed bottom-1 left-1 z-50 max-w-full overflow-hidden whitespace-pre-wrap rounded bg-black/60 p-1 text-left text-[9px] leading-3 text-green-300'
+    document.body.append(el)
+  }
   const lines = (el.textContent ?? '').split('\n')
   lines.push(`[${new Date().toISOString().slice(11, 23)}] ${line}`)
-  el.textContent = lines.slice(-40).join('\n')
+  el.textContent = lines.slice(-10).join('\n')
 }

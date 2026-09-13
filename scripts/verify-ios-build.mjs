@@ -96,8 +96,10 @@ if (!mainEntry.some((n) => jsTexts[n].includes('awaiting createLocalBackend'))) 
 const workerEntry = jsAssets.find((n) => /^db\.worker-/.test(n))
 if (!workerEntry) fail('缺少 db.worker-*.js（blob worker 方案的产物）')
 else {
-  const w = jsTexts[workerEntry].trim()
-  if (/^import[\s("']|^export[\s{]/.test(w)) {
+  // 匹配最小化后的静态 import/export（import{a}from"..." / import*as x / 尾部
+  // export{..}）；动态 import(...) 不匹配——worker 里的异步 chunk 加载合法
+  const w = jsTexts[workerEntry]
+  if (/(?:^|[;}])import\s*["'{*]|(?:^|[;}])export\s*[{*]/.test(w)) {
     fail(`worker 产物是 ES module（fetch+blob classic worker 会语法错误）: ${workerEntry}`)
   }
 }
