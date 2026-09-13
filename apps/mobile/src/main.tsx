@@ -46,6 +46,23 @@ root.innerHTML =
   '<div class="flex h-screen items-center justify-center text-sm text-gray-500">正在启动数据服务…</div>'
 
 async function boot(): Promise<void> {
+  try {
+    await bootInner()
+  } catch (err) {
+    // 本地库起不来（worker / wasm / IndexedDB 失败）时必须把错误画出来，
+    // 否则真机上就是一张永远停在启动文案的"白屏"，无从排查。
+    console.error('[mobile] 启动失败', err)
+    const detail = err instanceof Error ? err.stack ?? err.message : String(err)
+    root.innerHTML = `
+      <div class="flex h-screen flex-col items-center justify-center gap-3 p-6 text-center">
+        <div class="text-sm font-medium text-red-600">启动失败，请截图反馈</div>
+        <pre class="max-w-full overflow-auto whitespace-pre-wrap text-left text-xs leading-5 text-gray-500"></pre>
+      </div>`
+    root.querySelector('pre')!.textContent = detail
+  }
+}
+
+async function bootInner(): Promise<void> {
   let ready = true
   if (HTTP_BASE) {
     setBackend(createHttpBackend(HTTP_BASE))

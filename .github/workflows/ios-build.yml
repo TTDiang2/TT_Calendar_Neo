@@ -351,6 +351,9 @@ jobs:
           cp -R "$APP" Payload/
           find Payload -type f -exec chmod 644 {} +
           find Payload -type d -exec chmod 755 {} +
+          # 主可执行必须保留 x 位（上面的 blanket 644 会抹掉；签名/安装工具虽常
+          # 不看 zip 内权限位，但别赌运气）
+          chmod 755 "Payload/$(basename "$APP")/$(basename "$EXE")"
           zip -qry "$GITHUB_WORKSPACE/tt-calendar-ios-unsigned.ipa" Payload/
           rm -rf Payload
           ls -lh "$GITHUB_WORKSPACE/tt-calendar-ios-unsigned.ipa"

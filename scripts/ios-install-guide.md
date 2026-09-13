@@ -8,7 +8,7 @@
 
 ## 你需要
 - 一台 Windows 电脑 + 一根数据线
-- iPhone（iOS 14+）、免费 Apple ID
+- iPhone（**iOS 15+**，前端用了 module worker）、免费 Apple ID
 - 免费签名的固有限制：**同一 Apple ID 最多 3 个自签 App，7 天有效期**（到期在 SideStore 里刷新即可，数据不丢）
 
 ## 路线 1（推荐，已实测）：iLoader 装 SideStore，再在手机里装 App
@@ -37,8 +37,9 @@
 
 - **数据在手机本地**（sql.js + IndexedDB），离线可用，不需要电脑开着服务。
 - **GitHub 同步**：App 内 设置 → 同步，填 GitHub PAT 即可多端同步（见 SYNC_SETUP 文档）。
-- **本地网络权限**：新包已声明 `NSLocalNetworkUsageDescription`；只有把数据地址指到局域网 IP
-  时系统才会要这个权限，纯离线/GitHub 同步用不到。
+- **本地网络权限**：新包已声明 `NSLocalNetworkUsageDescription`；当前版本数据走手机本地库或
+  GitHub 同步，一般用不到本地网络，系统也不会来要权限。若以后把数据地址指到局域网 http 服务，
+  注意 `tauri://` 页面里 fetch 明文 http 会被 WebKit 拦（需改 https）。
 - **不想装机也能看效果**：把 CI 的另一个产物 `tt-calendar-ios-sim.zip` 传到
   [Appetize.io](https://appetize.io)，浏览器里就能跑（Windows 上最省事的「iOS 模拟」方案）。
 

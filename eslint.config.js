@@ -69,7 +69,7 @@ export default tseslint.config(
     },
   },
   {
-    // Node 脚本（ESM，.mjs，如 scripts/patch-ios-ats.mjs）跑在 Node 里
+    // Node 脚本（ESM，.mjs，如 scripts/patch-ios-plist.mjs）跑在 Node 里
     files: ['**/*.mjs'],
     languageOptions: {
       sourceType: 'module',

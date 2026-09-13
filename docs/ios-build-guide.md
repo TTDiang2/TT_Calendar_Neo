@@ -3,24 +3,30 @@
 > 目标：在「自己只有 Windows」的前提下，为 iPhone 产出一个能装的 App（.ipa / 模拟器 .app）。
 > 本文件记录：架构、现有 CI、**我们踩过的所有坑与根因**、以及两条可行路线（云端 CI / 借·租一台 Mac 一键跑）。
 
-状态日期：2026-09-13（✅ CI 出包 + 真机可用双达成，见下方更新）
+状态日期：2026-09-13（✅ CI 出包，产物已二进制级验证为生产模式；真机装机复验待完成）
 
 ---
 
 ## 0. 一句话结论
 
-> **【2026-09-13 更新】CI 出的包在真机上可用了！** 2026-09-11 装到 iPhone 的包白屏，报
+> **【2026-09-13 更新】修复 CI 出包的「dev 模式白屏」根因。** 2026-09-11 装到 iPhone 的包白屏，报
 > `Failed to request http://localhost:5175/ ... local network permissions`。根因不是权限声明，
 > 而是 **CI 编译 Rust lib 时没带 `tauri/custom-protocol` feature**：tauri 的 build.rs 以
 > `dev = !custom_protocol` 决定运行时形态（与 cargo profile 无关），缺了它 App 就运行在
 > dev 模式——把 tauri:// 的资源请求代理到 devUrl（手机上当然连不通）。修复（双保险 + 守门）：
 > 1. `apps/mobile/src-tauri/Cargo.toml` 的 `[features]` 把 `custom-protocol` 放进 `default`
->    （`tauri dev/ios dev` 会自动 `--no-default-features` 排除，不影响本地开发）；
+>    （`tauri dev/ios dev` 会自动 `--no-default-features` 排除，不影响本地开发；
+>    但手工 `cargo check/test` 现在默认要 `../dist` 存在，先 `pnpm --filter @tt-calendar/mobile build`）；
 > 2. `scripts/ci-ios-options-server` 返回该 feature（等价官方 `tauri ios build` 的 build_options 注入）；
-> 3. 新增 `scripts/verify-ios-build.mjs`：CI 打包前验证产物（无 dev 标记 + 前端资源已内嵌 + plist 键齐全）。
+> 3. 新增 `scripts/verify-ios-build.mjs`：CI 打包前验证产物（无 dev 标记 + 前端资源[含 wasm]已内嵌 + plist 键齐全）。
 > 另：productName 从 `TT 日历` 改为 `TTCalendar`（中文名 + 空格会在签名/侧载环节添乱）；
-> Info.plist 补丁（`scripts/patch-ios-plist.mjs`）增加 `NSLocalNetworkUsageDescription`。
+> Info.plist 补丁（`scripts/patch-ios-plist.mjs`）增加 `NSLocalNetworkUsageDescription`；
+> `minimumSystemVersion` 提到 **iOS 15.0**（前端用了 `type:'module'` worker，Safari 15 才支持）；
+> `main.tsx` 的 `boot()` 增加错误上屏（本地库起不再显示堆栈，不再无限停在启动文案）。
 > 装机方式：**iLoader + SideStore**（用户实测），或 Sideloadly（见 `scripts/ios-install-guide.md`）。
+> ⚠️ 待办：新包已验证为生产模式，但 **尚未在真机上完成「启动 + 写数据 + 重启数据还在」的复验**；
+> 另若将来给 Secrets 配 `VITE_API_BASE`，必须用 **https**（`tauri://` 页面里 fetch http 会被
+> WebKit 当混合内容拦截，ATS 放行管不了这个）。
 >
 > **【2026-09-04 更新】纯 GitHub Actions CI 已经打通！** 上一版「只能借 Mac」的结论已被推翻：通过「jsonrpsee 假 options 服务」绕过了 tauri-cli 的 server-addr panic，CI 全绿（run 33841117021，6 分 43 秒），自动产出真机未签名 .ipa + 模拟器包两个 artifact（见 GitHub Actions 页面下载）。**现在拿包 = 打开 Actions 页 → 最新绿色 run → 下载 artifact**，全程不需要 Mac。
 >

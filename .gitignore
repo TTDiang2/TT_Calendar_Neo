@@ -25,6 +25,9 @@ _tmp_*/
 # 构建前移走的旧 dist（clean-dist.cjs 改名，非删除）
 _trash_*/
 
+# 本地交付产物（CI 下载的 ipa/sim 包等，不入库）
+artifacts/
+
 # 编辑器 / 系统
 .vscode/*
 !.vscode/extensions.json
