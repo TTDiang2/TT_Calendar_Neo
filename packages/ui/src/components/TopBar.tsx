@@ -1,4 +1,4 @@
-import { Calendar, CheckSquare, ChevronLeft, ChevronRight, Layers, ListTodo, Rss, Search, Settings } from 'lucide-react'
+import { BarChart3, Calendar, CheckSquare, ChevronLeft, ChevronRight, Layers, ListTodo, Rss, Search, Settings, Sparkles } from 'lucide-react'
 import clsx from 'clsx'
 import type { TopTab, TodoViewMode, ViewMode } from '../adapt/types'
 
@@ -37,37 +37,55 @@ const TODO_MODES: { key: TodoViewMode; label: string }[] = [
   { key: 'stickies', label: '便签' },
 ]
 
+/** 一级 tab 定义：手机端走 BottomTabBar，桌面端走本组件的分段控件 */
+const TOP_TABS: { key: TopTab; label: string; icon: React.ReactNode }[] = [
+  { key: 'calendar', label: '日历', icon: <Calendar size={14} /> },
+  { key: 'todo', label: '待办', icon: <CheckSquare size={14} /> },
+  { key: 'stats', label: '分析', icon: <BarChart3 size={14} /> },
+  { key: 'widgets', label: '小组件', icon: <Sparkles size={14} /> },
+]
+
 export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeChange, onTodoViewChange, onPrev, onNext, onToday, canPrev, canNext, onOpenSearch, onOpenSubscription, onOpenSettings, onOpenLayers }: Props) {
   return (
-    /* 布局：手机竖屏（<md）flex-wrap 拆三行，每行内容都不再互相挤占：
-         第 1 行 = 顶级 tab（左）+ 全局操作图标（右，靠最右）
-         第 2 行 = 标题/日期导航（独占一行、可截断居中）
-         第 3 行 = 视图模式切换（整行横向滚动）
-       桌面（md+）：md:flex-nowrap 合并回单行，顺序与旧版一致（tab → 标题/导航 → 模式 → 操作） */
+    /* 布局：手机竖屏（<md）flex-wrap 拆行——一级 tab 交给底部标签栏（md:hidden），
+         本栏只剩：第 1 行 标题+操作、第 2 行 视图模式横滚。
+       桌面（md+）：md:flex-nowrap 合并单行（tab → 标题/导航 → 模式 → 操作） */
     <header className="bg-white border-b border-gray-200 flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 md:px-4 py-1.5 md:py-0 md:h-14 md:flex-nowrap">
-      {/* 顶级 tab：日历 / 待办（手机独占第 1 行左侧） */}
-      <div className="order-1 inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50 md:mr-3 flex-shrink-0">
-        <button
-          onClick={() => onTopTabChange('calendar')}
-          className={clsx(
-            'flex items-center gap-1 px-2 md:px-3 py-1 text-sm rounded-md transition',
-            topTab === 'calendar' ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
-          )}
-        >
-          <Calendar size={14} /> 日历
-        </button>
-        <button
-          onClick={() => onTopTabChange('todo')}
-          className={clsx(
-            'flex items-center gap-1 px-2 md:px-3 py-1 text-sm rounded-md transition',
-            topTab === 'todo' ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
-          )}
-        >
-          <CheckSquare size={14} /> 待办
-        </button>
+      {/* 一级 tab：仅桌面显示（手机用底部标签栏，避免双份导航） */}
+      <div className="hidden md:inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50 md:mr-3 flex-shrink-0">
+        {TOP_TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => onTopTabChange(t.key)}
+            className={clsx(
+              'flex items-center gap-1 px-3 py-1 text-sm rounded-md transition',
+              topTab === t.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
+            )}
+          >
+            {t.icon} {t.label}
+          </button>
+        ))}
       </div>
 
-      {topTab === 'calendar' ? (
+      {topTab === 'stats' || topTab === 'widgets' ? (
+        /* 分析 / 小组件：标题 + 右侧操作（无视图模式切换） */
+        <>
+          <div className="order-2 w-full md:w-auto md:flex-none justify-center flex items-center gap-1.5 min-w-0">
+            {topTab === 'stats' ? <BarChart3 size={18} className="flex-shrink-0" /> : <Sparkles size={18} className="flex-shrink-0" />}
+            <h1 className="text-sm md:text-lg font-semibold text-gray-800 truncate">
+              {topTab === 'stats' ? '分析' : '小组件'}
+            </h1>
+          </div>
+          <div className="order-1 md:order-4 ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
+            <button onClick={onOpenSubscription} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
+              <Rss size={18} />
+            </button>
+            <button onClick={onOpenSettings} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
+              <Settings size={18} />
+            </button>
+          </div>
+        </>
+      ) : topTab === 'calendar' ? (
         <>
           {/* 标题 / 日期导航：手机独占整行居中（宽按钮大、标题截断不挤 tab），桌面回原位置 */}
           {mode !== 'countdown' ? (

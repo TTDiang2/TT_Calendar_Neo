@@ -5,7 +5,7 @@ import '@tt-calendar/ui/index.css'
 import { App, setBackend, createHttpBackend } from '@tt-calendar/ui'
 import { ErrorBoundary } from '@tt-calendar/ui/components/ErrorBoundary'
 import { createLocalBackend } from './local/backend'
-import { bootLog } from './boot-log'
+import { bootLog, bootLogSettle } from './boot-log'
 
 // 启动期兜底诊断：任何未捕获 rejection / 脚本错误都必须留痕上屏，
 // 否则真机上就是一张没有线索的白屏（2026-09-13 卡点排查教训）
@@ -206,6 +206,8 @@ async function bootInner(): Promise<void> {
     </React.StrictMode>,
   )
   bootLog('React render scheduled')
+  // 启动已走完关键路径：撤销 bootlog 看门狗（卡死自动显形不再触发）
+  bootLogSettle()
   if (!ready) {
     console.warn('[mobile] 数据服务 30 秒内没就绪，界面可能没数据')
   }

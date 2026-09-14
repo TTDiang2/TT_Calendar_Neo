@@ -216,10 +216,24 @@ export class GitHubDataRepo {
         throw e
       }
     } else {
-      await this.api('POST', `/repos/${this.repo}/git/refs`, {
-        ref: `refs/heads/${this.branch}`,
-        sha: commit.sha,
-      })
+      // parentSha=null 本意是「空仓首建分支」。但分支实际已存在时（并发首绑、
+      // 或远端是初始化过但快照为空的仓），GitHub 对 POST refs 返回
+      // 422 "Reference already exists"。此时本提交没有父提交（parents=[]），
+      // 对已有 head 必然非快进，就地 PATCH 注定失败——正确做法是重读 head
+      // 并抛 SyncConflictError，让 SyncFacade 以正确的父提交重拉重并后重试。
+      try {
+        await this.api('POST', `/repos/${this.repo}/git/refs`, {
+          ref: `refs/heads/${this.branch}`,
+          sha: commit.sha,
+        })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (!(msg.includes('→ 422') && msg.includes('already exists'))) throw e
+        // 重读一次 head：把「分支已存在」坐实，也让下一次合并拿到正确 commitSha
+        // （headSha 返回 null 的极端竞态同样按冲突处理，由调用方 bounded 重试收敛）
+        await this.headSha()
+        throw new SyncConflictError()
+      }
     }
 
     return { commitSha: commit.sha, htmlUrl: commit.html_url ?? null }

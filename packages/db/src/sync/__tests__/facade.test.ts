@@ -22,8 +22,8 @@ async function openDevice(): Promise<LocalDbHandle> {
 }
 
 /** 内存假远端：commitSha 链 + 可注入的一次性冲突 */
-function fakeRemote(initial?: { snapshot: Snapshot; tombstones: Tombstones }) {
-  let head: string | null = null
+function fakeRemote(initial?: { snapshot: Snapshot; tombstones: Tombstones; head?: string }) {
+  let head: string | null = initial?.head ?? null
   let snapshot: Snapshot = initial?.snapshot ?? {}
   let tombstones: Tombstones = initial?.tombstones ?? {}
   let pendingConflicts = 0
@@ -134,6 +134,64 @@ describe('SyncFacade 端到端（假远端）', () => {
     expect(r3.pushed ?? 0).toBe(0)
     pc.sqlite.close()
     phone.sqlite.close()
+  })
+
+  it('首绑·远端分支已存在但快照为空 → 以远端头为父前进，不再重建 ref（422 already exists 回归）', async () => {
+    const h = await openDevice()
+    // 分支已初始化过但数据被清空：head 存在、快照 0 行。
+    // 旧行为传 parentSha=null 会重新 POST 创建 ref → GitHub 422 "Reference already exists"。
+    const fr = fakeRemote({ snapshot: {}, tombstones: {}, head: 'rempty0' })
+    const f = makeFacade(h, fr.remote)
+    f.saveConfig({ repo: 'u/d', branch: 'main', token: 't', auto_on_start: false, sync_on_close: false })
+    const list = h.backend.createTodoList('本地')
+    h.backend.createTodo({ list_id: list.id, title: '本地待办' })
+
+    const r = await f.sync()
+    expect(r.result).toBe('initialized')
+    expect(r.pushed).toBeGreaterThan(0)
+    // 前进成功：head 已经从 rempty0 前进到新提交（而非重建后仍报冲突）
+    expect(fr.head).toBeTruthy()
+    expect(fr.head).not.toBe('rempty0')
+    expect(f.getStatus().ok).toBe(true)
+    h.sqlite.close()
+  })
+
+  it('首绑并发：分支在 readData 后被另一端建出 → 重读远端以新 head 为父重试成功', async () => {
+    const h = await openDevice()
+    let head: string | null = null
+    let snapshot: Snapshot = {}
+    let tombstones: Tombstones = {}
+    let writes = 0
+    const rival: SyncRemote = {
+      async readData() {
+        // 第一次读：分支尚不存在；返回 null 后另一端立即建出空分支（竞态窗口）
+        if (head === null) {
+          head = 'rival0'
+          return null
+        }
+        return { snapshot: structuredClone(snapshot), tombstones: structuredClone(tombstones), commitSha: head }
+      },
+      async writeData(snap, tombs, parentSha) {
+        writes += 1
+        if (head !== null && parentSha !== head) throw new SyncConflictError()
+        snapshot = structuredClone(snap)
+        tombstones = structuredClone(tombs)
+        head = `c${writes}`
+        return { commitSha: head, htmlUrl: `https://example.test/${head}` }
+      },
+    }
+    const f = new SyncFacade({ backend: h.backend, svc: h.svc, makeRemote: () => rival })
+    f.saveConfig({ repo: 'u/d', branch: 'main', token: 't', auto_on_start: false, sync_on_close: false })
+    const list = h.backend.createTodoList('本地')
+    h.backend.createTodo({ list_id: list.id, title: '本地待办' })
+
+    const r = await f.sync()
+    // 旧行为：writeData(null) 撞已存在分支，SyncConflictError 直接抛给 UI
+    // 新行为：重读远端（空快照 → 仍走 initialized）以 rival0 为父重试成功
+    expect(r.result).toBe('initialized')
+    expect(writes).toBe(2)
+    expect(r.pushed).toBeGreaterThan(0)
+    h.sqlite.close()
   })
 
   it('首绑·merge_push：两边数据取并集', async () => {

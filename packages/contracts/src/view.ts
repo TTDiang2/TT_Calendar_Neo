@@ -13,7 +13,7 @@ import { Todo } from './todo'
 export const ViewMode = z.enum(['month', 'week', 'day', 'year', 'countdown'])
 export type ViewMode = z.infer<typeof ViewMode>
 
-export const TopTab = z.enum(['calendar', 'todo', 'stats'])
+export const TopTab = z.enum(['calendar', 'todo', 'stats', 'widgets'])
 export type TopTab = z.infer<typeof TopTab>
 
 /** 侧栏涂色条展示用的一条涂色标记 */

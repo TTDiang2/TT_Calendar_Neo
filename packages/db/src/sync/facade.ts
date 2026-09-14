@@ -194,20 +194,42 @@ export class SyncFacade {
     const remote = this.makeRemote(cfg)
     const base = this.readBase()
     const remoteData = await remote.readData()
-    const remoteRows = remoteData ? rowCountOf(remoteData.snapshot) : 0
 
-    // 首绑：本地无基线
+    // 首绑：本地无基线。初始化推送可能撞并发（分支刚被另一台设备建出、
+    // 或 readData 与 write 之间远端发生变化）：SyncConflictError 后重读远端
+    // 重试（≤3 次）；若重读发现远端已有数据则转 needs_decision。
     if (!base) {
-      if (remoteRows > 0) {
-        return { result: 'needs_decision', remote_rows: remoteRows }
+      let attempt = 0
+      for (;;) {
+        attempt += 1
+        const fresh = attempt === 1 ? remoteData : await remote.readData()
+        const freshRows = fresh ? rowCountOf(fresh.snapshot) : 0
+        if (freshRows > 0) {
+          return { result: 'needs_decision', remote_rows: freshRows }
+        }
+        // 远端为空：把本地初始化上去。注意「远端无数据」≠「分支不存在」：
+        // 分支可能已存在但快照为空（此前初始化过又清空数据），此时必须以
+        // 远端头提交为父前进，传 null 会走创建 ref → 422 "Reference already exists"。
+        const snapshot = this.svc.exportSnapshot()
+        const tombstones = this.svc.exportTombstones()
+        try {
+          const w = await remote.writeData(
+            snapshot,
+            tombstones,
+            fresh?.commitSha ?? null,
+            'tt-calendar: 初始化数据仓',
+          )
+          this.saveBase({ snapshot, tombstones, commitSha: w.commitSha })
+          this.saveLastStatus(w.commitSha)
+          return { result: 'initialized', pushed: rowCountOf(snapshot), commit_url: w.htmlUrl }
+        } catch (e) {
+          if (e instanceof Error && e.name === 'SyncConflictError' && attempt < 3) {
+            await new Promise((r) => setTimeout(r, 300 * attempt))
+            continue
+          }
+          throw e
+        }
       }
-      // 远端为空：把本地初始化上去
-      const snapshot = this.svc.exportSnapshot()
-      const tombstones = this.svc.exportTombstones()
-      const w = await remote.writeData(snapshot, tombstones, null, 'tt-calendar: 初始化数据仓')
-      this.saveBase({ snapshot, tombstones, commitSha: w.commitSha })
-      this.saveLastStatus(w.commitSha)
-      return { result: 'initialized', pushed: rowCountOf(snapshot), commit_url: w.htmlUrl }
     }
 
     // 常规：重拉→合并→推回，冲突最多重试 3 次

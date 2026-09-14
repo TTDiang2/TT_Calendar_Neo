@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
 import { useViewData, useCountdown } from './hooks/useApi'
 import { toggleLayer, moveDay, getTodoStats, getTodos, getSyncStatus, getSyncConfig, syncNow, refreshDueSubscriptions } from './adapt/api'
 import { shiftMonthKey, shiftYearKey, todayStr } from './adapt/data'
@@ -13,6 +14,10 @@ import { YearView } from './components/YearView'
 import { DetailPanel } from './components/DetailPanel'
 import { TodoView } from './components/TodoView'
 import { CountdownView } from './components/CountdownView'
+import { StatsView } from './components/StatsView'
+import { WidgetsView } from './components/WidgetsView'
+import { BottomTabBar } from './components/BottomTabBar'
+import { animEnter, animSheetUp } from './anim'
 import {
   EventEditor,
   ScheduleEditor,
@@ -72,6 +77,13 @@ export default function App() {
   const [mobileLayersOpen, setMobileLayersOpen] = useState(false)
   const dragSource = useRef<string | null>(null)
   const qc = useQueryClient()
+
+  // 一级 tab / 视图切换的内容入场动效（ anime.js；reduced-motion 时自动跳过）
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const sheetRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    animEnter(contentRef.current, { distance: 8, duration: 260 })
+  }, [topTab, mode])
 
   const isDayWeek = mode === 'week' || mode === 'day'
   const prevIsDayWeek = useRef<boolean | null>(null)
@@ -293,6 +305,11 @@ export default function App() {
     return monthData.days.find((d) => d.date === selectedDate) ?? null
   }, [selectedDate, monthData, mode])
 
+  // 手机端日期详情弹层：每次出现从底部滑入
+  useEffect(() => {
+    if (selectedDay) animSheetUp(sheetRef.current)
+  }, [selectedDay])
+
   function jumpToEvent(ev: CalEvent) {
     const [y, m] = ev.date.split('-').map(Number)
     setMonthKey(`${y}-${m}`)
@@ -374,9 +391,13 @@ export default function App() {
         onOpenLayers={() => setMobileLayersOpen(true)}
       />
       <ReminderBanner onJumpToTodo={() => setTopTab('todo')} />
-      <div className="flex-1 flex overflow-hidden">
+      <div ref={contentRef} className="flex-1 flex overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
         {topTab === 'todo' ? (
           <TodoView viewMode={todoView} />
+        ) : topTab === 'stats' ? (
+          <StatsView onGoTodo={() => setTopTab('todo')} />
+        ) : topTab === 'widgets' ? (
+          <WidgetsView />
         ) : mode === 'countdown' ? (
           <CountdownView />
         ) : (
@@ -453,7 +474,7 @@ export default function App() {
                       className="absolute inset-0 bg-black/30"
                       onClick={() => setSelectedDate(null)}
                     />
-                    <div className="relative">
+                    <div ref={sheetRef} className="relative">
                       <DetailPanel
                         variant="sheet"
                         day={selectedDay}
@@ -483,6 +504,23 @@ export default function App() {
         onToggle={toggleLayerFn}
         countdown={countdownData?.text ?? '…'}
       />
+
+      {/* 手机：底部标签栏（日历/待办/分析/小组件） */}
+      <BottomTabBar active={topTab} onChange={setTopTab} />
+
+      {/* 手机：日历页悬浮新建按钮（在底部标签栏上方） */}
+      {topTab === 'calendar' && mode !== 'countdown' && (
+        <button
+          onClick={() => {
+            if (mode === 'year') setMode('month')
+            openEvent(selectedDate ?? dayCursor ?? todayStr())
+          }}
+          className="md:hidden fixed right-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-30 w-12 h-12 rounded-full bg-pink-500 text-white shadow-lg shadow-pink-500/30 flex items-center justify-center active:scale-90 transition-transform"
+          title="新建事件"
+        >
+          <Plus size={22} />
+        </button>
+      )}
 
       {ctxMenu && (
         <ContextMenu

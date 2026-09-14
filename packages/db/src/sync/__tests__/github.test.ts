@@ -101,6 +101,46 @@ describe('GitHubDataRepo', () => {
     )
   })
 
+  it('首建分支撞 422 already exists → 重读 head 并抛 SyncConflictError（等待调用方以正确父提交重试）', async () => {
+    withFetch((method, path) => {
+      if (path === '/repos/u/d/git/refs' && method === 'POST') {
+        return new Response('{"message":"Reference already exists"}', {
+          status: 422,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      if (path.startsWith('/repos/u/d/git/ref/heads/main')) {
+        return okJson({ object: { sha: 'existing-head' } })
+      }
+      // commitFiles 前置的 blob/tree/commit 建链
+      if (method === 'POST') return okJson({ sha: `s${Math.random()}`, html_url: 'x' })
+      return new Response('nope', { status: 404 })
+    })
+
+    const repo = new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' })
+    await expect(repo.commitFiles([{ path: 'a.txt', text: 'x' }], null, 'm')).rejects.toBeInstanceOf(
+      SyncConflictError,
+    )
+  })
+
+  it('首建分支 already exists 且重读 head 也 404（极端竞态）→ 仍 SyncConflictError', async () => {
+    withFetch((method, path) => {
+      if (path === '/repos/u/d/git/refs' && method === 'POST') {
+        return new Response('{"message":"Reference already exists"}', {
+          status: 422,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      if (method === 'POST') return okJson({ sha: `s${Math.random()}`, html_url: 'x' })
+      return new Response('nope', { status: 404 })
+    })
+
+    const repo = new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' })
+    await expect(repo.commitFiles([{ path: 'a.txt', text: 'x' }], null, 'm')).rejects.toBeInstanceOf(
+      SyncConflictError,
+    )
+  })
+
   it('空仓/分支不存在 → readData 返回 null', async () => {
     withFetch(() => new Response('not found', { status: 404 }))
     const repo = new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' })
