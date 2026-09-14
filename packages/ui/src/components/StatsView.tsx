@@ -75,7 +75,12 @@ export function StatsView({ onGoTodo }: { onGoTodo?: () => void }) {
   // 柱状图必须画连续日期轴——零完成的日子整根柱归零，"断档"才是关键信息。
   // 以序列末位（≈今天）为锚，向历史方向取连续 N 天，用 Map 查计数，缺省 0。
   const doneByDate = useMemo(() => new Map(daily.map((d) => [d.date, d.count])), [daily])
-  const anchorDate = daily.length > 0 ? daily[daily.length - 1]!.date : todayStr()
+  // 锚点 = max(今天, 最后一个有完成记录的日期)：今天零完成时轴上也要有"今天"
+  const anchorDate = useMemo(() => {
+    const today = todayStr()
+    const last = daily.length > 0 ? daily[daily.length - 1]!.date : today
+    return last > today ? last : today
+  }, [daily])
   const windowDates = useMemo(() => {
     const anchor = new Date(anchorDate + 'T00:00:00')
     const out: { date: string; count: number }[] = []
