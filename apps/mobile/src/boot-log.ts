@@ -48,6 +48,7 @@ function armWatchdog(): void {
   watchdog = setTimeout(() => {
     watchdog = null
     if (settled || revealed) return
+    if (debugFlagOn()) return   // 手动全显模式下无意义，避免重复头行
     revealed = true
     // 头行 + 最近 9 条一次显形：屏上立刻能看到「卡在哪一步」
     // （appendToScreen 只留最后 10 行，所以头行之外最多回灌 9 条）
