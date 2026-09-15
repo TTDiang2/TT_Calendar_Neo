@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { GitHubDataRepo, SNAPSHOT_PATH, SyncConflictError, TOMBSTONES_PATH } from '../github'
+import { GitHubDataRepo, SNAPSHOT_PATH, SyncConflictError, TOMBSTONES_PATH, unionSnapshot } from '../github'
 
 type Handler = (method: string, path: string, body?: unknown) => Response | Promise<Response>
 
@@ -141,6 +141,75 @@ describe('GitHubDataRepo', () => {
     )
   })
 
+  it('快照与旧版各表并存 → 取并集（用户仓实证：空快照 319B + 旧版 todo.json 671KB）', async () => {
+    // 真实形态：老 Neo 的失败初始化往旧版仓补了个空 snapshot.json，旧版各表原样
+    // 保留。只认快照会永久遮蔽旧版数据（= 用户「永远 0/0/0/0」的实际成因）。
+    const snapshotJson = {
+      todo_list: [{ id: 'L1', display_name: '任务', updated_at: '2026-09-15 09:18:48+08:00' }],
+      todo: [],
+      marks: [],
+    }
+    const legacyTodo = {
+      rows: [
+        { id: 'T1', list_id: 'L1', title: '电脑待办一', updated_at: '2026-09-01 10:00:00+08:00' },
+        { id: 'T2', list_id: 'L1', title: '电脑待办二', updated_at: '2026-09-02 10:00:00+08:00' },
+      ],
+    }
+    // 同一行两边都有 → 按 updated_at LWW（旧版较新则旧版胜）
+    const legacyList = {
+      rows: [{ id: 'L1', display_name: '任务', updated_at: '2026-09-20 09:00:00+08:00' }],
+    }
+    withFetch((method, path) => {
+      void method
+      if (path === '/repos/u/d/git/ref/heads/main') return okJson({ object: { sha: 'h-mix' } })
+      if (path.startsWith('/repos/u/d/git/trees/h-mix')) {
+        return okJson({
+          tree: [
+            { path: 'data/snapshot.json', type: 'blob', sha: 'b-snap' },
+            { path: 'manifest.json', type: 'blob', sha: 'b-manifest' },
+            { path: 'data/todo.json', type: 'blob', sha: 'b-todo' },
+            { path: 'data/todo_list.json', type: 'blob', sha: 'b-list' },
+          ],
+        })
+      }
+      if (path === '/repos/u/d/git/blobs/b-snap') return okJson({ content: B64(snapshotJson), encoding: 'base64' })
+      if (path === '/repos/u/d/git/blobs/b-todo') return okJson({ content: B64(legacyTodo), encoding: 'base64' })
+      if (path === '/repos/u/d/git/blobs/b-list') return okJson({ content: B64(legacyList), encoding: 'base64' })
+      if (path === '/repos/u/d/git/blobs/b-manifest') return okJson({ content: B64({}), encoding: 'base64' })
+      return new Response('nope', { status: 404 })
+    })
+
+    const repo = new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' })
+    const data = await repo.readData()
+    expect(data!.legacy).toBe(true)
+    // 旧版 todo 的 2 行进来了（此前读到 0 行 = 用户症状）
+    expect((data!.snapshot['todo'] ?? []).map((r) => (r as { title: string }).title).sort()).toEqual([
+      '电脑待办一',
+      '电脑待办二',
+    ])
+    // L1 两边都有 → LWW 取 updated_at 较新的旧版行，且不重复
+    const lists = data!.snapshot['todo_list'] ?? []
+    expect(lists).toHaveLength(1)
+    expect(String((lists[0] as { updated_at: string }).updated_at)).toBe('2026-09-20 09:00:00+08:00')
+  })
+
+  it('unionSnapshot：行级并集 + LWW + 空表不遮蔽', () => {
+    const a = { todo: [{ id: 'T1', title: 'A', updated_at: '2026-01-01 00:00:00+08:00' }] }
+    const b = {
+      todo: [
+        { id: 'T1', title: 'B', updated_at: '2026-02-01 00:00:00+08:00' },
+        { id: 'T2', title: 'C', updated_at: '2026-01-01 00:00:00+08:00' },
+      ],
+      marks: [],
+    }
+    const out = unionSnapshot(a as never, b as never)
+    const rows = out['todo'] as { id: string; title: string }[]
+    expect(rows).toHaveLength(2)
+    expect(rows.find((r) => r.id === 'T1')!.title).toBe('B') // LWW：较新者胜
+    expect(rows.find((r) => r.id === 'T2')!.title).toBe('C') // 仅旧版有的行也保留
+    expect(out['marks']).toBeUndefined() // 空表不产生键（删除由 tombstones 传播）
+  })
+
   it('空仓/分支不存在 → readData 返回 null', async () => {
     withFetch(() => new Response('not found', { status: 404 }))
     const repo = new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' })
@@ -181,7 +250,8 @@ describe('GitHubDataRepo', () => {
     expect(data).not.toBeNull()
     expect(data!.legacy).toBe(true)
     expect(data!.snapshot['events']).toEqual(LEGACY_ROWS.rows)
-    expect(data!.snapshot['todo_list']).toEqual([])
+    // 空表在并集里不显式生成键（等价于空行；删除仍由 tombstones 传播）
+    expect(data!.snapshot['todo_list'] ?? []).toEqual([])
     expect(data!.tombstones['events|u9']).toBe('2026-01-02 08:00:00+08:00')
   })
 

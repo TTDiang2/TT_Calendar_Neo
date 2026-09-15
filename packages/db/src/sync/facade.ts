@@ -27,11 +27,14 @@ export interface SyncRemote {
     commitSha: string
     legacy: boolean
   } | null>
+  /** dualWrite：是否额外写旧版每表一文件（应由 readData 的 legacy 结果显式传入，
+   *  不再依赖实例内部状态——避免"readData 必须先于 writeData"的隐式调用顺序假设） */
   writeData(
     snapshot: Snapshot,
     tombstones: Tombstones,
     parentSha: string | null,
     message: string,
+    opts?: { dualWrite?: boolean },
   ): Promise<{ commitSha: string; htmlUrl: string | null }>
 }
 
@@ -242,6 +245,7 @@ export class SyncFacade {
             tombstones,
             fresh?.commitSha ?? null,
             'tt-calendar: 初始化数据仓',
+            { dualWrite: fresh?.legacy },
           )
           this.saveBase({ snapshot, tombstones, commitSha: w.commitSha })
           this.saveLastStatus(w.commitSha)
@@ -277,6 +281,7 @@ export class SyncFacade {
           r.tombstones,
           current?.commitSha ?? null,
           'tt-calendar: 数据同步',
+          { dualWrite: current?.legacy },
         )
         this.saveBase({ snapshot: r.merged, tombstones: r.tombstones, commitSha: w.commitSha })
         this.saveLastStatus(w.commitSha)
@@ -327,7 +332,9 @@ export class SyncFacade {
       },
       mode,
     )
-    const w = await remote.writeData(r.merged, r.tombstones, remoteData?.commitSha ?? null, `tt-calendar: 首绑 ${mode}`)
+    const w = await remote.writeData(r.merged, r.tombstones, remoteData?.commitSha ?? null, `tt-calendar: 首绑 ${mode}`, {
+      dualWrite: remoteData?.legacy,
+    })
     this.saveBase({ snapshot: r.merged, tombstones: r.tombstones, commitSha: w.commitSha })
     this.saveLastStatus(w.commitSha)
     return {

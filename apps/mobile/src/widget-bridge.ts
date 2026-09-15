@@ -64,7 +64,9 @@ export async function refreshWidgetSnapshot(): Promise<void> {
   }
 }
 
-/** 启动周期刷新（前台时每 15 分钟 + 回前台立即刷一次） */
+/** 启动周期刷新（前台时每 15 分钟 + 回前台立即刷一次）。
+ *  注意：这里只更新 App Group 里的快照文件；小组件界面的重载由 iOS 调度
+ *  （我们未调用 WidgetCenter.reloadAllTimelines），最坏可能滞后到下次时间线刷新。 */
 export function startWidgetRefresh(): void {
   if (timer !== null || typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return
   timer = setInterval(() => {

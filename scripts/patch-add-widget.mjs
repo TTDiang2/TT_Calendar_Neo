@@ -13,13 +13,27 @@
  * 幂等：pbxproj 里已有 TTWidget 标记时跳过 pbxproj 注入；entitlements 已含
  * App Group 时跳过追加。在 tauri ios init 之后、xcodebuild 之前运行。
  */
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, existsSync, renameSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const widgetSrc = join(repoRoot, 'apps', 'mobile', 'widget')
 const genApple = process.argv[2] ?? join(repoRoot, 'apps', 'mobile', 'src-tauri', 'gen', 'apple')
+
+// appex 版本号必须与宿主 App 一致（App Store 校验会因此拒绝；侧载虽多能容忍，
+// 但没必要留坑）。版本号从 tauri.conf.json 派生，避免硬编码漂移。
+function readAppVersion() {
+  try {
+    const conf = JSON.parse(
+      readFileSync(join(repoRoot, 'apps', 'mobile', 'src-tauri', 'tauri.conf.json'), 'utf8'),
+    )
+    return String(conf.version ?? '1.0')
+  } catch {
+    return '1.0'
+  }
+}
+const APP_VERSION = readAppVersion()
 
 // ── 定位 .xcodeproj ──
 const entries = existsSync(genApple) ? readdirSync(genApple) : []
@@ -284,7 +298,7 @@ if (pbx.includes('/* TTWidget */')) {
     INFOPLIST_FILE: 'TTWidget/Info.plist',
     IPHONEOS_DEPLOYMENT_TARGET: '15.0',
     LD_RUNPATH_SEARCH_PATHS: ['$(inherited)', '@executable_path/Frameworks', '@executable_path/../../Frameworks'],
-    MARKETING_VERSION: '1.0',
+    MARKETING_VERSION: APP_VERSION,
     PRODUCT_BUNDLE_IDENTIFIER: 'com.tt.calendar.mobile.widget',
     PRODUCT_NAME: '$(TARGET_NAME)',
     SDKROOT: 'iphoneos',
@@ -331,8 +345,12 @@ ${fmtSettings(baseSettings)}
 `
   pbx = pbx.replace('/* End XCConfigurationList section */', `${configList}/* End XCConfigurationList section */`)
 
-  writeFileSync(projPath, pbx)
+  // 先校验后落盘：校验失败时原工程保持不动（否则会留下半成品 + 幂等标记，
+  // 重跑直接"跳过注入"且无任何报错 —— 2026-09-15 智者复核指出）
   validateInjected(pbx)
+  const tmpProj = projPath + '.tmp'
+  writeFileSync(tmpProj, pbx)
+  renameSync(tmpProj, projPath)
   console.log('[widget] project.pbxproj 注入完成：TTWidget target（app-extension）+ Embed PlugIns phase + target 依赖')
 }
 
@@ -387,8 +405,28 @@ function validateInjected(text) {
     console.error('[widget] ✗ pbxproj 存在悬空引用（Xcode 会静默忽略）：', dangling.join(', '))
     process.exit(1)
   }
+
+  // 结构事实断言：注入用的锚点全是 XcodeGen 对模板名字取的哈希（如
+  // B484EA2F… / 85023663… / A4570ACA…）。tauri-cli 一升级、项目名/结构一变，
+  // 某处 replace 就会静默 no-op，而脚本照旧打印"注入完成"——智者用合成工程
+  // 实证过这个 fail-open（只对 rootObject/dependencies 做了 fail-fast）。
+  // 这里把「注入必须达成的结构事实」逐条验证，任一缺失即失败。
+  const structuralChecks = [
+    ['TTWidget 在工程 targets 列表', new RegExp(`\\n\\t\\t\\t\\t${ids.widgetTarget} /\\* TTWidget \\*/,`)],
+    ['TTWidget 组挂进 mainGroup', new RegExp(`${ids.widgetGroup} /\\* TTWidget \\*/,`)],
+    ['appex 产物挂进 Products 组', new RegExp(`${ids.widgetProductRef} /\\* TTWidget\\.appex \\*/,`)],
+    ['Embed phase 在主 App buildPhases', new RegExp(`\\n\\t\\t\\t\\t${ids.embedPhase} /\\* Embed Foundation Extensions \\*/,`)],
+    ['target 依赖挂到主 App', new RegExp(`\\n\\t\\t\\t\\t${ids.targetDependency} /\\* PBXTargetDependency \\*/,`)],
+  ]
+  const failed = structuralChecks.filter(([, re]) => !re.test(text)).map(([label]) => label)
+  if (failed.length > 0) {
+    console.error('[widget] ✗ pbxproj 结构断言失败（锚点未命中，模板可能已变）：')
+    for (const label of failed) console.error('   -', label)
+    process.exit(1)
+  }
+
   console.log(
-    `[widget] pbxproj 自检通过（${generatedSettingLines.length} 条设置行引号合规 + 括号配平 + ${referenced.size} 处引用无悬空）`,
+    `[widget] pbxproj 自检通过（${generatedSettingLines.length} 条设置行引号合规 + 括号配平 + ${referenced.size} 处引用无悬空 + ${structuralChecks.length} 项结构断言）`,
   )
 }
 

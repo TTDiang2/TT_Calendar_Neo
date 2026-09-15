@@ -6,11 +6,12 @@
 
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { Snapshot, Tombstones } from '@tt-calendar/contracts'
 
 import { openLocalDb, type LocalDbHandle } from '../../local/backend'
+import { GitHubDataRepo } from '../github'
 import { SyncConflictError } from '../github'
 import { SyncFacade, rowCountOf, type SyncRemote } from '../facade'
 
@@ -170,6 +171,141 @@ describe('SyncFacade 端到端（假远端）', () => {
     await f.resolveFirstBind('pull_overwrite')
     expect(phone.backend.getTodoLists().map((l) => l.display_name)).toContain('电脑清单')
     expect(phone.backend.getTodos().map((t) => t.title)).toContain('电脑上的待办')
+    phone.sqlite.close()
+  })
+
+  it('【用户现场回归】旧版仓 + 老 Neo 写下的空快照并存，手机已有空基线 → 必须拉到电脑数据', async () => {
+    const wasmBinary = readFileSync(require.resolve('sql.js/dist/sql-wasm.wasm'))
+    const phone = await openLocalDb({ wasmBinary, autosaveMs: 0, skipLoad: true })
+    // 真实链路（真 GitHubDataRepo + stub fetch），复刻用户现场：
+    //   远端 = 旧版每表文件（电脑真实数据）+ 老 Neo 那次失败初始化补的
+    //         空 data/snapshot.json + 被其覆盖的 tombstones
+    //   本地 = 已有那条空基线（sync.base 指向空快照，故 !base 不成立，
+    //          needs_decision 分支不会进入——这正是"永远 0/0/0/0"的关键）
+    const legacyRows = {
+      todo_list: [{ id: 'L1', display_name: '电脑清单', updated_at: '2026-09-01 10:00:00+08:00' }],
+      todo: [{ id: 'T1', list_id: 'L1', title: '电脑上的待办', status: 'notStarted' }],
+    }
+    let pushed = 0
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url).replace('https://api.github.com', '')
+      const [path] = u.split('?')
+      const method = String(init?.method ?? 'GET')
+      if (path === '/repos/u/d/git/ref/heads/main') return new Response(JSON.stringify({ object: { sha: 'h-legacy' } }, null, 0))
+      if (path.startsWith('/repos/u/d/git/trees/h-legacy')) {
+        return new Response(
+          JSON.stringify({
+            tree: [
+              { path: 'data/snapshot.json', type: 'blob', sha: 'b-empty' },
+              { path: 'data/tombstones.json', type: 'blob', sha: 'b-tombs' },
+              { path: 'manifest.json', type: 'blob', sha: 'b-manifest' },
+              { path: 'data/todo_list.json', type: 'blob', sha: 'b-todolist' },
+              { path: 'data/todo.json', type: 'blob', sha: 'b-todo' },
+            ],
+          }),
+        )
+      }
+      const b64 = (o: unknown) => Buffer.from(JSON.stringify(o), 'utf8').toString('base64')
+      if (path === '/repos/u/d/git/blobs/b-empty') return new Response(JSON.stringify({ content: b64({}), encoding: 'base64' }))
+      if (path === '/repos/u/d/git/blobs/b-tombs') return new Response(JSON.stringify({ content: b64({}), encoding: 'base64' }))
+      if (path === '/repos/u/d/git/blobs/b-manifest') return new Response(JSON.stringify({ content: b64({}), encoding: 'base64' }))
+      if (path === '/repos/u/d/git/blobs/b-todolist') return new Response(JSON.stringify({ content: b64({ rows: legacyRows.todo_list }), encoding: 'base64' }))
+      if (path === '/repos/u/d/git/blobs/b-todo') return new Response(JSON.stringify({ content: b64({ rows: legacyRows.todo }), encoding: 'base64' }))
+      if (path.startsWith('/repos/u/d/git/commits/')) return new Response(JSON.stringify({ tree: { sha: 'basetree' } }))
+      if (method === 'POST' && path.endsWith('/git/blobs')) return new Response(JSON.stringify({ sha: 'nb' }))
+      if (method === 'POST' && path.endsWith('/git/trees')) return new Response(JSON.stringify({ sha: 'nt' }))
+      if (method === 'POST' && path.endsWith('/git/commits')) return new Response(JSON.stringify({ sha: 'nc', html_url: 'x' }))
+      if (method === 'PATCH' && path.includes('/git/refs/heads/')) return new Response(JSON.stringify({}))
+      if (method === 'POST' && path.endsWith('/git/refs')) return new Response(JSON.stringify({ sha: 'nc' }))
+      pushed += 1
+      return new Response('nope', { status: 404 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      // 手机先经历一次"老版本失败初始化"：空快照 + 空基线
+      await phone.backend.setMeta('sync.repo', 'u/d')
+      await phone.backend.setMeta('sync.branch', 'main')
+      await phone.backend.setMeta('sync.token', 't')
+      await phone.backend.setMeta('sync.base', JSON.stringify({ snapshot: {}, tombstones: {}, commitSha: 'h-legacy' }))
+
+      const f = makeFacade(phone, new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' }))
+      const r = await f.sync()
+      // 修复前：读到的远端是空快照 → rows=0 → 走常规合并 → ok 且 0/0/0/0（用户现场）
+      // 修复后：快照与旧版表取并集 → 2 行 → 合并把电脑数据拉进手机
+      expect(r.result).toBe('ok')
+      expect((r.pulled ?? 0)).toBeGreaterThan(0)
+      expect(phone.backend.getTodoLists().map((l) => l.display_name)).toContain('电脑清单')
+      expect(phone.backend.getTodos().map((t) => t.title)).toContain('电脑上的待办')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    phone.sqlite.close()
+  })
+
+  it('【用户现场回归·双向】远端空快照+旧版各表并存，手机本地也有行 → 并集互通且不重复', async () => {
+    const wasmBinary = readFileSync(require.resolve('sql.js/dist/sql-wasm.wasm'))
+    const phone = await openLocalDb({ wasmBinary, autosaveMs: 0, skipLoad: true })
+    // 手机本地：自己建的一条待办（模拟用户已在手机录过东西）
+    const myList = phone.backend.createTodoList('手机清单')
+    phone.backend.createTodo({ list_id: myList.id, title: '手机上的待办' })
+
+    const legacyRows = {
+      todo_list: [{ id: 'L9', display_name: '电脑清单', updated_at: '2026-09-01 10:00:00+08:00' }],
+      todo: [{ id: 'T9', list_id: 'L9', title: '电脑上的待办', status: 'notStarted' }],
+    }
+    const b64 = (o: unknown) => Buffer.from(JSON.stringify(o), 'utf8').toString('base64')
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url).replace('https://api.github.com', '')
+      const [path] = u.split('?')
+      const method = String(init?.method ?? 'GET')
+      if (path === '/repos/u/d/git/ref/heads/main') return new Response(JSON.stringify({ object: { sha: 'h-x' } }))
+      if (path.startsWith('/repos/u/d/git/trees/h-x')) {
+        return new Response(
+          JSON.stringify({
+            tree: [
+              { path: 'data/snapshot.json', type: 'blob', sha: 'b-empty' },
+              { path: 'data/tombstones.json', type: 'blob', sha: 'b-tombs' },
+              { path: 'manifest.json', type: 'blob', sha: 'b-manifest' },
+              { path: 'data/todo_list.json', type: 'blob', sha: 'b-todolist' },
+              { path: 'data/todo.json', type: 'blob', sha: 'b-todo' },
+            ],
+          }),
+        )
+      }
+      if (path === '/repos/u/d/git/blobs/b-empty') return new Response(JSON.stringify({ content: b64({}), encoding: 'base64' }))
+      if (path === '/repos/u/d/git/blobs/b-tombs') return new Response(JSON.stringify({ content: b64({}), encoding: 'base64' }))
+      if (path === '/repos/u/d/git/blobs/b-manifest') return new Response(JSON.stringify({ content: b64({}), encoding: 'base64' }))
+      if (path === '/repos/u/d/git/blobs/b-todolist') return new Response(JSON.stringify({ content: b64({ rows: legacyRows.todo_list }), encoding: 'base64' }))
+      if (path === '/repos/u/d/git/blobs/b-todo') return new Response(JSON.stringify({ content: b64({ rows: legacyRows.todo }), encoding: 'base64' }))
+      if (path.startsWith('/repos/u/d/git/commits/')) return new Response(JSON.stringify({ tree: { sha: 'basetree' } }))
+      if (method === 'POST' && path.endsWith('/git/blobs')) return new Response(JSON.stringify({ sha: 'nb' }))
+      if (method === 'POST' && path.endsWith('/git/trees')) return new Response(JSON.stringify({ sha: 'nt' }))
+      if (method === 'POST' && path.endsWith('/git/commits')) return new Response(JSON.stringify({ sha: 'nc', html_url: 'x' }))
+      if (method === 'PATCH' && path.includes('/git/refs/heads/')) return new Response(JSON.stringify({}))
+      if (method === 'POST' && path.endsWith('/git/refs')) return new Response(JSON.stringify({ sha: 'nc' }))
+      return new Response('nope', { status: 404 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await phone.backend.setMeta('sync.repo', 'u/d')
+      await phone.backend.setMeta('sync.branch', 'main')
+      await phone.backend.setMeta('sync.token', 't')
+      await phone.backend.setMeta('sync.base', JSON.stringify({ snapshot: {}, tombstones: {}, commitSha: 'h-x' }))
+
+      const f = makeFacade(phone, new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' }))
+      const r = await f.sync()
+      expect(r.result).toBe('ok')
+      const titles = phone.backend.getTodos().map((t) => t.title)
+      // 并集：手机自己的 + 电脑的，都在、且都不重复
+      expect(titles).toContain('手机上的待办')
+      expect(titles).toContain('电脑上的待办')
+      expect(new Set(titles).size).toBe(titles.length)
+      expect(phone.backend.getTodoLists().map((l) => l.display_name).sort()).toEqual(['手机清单', '电脑清单'])
+      // 回写时旧版各表也要带上（让电脑端继续可见），推送行数 > 0
+      expect(r.pushed ?? 0).toBeGreaterThan(0)
+    } finally {
+      vi.unstubAllGlobals()
+    }
     phone.sqlite.close()
   })
 

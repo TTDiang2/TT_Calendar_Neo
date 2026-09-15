@@ -388,12 +388,17 @@ jobs:
           EXE=$(find "$APP" -maxdepth 1 -type f -perm -111 | head -1)
           if [ -z "$EXE" ]; then echo ".app 内无可执行文件，产物无效: $APP"; exit 1; fi
           echo "可执行: $EXE ($(du -h "$EXE" | cut -f1))"
-          # 主屏小组件必须真的嵌进 PlugIns/，否则装上也没有小组件可选
-          if [ -d "$APP/PlugIns" ]; then
-            echo "已嵌入 extension："; find "$APP/PlugIns" -maxdepth 2 | sed 's/^/  /'
-          else
-            echo "警告：PlugIns 目录缺失——小组件未嵌入"
+          # 主屏小组件必须真的嵌进 PlugIns/，否则装上也没有小组件可选。
+          # 这里是**硬失败**：此前只打警告，构建仍然绿并上传了没有小组件的
+          # ipa（2026-09-15 悬空引用事故就是这个静默通道放过去的）。
+          if [ ! -d "$APP/PlugIns/TTWidget.appex" ]; then
+            echo "错误：PlugIns/TTWidget.appex 缺失——小组件未嵌入，产物不可用"
+            echo "--- .app 内容 ---"
+            ls -la "$APP" | sed 's/^/  /'
+            exit 1
           fi
+          echo "已嵌入 extension："
+          find "$APP/PlugIns" -maxdepth 2 | sed 's/^/  /'
           rm -rf Payload
           mkdir -p Payload
           cp -R "$APP" Payload/

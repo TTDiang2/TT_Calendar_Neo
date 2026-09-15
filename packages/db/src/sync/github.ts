@@ -16,6 +16,7 @@
 import pRetry, { AbortError } from 'p-retry'
 
 import type { Snapshot, Tombstones } from '@tt-calendar/contracts'
+import { SYNC_TABLES } from '@tt-calendar/contracts'
 
 const API_ROOT = 'https://api.github.com'
 
@@ -30,6 +31,44 @@ function isLegacyTablePath(path: string): boolean {
     path !== SNAPSHOT_PATH &&
     path !== TOMBSTONES_PATH
   )
+}
+
+/**
+ * 把两份快照按**行级并集**合并（Neo 单文件快照 × 旧版每表文件）。
+ *
+ * 为什么需要并集而不是二选一：旧版仓被老 Neo 触碰过时，仓里会同时存在
+ * 空的 data/snapshot.json 与完整的旧版各表；只认其一都会丢数据（这正是
+ * 2026-09-15 用户「永远 0/0/0/0」的成因）。同一行两边都有时按 updated_at
+ * 取新（LWW）——与三方合并同一口径；我们自己的双写产物两边内容一致，
+ * 并集天然幂等。
+ */
+export function unionSnapshot(primary: Snapshot, extra: Snapshot): Snapshot {
+  const out: Snapshot = { ...primary }
+  for (const [table, rows] of Object.entries(extra)) {
+    if (!Array.isArray(rows) || rows.length === 0) continue
+    const spec = (SYNC_TABLES as Record<string, readonly [string, string, boolean]>)[table]
+    const key = spec?.[1] ?? 'id'
+    const byKey = new Map<string, Record<string, unknown>>()
+    const put = (row: unknown): void => {
+      if (!row || typeof row !== 'object') return
+      const r = row as Record<string, unknown>
+      const k = String(r[key] ?? '')
+      if (!k) return
+      const prev = byKey.get(k)
+      if (!prev) {
+        byKey.set(k, r)
+        return
+      }
+      const a = String(prev['updated_at'] ?? '')
+      const b = String(r['updated_at'] ?? '')
+      byKey.set(k, b >= a ? r : prev)
+    }
+    const outRec = out as Record<string, unknown[] | undefined>
+    for (const r of outRec[table] ?? []) put(r)
+    for (const r of rows) put(r)
+    outRec[table] = [...byKey.values()]
+  }
+  return out
 }
 
 /** 422 = ref 非快进（远端被并发推进） */
@@ -285,15 +324,29 @@ export class GitHubDataRepo {
     const hasManifest = tree.tree.some((t) => t.type === 'blob' && t.path === 'manifest.json')
     this.legacyLayout = hasManifest || legacyTables.length > 0
 
-    if (snap) {
-      const snapshot = JSON.parse(textDecoder.decode(snap)) as Snapshot
+    const snapshot: Snapshot = snap ? (JSON.parse(textDecoder.decode(snap)) as Snapshot) : {}
+    if (legacyTables.length === 0) {
+      // 纯 Neo 仓（快照存在）或空仓 —— 无旧版表可并
       return { snapshot, tombstones, commitSha: head, legacy: false }
     }
-    if (legacyTables.length === 0) {
-      // 分支存在但完全无文件（空树提交）：视为空的 Neo 仓
-      return { snapshot: {}, tombstones, commitSha: head, legacy: false }
+    // ⚠️ 快照与旧版各表**并存**是真实且必然出现的形态：旧版仓被老 Neo 触碰过时，
+    // 那次（失败的）初始化会往仓里补一个空的 data/snapshot.json，而旧版各表原样
+    // 保留。若此时见快照就早返回，旧版表会被永久遮蔽 → 用户实测的「永远 0/0/0/0」
+    // （2026-09-15 智者复核指出，我的第一版修复正是栽在这里）。故两者必须取并集。
+    const legacySnapshot = await this.synthesizeLegacy(tree, legacyTables)
+    return {
+      snapshot: unionSnapshot(snapshot, legacySnapshot),
+      tombstones,
+      commitSha: head,
+      legacy: true,
     }
-    // 新版快照缺失：逐表合成（每表一文件 {"rows":[...]}）
+  }
+
+  /** 把旧版每表一文件的布局合成为 Neo 快照形态（单表损坏则跳过该表） */
+  private async synthesizeLegacy(
+    tree: { tree: GitTreeEntry[] },
+    legacyTables: GitTreeEntry[],
+  ): Promise<Snapshot> {
     const snapshot: Snapshot = {}
     await Promise.all(
       legacyTables.map(async (entry) => {
@@ -310,7 +363,7 @@ export class GitHubDataRepo {
         }
       }),
     )
-    return { snapshot, tombstones, commitSha: head, legacy: true }
+    return snapshot
   }
 
   /** 写远端数据（快照 + 墓碑；旧版布局时额外双写每表一文件）。
@@ -324,12 +377,15 @@ export class GitHubDataRepo {
     tombstones: Tombstones,
     parentSha: string | null,
     message: string,
+    opts?: { dualWrite?: boolean },
   ): Promise<{ commitSha: string; htmlUrl: string | null }> {
     const files: { path: string; text: string }[] = [
       { path: SNAPSHOT_PATH, text: JSON.stringify(snapshot) },
       { path: TOMBSTONES_PATH, text: JSON.stringify(tombstones) },
     ]
-    if (this.legacyLayout) {
+    // 调用方（SyncFacade）显式传 dualWrite；未传时退回 readData 探测到的实例
+    // 状态（仅供直接调用与测试使用）
+    if (opts?.dualWrite ?? this.legacyLayout) {
       for (const [table, rows] of Object.entries(snapshot)) {
         if (Array.isArray(rows)) {
           files.push({ path: `data/${table}.json`, text: JSON.stringify({ rows }) })

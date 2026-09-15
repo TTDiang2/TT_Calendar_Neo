@@ -93,7 +93,7 @@ export function WidgetsView() {
         <h2 className="text-base font-semibold text-gray-800 flex items-center gap-1.5">
           <Sparkles size={16} className="text-pink-500" /> 小组件
         </h2>
-        <span className="text-[11px] text-gray-400 hidden sm:inline">把常用信息钉在这一页</span>
+        <span className="text-[11px] text-gray-400 hidden sm:inline">App 内的信息卡片</span>
         <div className="ml-auto flex items-center gap-2">
           {editing && (
             <button
@@ -112,6 +112,18 @@ export function WidgetsView() {
           >
             {editing ? '完成' : '编辑'}
           </button>
+        </div>
+      </div>
+
+      {/* 主屏小组件引导：此处是 App 内的卡片页；真正放主屏幕的小组件另有入口。
+          上次的误解就发生在这里，故把两条路径写明。 */}
+      <div className="px-3 md:px-5 pt-1 pb-2 max-w-6xl w-full mx-auto">
+        <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-3 text-[12px] text-sky-900 leading-relaxed">
+          <p className="font-medium mb-0.5">想放到手机主屏幕？那是系统的「小组件」</p>
+          <p className="text-sky-800/80">
+            本页是 <b>App 内的信息卡片</b>。要在 iPhone 主屏幕显示，请长按主屏幕空白处 →
+            左上角「+」→ 搜索「TT 日历」→ 选尺寸添加（iOS 14+；小组件数据由 App 打开时同步写入）。
+          </p>
         </div>
       </div>
 

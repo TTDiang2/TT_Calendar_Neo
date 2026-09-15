@@ -1,8 +1,16 @@
 // TT 日历 · 主屏小组件（WidgetKit extension）。
+//
 // 数据来源：主 App 通过 Tauri command 把当日概览 JSON 写进 App Group 容器
 // （group.com.tt.calendar.mobile/widget-snapshot.json），本进程只读该文件，
-// 不访问网络、不访问主 App 沙盒。时间线 30 分钟兜底刷新；App 前台数据变化时
-// 会在写文件后由系统尽快重载更及时的版本。
+// 不访问网络、不访问主 App 沙盒。
+//
+// 刷新时序（如实说明，别把注释写成承诺）：
+//   · 文件侧：App 在前台时每 15 分钟、以及回前台/同步完成时重写快照；
+//   · 界面侧：本时间线请求 15 分钟后重载，但**最终由 iOS 调度**（可延后），
+//     且当前没有调用 WidgetCenter.reloadAllTimelines()——App 写完文件不会
+//     立刻触发重载，最坏情况要等到下次时间线刷新才显示新数据。
+//     （补 reload 需要在主 App target 链接 WidgetKit 再从 Rust 调 ObjC，
+//      属后续增强；这里先保证说法与实现一致。）
 
 import WidgetKit
 import SwiftUI
@@ -57,9 +65,9 @@ struct Provider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
         let entry = TodayEntry(date: Date(), snap: loadSnapshot())
-        // 兜底刷新：30 分钟后（主 App 每次写数据时会请求更即时的重载）
-        let next = Calendar.current.date(byAdding: .minute, value: 30, to: Date())
-            ?? Date().addingTimeInterval(1800)
+        // 与文件侧刷新节奏对齐：请求 15 分钟后重载（实际由 iOS 调度，可延后）
+        let next = Calendar.current.date(byAdding: .minute, value: 15, to: Date())
+            ?? Date().addingTimeInterval(900)
         completion(Timeline(entries: [entry], policy: .after(next)))
     }
 }
