@@ -42,6 +42,13 @@ const REGISTRY: WidgetMeta[] = [
   { id: 'stats', title: '完成概览', desc: '待办完成率一览', rows: 1, Comp: StatsWidget },
 ]
 
+/** 是否运行在 iOS（Tauri 容器内 + UA 为 iPhone/iPad/iPod）。
+ *  主屏小组件说明只在 iOS 有意义；桌面/网页端显示通用文案，避免跨端串味。 */
+function isIOS(): boolean {
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return false
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent)
+}
+
 const LS_KEY = 'widgets-enabled'
 
 function loadEnabled(): string[] {
@@ -119,10 +126,11 @@ export function WidgetsView() {
           上次的误解就发生在这里，故把两条路径写明。 */}
       <div className="px-3 md:px-5 pt-1 pb-2 max-w-6xl w-full mx-auto">
         <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-3 text-[12px] text-sky-900 leading-relaxed">
-          <p className="font-medium mb-0.5">想放到手机主屏幕？那是系统的「小组件」</p>
+          <p className="font-medium mb-0.5">本页是 App 内的信息卡片</p>
           <p className="text-sky-800/80">
-            本页是 <b>App 内的信息卡片</b>。要在 iPhone 主屏幕显示，请长按主屏幕空白处 →
-            左上角「+」→ 搜索「TT 日历」→ 选尺寸添加（iOS 14+；小组件数据由 App 打开时同步写入）。
+            {isIOS()
+              ? '想放到 iPhone 主屏幕？长按主屏幕空白处 → 左上角「+」→ 搜索「TT 日历」→ 选尺寸添加（iOS 14+）。小组件显示的数据由 App 打开时同步写入。'
+              : 'iPhone 版另配有系统「主屏小组件」（长按主屏幕 → 左上角「+」→ 搜「TT 日历」添加）。本页卡片在三端通用。'}
           </p>
         </div>
       </div>
