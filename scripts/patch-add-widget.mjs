@@ -51,7 +51,6 @@ const ids = {
   widgetProductRef: idAt(11),
   widgetProductBuildFile: idAt(12),
   embedPhase: idAt(13),
-  embedBuildFile: idAt(14),
   containerProxy: idAt(15),
   targetDependency: ID_PREFIX + '11',
 }
@@ -99,7 +98,7 @@ if (pbx.includes('/* TTWidget */')) {
   // 1) PBXBuildFile
   const buildFileEntries = `
 		${ids.widgetSwiftBuildFile} /* TTCalendarWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = ${ids.widgetSwiftFileRef} /* TTCalendarWidget.swift */; };
-		${ids.widgetProductBuildFile} /* TTWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ${ids.widgetProductRef} /* TTWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };`
+		${ids.widgetProductBuildFile} /* TTWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ${ids.widgetProductRef} /* TTWidget.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };`
   pbx = pbx.replace('/* End PBXBuildFile section */', `${buildFileEntries}\n/* End PBXBuildFile section */`)
 
   // 2) PBXFileReference
@@ -119,7 +118,7 @@ if (pbx.includes('/* TTWidget */')) {
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				${ids.embedBuildFile} /* TTWidget.appex in Embed Foundation Extensions */,
+				${ids.widgetProductBuildFile} /* TTWidget.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -373,7 +372,24 @@ function validateInjected(text) {
     console.error(`[widget] ✗ pbxproj 括号不配平：braces=${braces} parens=${parens}`)
     process.exit(1)
   }
-  console.log(`[widget] pbxproj 自检通过（${generatedSettingLines.length} 条设置行引号合规 + 括号配平）`)
+
+  // 悬空引用检查（2026-09-15 真实翻车点）：pbxproj 里被引用的对象 ID 必须在
+  // 定义段出现过，否则 Xcode **静默忽略**该引用——当时嵌入阶段写错了一个 ID，
+  // 结果 appex 既不报错也没被拷进 PlugIns，排查代价很高。
+  const defined = new Set()
+  for (const m of text.matchAll(/\n\t\t([0-9A-F]{24}) \/\* [\s\S]*?\*\/ = \{/g)) defined.add(m[1])
+  for (const m of text.matchAll(/\n\t\t([0-9A-F]{24}) \/\* [\s\S]*?\*\/ = \{isa = /g)) defined.add(m[1])
+  const referenced = new Set()
+  for (const m of text.matchAll(/fileRef = ([0-9A-F]{24})/g)) referenced.add(m[1])
+  for (const m of text.matchAll(/^\t\t\t\t([0-9A-F]{24}) \/\*[^\n]*\*\/,$/gm)) referenced.add(m[1])
+  const dangling = [...referenced].filter((id) => !defined.has(id))
+  if (dangling.length > 0) {
+    console.error('[widget] ✗ pbxproj 存在悬空引用（Xcode 会静默忽略）：', dangling.join(', '))
+    process.exit(1)
+  }
+  console.log(
+    `[widget] pbxproj 自检通过（${generatedSettingLines.length} 条设置行引号合规 + 括号配平 + ${referenced.size} 处引用无悬空）`,
+  )
 }
 
 // 11) scheme 补丁：把 widget 加进 BuildActionEntries。

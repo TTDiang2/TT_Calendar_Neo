@@ -175,8 +175,12 @@ jobs:
             > /tmp/xcb.log 2>&1
           XB=$?
           echo "xcodebuild 退出码: $XB"
-          echo "--- 日志尾部 ---"
-          tail -50 /tmp/xcb.log
+          echo "--- 日志尾部（120 行）---"
+          tail -120 /tmp/xcb.log
+          echo "--- 与小组件相关的构建行 ---"
+          grep -nE "TTWidget|appex|Embed Foundation|CopyFiles" /tmp/xcb.log | head -40 || true
+          echo "--- Build/Products 下的产物树 ---"
+          find "$DD/Build/Products" -maxdepth 2 \( -name '*.app' -o -name '*.appex' \) 2>/dev/null | sed 's/^/  /' || true
           if [ "$XB" != "0" ]; then
             echo "xcodebuild 失败"
             exit 1
@@ -345,8 +349,12 @@ jobs:
             > /tmp/xcb.log 2>&1
           XB=$?
           echo "xcodebuild 退出码: $XB"
-          echo "--- 日志尾部 ---"
-          tail -50 /tmp/xcb.log
+          echo "--- 日志尾部（120 行）---"
+          tail -120 /tmp/xcb.log
+          echo "--- 与小组件相关的构建行 ---"
+          grep -nE "TTWidget|appex|Embed Foundation|CopyFiles" /tmp/xcb.log | head -40 || true
+          echo "--- Build/Products 下的产物树 ---"
+          find "$DD/Build/Products" -maxdepth 2 \( -name '*.app' -o -name '*.appex' \) 2>/dev/null | sed 's/^/  /' || true
           if [ "$XB" != "0" ]; then
             echo "xcodebuild 失败"
             exit 1
