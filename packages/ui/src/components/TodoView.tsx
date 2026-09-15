@@ -348,29 +348,29 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
 
       {/* 中任务区 */}
       <div className="flex-1 flex flex-col p-2 md:p-4 overflow-hidden min-w-0">
-        {/* 手机：列表横滑 chips（替代左侧栏），桌面隐藏 */}
-        <div className="md:hidden flex gap-1.5 overflow-x-auto pb-2 mb-1 flex-shrink-0 -mx-1 px-1">
+        {/* 手机：列表横滑 chips（替代左侧栏），桌面隐藏。触控目标加大 + 粉调高亮 */}
+        <div className="md:hidden flex gap-2 overflow-x-auto pb-2.5 mb-1 flex-shrink-0 -mx-1 px-1">
           <button
             onClick={() => { setSelectedList(null); setSelectedTodoId(null); setManualOrder(null) }}
             className={clsx(
-              'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border whitespace-nowrap flex-shrink-0',
-              selectedList === null ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200',
+              'flex items-center gap-1.5 px-3.5 py-2 text-sm rounded-full border whitespace-nowrap flex-shrink-0 transition-colors',
+              selectedList === null ? 'bg-pink-500 text-white border-pink-500 shadow-sm' : 'bg-white text-gray-600 border-gray-200 active:bg-gray-50',
             )}
           >
-            <Inbox size={12} /> 全部
-            {stats ? <span className="text-[10px] opacity-80">{stats.incomplete}</span> : null}
+            <Inbox size={14} /> 全部
+            {stats ? <span className="text-[11px] opacity-80">{stats.incomplete}</span> : null}
           </button>
           {lists.map((l) => (
             <button
               key={l.id}
               onClick={() => { setSelectedList(l.id); setSelectedTodoId(null); setManualOrder(null) }}
               className={clsx(
-                'px-2.5 py-1 text-xs rounded-full border whitespace-nowrap flex-shrink-0',
-                selectedList === l.id ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200',
+                'px-3.5 py-2 text-sm rounded-full border whitespace-nowrap flex-shrink-0 transition-colors',
+                selectedList === l.id ? 'bg-pink-500 text-white border-pink-500 shadow-sm' : 'bg-white text-gray-600 border-gray-200 active:bg-gray-50',
               )}
             >
               {l.display_name}
-              {counts.get(l.id) ? <span className="ml-1 text-[10px] opacity-80">{counts.get(l.id)}</span> : null}
+              {counts.get(l.id) ? <span className="ml-1.5 text-[11px] opacity-80">{counts.get(l.id)}</span> : null}
             </button>
           ))}
         </div>
@@ -458,7 +458,7 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
               {tagFilter ? `没有「${tagFilter}」标签的待办` : '暂无待办，点「新建待办」开始'}
             </div>
           ) : (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-2 md:gap-1">
               {filteredIncomplete.length === 0 && completedCount === 0 && (
                 <p className="text-sm text-gray-400 text-center py-4">没有未完成待办</p>
               )}
@@ -685,22 +685,24 @@ function TodoRow({ todo, listName, isDone, overdue, selected, leaving, onSelect,
       onClick={onSelect}
       onDoubleClick={onOpenNotes}
       className={clsx(
-        'group flex items-start gap-2 px-3 py-2 rounded-lg cursor-pointer border transition-all duration-200 tt-row-enter',
-        selected ? 'bg-blue-50 border-blue-200' : 'border-transparent hover:bg-gray-100 hover:border-gray-200 active:scale-[0.99]',
+        'group flex items-start gap-2.5 px-3 py-2.5 md:py-2 rounded-2xl md:rounded-lg cursor-pointer border transition-all duration-200 tt-row-enter',
+        selected
+          ? 'bg-pink-50 border-pink-200 shadow-sm'
+          : 'bg-white md:bg-transparent border-gray-100 md:border-transparent shadow-sm md:shadow-none hover:bg-gray-100 hover:border-gray-200 active:scale-[0.99]',
         leaving && 'opacity-0 scale-[0.98] -translate-x-2 max-h-0 py-0 my-0 overflow-hidden',
       )}
     >
       <button
         onClick={(e) => { e.stopPropagation(); onToggle() }}
         className={clsx(
-          'w-4 h-4 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center transition-all duration-200 active:scale-75',
-          isDone ? 'bg-blue-500 border-blue-500' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50',
+          'w-[18px] h-[18px] mt-0.5 rounded-full border flex-shrink-0 flex items-center justify-center transition-all duration-200 active:scale-75',
+          isDone ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300 hover:border-pink-400 hover:bg-pink-50',
         )}
       >
-        {isDone && <Check size={11} className="text-white" />}
+        {isDone && <Check size={12} className="text-white" />}
       </button>
       <div className="flex-1 min-w-0">
-        <p className={clsx('text-sm leading-snug break-words whitespace-normal', isDone ? 'text-gray-400 line-through' : 'text-gray-800')}>{todo.title}</p>
+        <p className={clsx('text-[15px] md:text-sm leading-snug break-words whitespace-normal', isDone ? 'text-gray-400 line-through' : 'text-gray-800')}>{todo.title}</p>
         {todo.body && <p className="text-xs text-gray-400 break-words whitespace-normal mt-0.5">{todo.body}</p>}
         <div className="flex flex-wrap gap-1 mt-1">
           {todo.complexity && (

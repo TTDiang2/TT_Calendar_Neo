@@ -29,50 +29,53 @@ export function MonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleC
 
   return (
     <div className="flex-1 flex flex-col min-h-0 gap-1.5 md:gap-0">
-      <div className="grid grid-cols-7 gap-1 mb-1 md:mb-1 flex-shrink-0">
-        {WEEKDAYS.map((w, i) => (
-          <div
-            key={w}
-            className={`text-center text-[11px] md:text-xs font-medium py-1 ${i >= 5 ? 'text-red-400' : 'text-gray-400'}`}
-          >
-            {w}
-          </div>
-        ))}
-      </div>
+      {/* 手机：月份网格包进圆角卡片（与小组件/分析页同一视觉语言）；桌面保持铺满无卡片 */}
+      <div className="flex flex-col min-h-0 rounded-3xl bg-white border border-gray-100 shadow-sm p-3 md:contents">
+        <div className="grid grid-cols-7 gap-1 mb-2 md:mb-1 flex-shrink-0">
+          {WEEKDAYS.map((w, i) => (
+            <div
+              key={w}
+              className={`text-center text-[11px] md:text-xs font-medium py-1 ${i >= 5 ? 'text-pink-400' : 'text-gray-400'}`}
+            >
+              {w}
+            </div>
+          ))}
+        </div>
 
-      {/* 月份网格：
-          手机且含今日 agenda → 压缩到上半（shrink-0，超高时自身可滚，最大占 ~58% 屏留给 agenda）；
-          否则（桌面 / 不含今日的月份）→ 占满剩余高度、超高整月可滚 */}
-      <div
-        className={clsx(
-          'grid grid-cols-7 gap-1',
-          showAgenda
-            ? 'md:flex-1 md:min-h-0 md:overflow-y-auto shrink-0 min-h-0 max-h-[58dvh] overflow-y-auto'
-            : 'flex-1 min-h-0 overflow-y-auto',
-        )}
-        onDragEnd={() => setDragOver(null)}
-      >
-        {monthData.days.map((day: Day, i) => (
-          <DayCell
-            key={i}
-            day={day}
-            layers={layers}
-            selected={selectedDate === day.date}
-            dragOver={dragOver === day.date}
-            onClick={onSelect}
-            onDoubleClick={onDoubleClick}
-            onContextMenu={onContextMenu}
-            onDragStart={(d) => {
-              onDragStart(d)
-              setDragOver(d)
-            }}
-            onDragEnter={(d) => setDragOver(d)}
-            onDrop={(d) => {
-              setDragOver(null)
-              onDrop(d)
-            }}
-          />
-        ))}
+        {/* 月份网格：
+            手机且含今日 agenda → 压缩到上半（shrink-0，超高时自身可滚，最大占 ~58% 屏留给 agenda）；
+            否则（桌面 / 不含今日的月份）→ 占满剩余高度、超高整月可滚 */}
+        <div
+          className={clsx(
+            'grid grid-cols-7 gap-1',
+            showAgenda
+              ? 'md:flex-1 md:min-h-0 md:overflow-y-auto shrink-0 min-h-0 max-h-[58dvh] overflow-y-auto'
+              : 'flex-1 min-h-0 overflow-y-auto',
+          )}
+          onDragEnd={() => setDragOver(null)}
+        >
+          {monthData.days.map((day: Day, i) => (
+            <DayCell
+              key={i}
+              day={day}
+              layers={layers}
+              selected={selectedDate === day.date}
+              dragOver={dragOver === day.date}
+              onClick={onSelect}
+              onDoubleClick={onDoubleClick}
+              onContextMenu={onContextMenu}
+              onDragStart={(d) => {
+                onDragStart(d)
+                setDragOver(d)
+              }}
+              onDragEnter={(d) => setDragOver(d)}
+              onDrop={(d) => {
+                setDragOver(null)
+                onDrop(d)
+              }}
+            />
+          ))}
+        </div>
       </div>
 
       {/* 手机：今日 agenda 占满月视图剩余空间（md 以上隐藏，因桌面月格子已铺满） */}
