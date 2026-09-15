@@ -29,6 +29,32 @@ if (!projDir) {
   process.exit(1)
 }
 const projPath = join(genApple, projDir, 'project.pbxproj')
+
+// 确定性对象 ID：**必须恰好 24 个十六进制字符**（0-9A-F）。
+// 早先用 'TT0WIDGET...' 前缀（含 T/W/G 非十六进制字符、且长 27 位）会导致
+// xcodebuild 解析 pbxproj 失败（CI 表现：xcodebuild -list 退 74，被 set -e 掐断）。
+const ID_SEQ = ['01','02','03','04','05','06','07','08','09','0A','0B','0C','0D','0E','0F','10']
+const ID_PREFIX = 'FEED' + '0'.repeat(18) // 4 + 18 = 22 位
+const idAt = (n) => ID_PREFIX + ID_SEQ[n]
+const ids = {
+  widgetTarget: idAt(0),
+  widgetConfigList: idAt(1),
+  widgetCfgDebug: idAt(2),
+  widgetCfgRelease: idAt(3),
+  widgetSourcesPhase: idAt(4),
+  widgetFrameworksPhase: idAt(5),
+  widgetSwiftFileRef: idAt(6),
+  widgetSwiftBuildFile: idAt(7),
+  widgetPlistFileRef: idAt(8),
+  widgetEntFileRef: idAt(9),
+  widgetGroup: idAt(10),
+  widgetProductRef: idAt(11),
+  widgetProductBuildFile: idAt(12),
+  embedPhase: idAt(13),
+  embedBuildFile: idAt(14),
+  containerProxy: idAt(15),
+  targetDependency: ID_PREFIX + '11',
+}
 let pbx = readFileSync(projPath, 'utf8')
 
 // plist 值格式化：数组 → ( item, ... )；含空格/逗号等特殊字符的字符串加引号
@@ -57,26 +83,6 @@ if (pbx.includes('/* TTWidget */')) {
   }
   console.log('[widget] 源文件已拷贝 ->', widgetDir)
 
-  // 确定性对象 ID（24 位十六进制大写）
-  const ids = {
-    widgetTarget: 'TT0WIDGET00000000000000001A',
-    widgetConfigList: 'TT0WIDGET00000000000000002B',
-    widgetCfgDebug: 'TT0WIDGET00000000000000003C',
-    widgetCfgRelease: 'TT0WIDGET00000000000000004D',
-    widgetSourcesPhase: 'TT0WIDGET00000000000000005E',
-    widgetFrameworksPhase: 'TT0WIDGET00000000000000006F',
-    widgetSwiftFileRef: 'TT0WIDGET000000000000000070',
-    widgetSwiftBuildFile: 'TT0WIDGET000000000000000081',
-    widgetPlistFileRef: 'TT0WIDGET000000000000000092',
-    widgetEntFileRef: 'TT0WIDGET0000000000000000A3',
-    widgetGroup: 'TT0WIDGET0000000000000000B4',
-    widgetProductRef: 'TT0WIDGET0000000000000000C5',
-    widgetProductBuildFile: 'TT0WIDGET0000000000000000D6',
-    embedPhase: 'TT0WIDGET0000000000000000E7',
-    embedBuildFile: 'TT0WIDGET0000000000000000F8',
-    containerProxy: 'TT0WIDGET000000000000000109',
-    targetDependency: 'TT0WIDGET00000000000000011A',
-  }
 
   // 1) PBXBuildFile
   const buildFileEntries = `
@@ -338,7 +344,7 @@ ${fmtSettings(baseSettings)}
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "TT0WIDGET00000000000000001A"
+               BlueprintIdentifier = "${ids.widgetTarget}"
                BuildableName = "TTWidget.appex"
                BlueprintName = "TTWidget"
                ReferencedContainer = "container:${projDir}">
