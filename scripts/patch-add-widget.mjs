@@ -57,19 +57,31 @@ const ids = {
 }
 let pbx = readFileSync(projPath, 'utf8')
 
-// plist 值格式化：数组 → ( item, ... )；含空格/逗号等特殊字符的字符串加引号
+// plist 值格式化。
+// ⚠️ pbxproj（OpenStep plist）里**含空格的值必须加引号**：早先把
+// `iPhone Developer` 裸写导致解析器读到 "iPhone" 就等分号 →
+// "missing semicolon in dictionary" → 整个工程被判损坏（CI 实测第 552 行）。
+// 规则收紧：只有纯标识符（字母/下划线开头 + 词字符）才裸写，其余一律
+// JSON 引号化（路径、$(VAR)、1,2、带空格的值、-Onone 全走引号）。
 const fmtValue = (v) => {
   if (Array.isArray(v)) {
     if (v.length === 0) return '()'
     const items = v.map((x) => `\t\t\t\t\t${fmtValue(x)},`).join('\n')
     return `(\n${items}\n\t\t\t\t)`
   }
-  if (typeof v === 'string' && /^[\w.$+\-/ @]+$/.test(v)) return v
+  if (typeof v === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(v)) return v
   return JSON.stringify(v)
 }
+// 收集所有由本脚本生成的 build setting 行，供 validateInjected 精准自检
+// （只查自己写的行，避免对 Xcode 原生语法——如行尾注释、内联 dict——误报）
+const generatedSettingLines = []
 const fmtSettings = (settings) =>
   Object.entries(settings)
-    .map(([k, v]) => `\t\t\t\t${k} = ${fmtValue(v)};`)
+    .map(([k, v]) => {
+      const line = `\t\t\t\t${k} = ${fmtValue(v)};`
+      generatedSettingLines.push(line)
+      return line
+    })
     .join('\n')
 
 if (pbx.includes('/* TTWidget */')) {
@@ -278,7 +290,7 @@ if (pbx.includes('/* TTWidget */')) {
     PRODUCT_NAME: '$(TARGET_NAME)',
     SDKROOT: 'iphoneos',
     SWIFT_VERSION: '5.0',
-    TARGETED_DEVICE_FAMILY: '"1,2"',
+    TARGETED_DEVICE_FAMILY: '1,2',
     VALID_ARCHS: 'arm64',
     WRAPPER_EXTENSION: 'appex',
   }
@@ -321,7 +333,47 @@ ${fmtSettings(baseSettings)}
   pbx = pbx.replace('/* End XCConfigurationList section */', `${configList}/* End XCConfigurationList section */`)
 
   writeFileSync(projPath, pbx)
+  validateInjected(pbx)
   console.log('[widget] project.pbxproj 注入完成：TTWidget target（app-extension）+ Embed PlugIns phase + target 依赖')
+}
+
+/**
+ * 自检注入结果：OpenStep plist 里**未加引号的值不能含空格/逗号**，否则解析器
+ * 会说 "missing semicolon in dictionary" 并把整个工程判为损坏（2026-09-15 CI
+ * 实测：CODE_SIGN_IDENTITY = iPhone Developer 缺引号，第 552 行）。Windows 上
+ * 没有 xcodebuild 可提前发现，故在脚本里兜一道。
+ */
+function validateInjected(text) {
+  const problems = []
+  for (const raw of generatedSettingLines) {
+    // 多行数组值（ARCHS/LD_RUNPATH_SEARCH_PATHS）逐项都由 fmtValue 加引号，
+    // 结构固定，跳过单行检查即可
+    if (raw.includes('\n')) continue
+    const m = /^\s*([A-Za-z_][\w.[\]]*)\s+= (.+);$/.exec(raw)
+    if (!m) {
+      problems.push(`行格式异常 -> ${raw.trim()}`)
+      continue
+    }
+    const value = m[2]
+    const isQuoted = value.startsWith('"') && value.endsWith('"')
+    const isVar = value.startsWith('$(')
+    const isContainer = value.startsWith('(') || value.startsWith('{')
+    if (!isQuoted && !isVar && !isContainer && /[\s,]/.test(value)) {
+      problems.push(`未加引号的值含空格/逗号 -> ${raw.trim()}`)
+    }
+  }
+  if (problems.length > 0) {
+    console.error('[widget] ✗ pbxproj 自检失败（会致工程被判损坏）：')
+    for (const pr of problems.slice(0, 5)) console.error('   ', pr)
+    process.exit(1)
+  }
+  const braces = (text.match(/\{/g) ?? []).length - (text.match(/\}/g) ?? []).length
+  const parens = (text.match(/\(/g) ?? []).length - (text.match(/\)/g) ?? []).length
+  if (braces !== 0 || parens !== 0) {
+    console.error(`[widget] ✗ pbxproj 括号不配平：braces=${braces} parens=${parens}`)
+    process.exit(1)
+  }
+  console.log(`[widget] pbxproj 自检通过（${generatedSettingLines.length} 条设置行引号合规 + 括号配平）`)
 }
 
 // 11) scheme 补丁：把 widget 加进 BuildActionEntries。
