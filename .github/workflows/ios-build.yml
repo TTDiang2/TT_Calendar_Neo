@@ -40,6 +40,7 @@ on:
       - 'apps/mobile/**'
       - 'packages/**'
       - 'scripts/patch-ios-plist.mjs'
+      - 'scripts/patch-add-widget.mjs'
       - 'scripts/verify-ios-build.mjs'
       - 'scripts/ios-install-guide.md'
       - 'scripts/ci-ios-options-server/**'
