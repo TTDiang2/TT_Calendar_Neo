@@ -6,6 +6,7 @@ import { App, setBackend, createHttpBackend } from '@tt-calendar/ui'
 import { ErrorBoundary } from '@tt-calendar/ui/components/ErrorBoundary'
 import { createLocalBackend } from './local/backend'
 import { bootLog, bootLogSettle } from './boot-log'
+import { refreshWidgetSnapshot, startWidgetRefresh } from './widget-bridge'
 
 // 启动期兜底诊断：任何未捕获 rejection / 脚本错误都必须留痕上屏，
 // 否则真机上就是一张没有线索的白屏（2026-09-13 卡点排查教训）
@@ -182,8 +183,12 @@ async function bootInner(): Promise<void> {
     try {
       setBackend(
         await createLocalBackend({
-          // 启动自动同步（auto_on_start）完成后，让 react-query 重新拉取最新数据
-          onSynced: () => void queryClient.invalidateQueries(),
+          // 启动自动同步（auto_on_start）完成后，让 react-query 重新拉取最新数据；
+          // 顺带把最新数据推给主屏小组件（延后一拍，等 setBackend 完成后再取数）
+          onSynced: () => {
+            void queryClient.invalidateQueries()
+            setTimeout(() => void refreshWidgetSnapshot(), 150)
+          },
         }),
       )
     } catch (err) {
@@ -191,6 +196,9 @@ async function bootInner(): Promise<void> {
       throw err
     }
     bootLog('createLocalBackend resolved')
+    // 主屏小组件数据桥：数据就绪后先推一次，并启动周期刷新
+    void refreshWidgetSnapshot()
+    startWidgetRefresh()
   }
   root.innerHTML = ''
   bootLog('root cleared; React render start')

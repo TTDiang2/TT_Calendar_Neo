@@ -249,6 +249,13 @@ jobs:
       - name: 注入 Info.plist 权限键（ATS + 本地网络）
         run: node scripts/patch-ios-plist.mjs
 
+      - name: 上传生成的 Xcode 工程（小组件注入脚本的分析输入）
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-project-dump
+          path: apps/mobile/src-tauri/gen/apple
+          retention-days: 7
+
       - name: 构建未签名真机 .app（直接 xcodebuild 关签名）
         working-directory: apps/mobile
         run: |

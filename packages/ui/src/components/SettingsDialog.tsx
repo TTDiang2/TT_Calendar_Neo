@@ -409,6 +409,11 @@ function SyncConfigSection() {
           </div>
         </div>
       )}
+      {status?.notice && decision === null && (
+        <div className="mb-3 p-3 rounded-md bg-sky-50 border border-sky-200 text-sm text-sky-800">
+          {status.notice}
+        </div>
+      )}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500 w-20 flex-shrink-0">{status?.configured ? lastLine : '未配置'}</span>

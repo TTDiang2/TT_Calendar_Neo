@@ -70,10 +70,29 @@ export class LocalDbCore {
     if (!cfg.repo || !cfg.has_token || !cfg[flag]) return
     try {
       const result = await facade.sync('merge')
-      // 首绑决策必须由用户在设置面板里做，后台自动同步只处理常规合并
-      if (result.result === 'ok') this.onSynced?.(result)
-    } catch {
-      // 后台同步失败（离线/凭据过期等）不打断使用；手动同步时会看到具体错误
+      // 首绑决策必须由用户在设置面板里做，后台自动同步只处理常规合并；
+      // 但 needs_decision / initialized / 异常不能静默吞掉——留痕到 meta，
+      // 设置面板「数据同步」节读取展示（否则用户只会看到莫名的全 0）。
+      if (result.result === 'ok') {
+        this.handle?.backend.setMeta('sync.pending_notice', '')
+        this.onSynced?.(result)
+      } else if (result.result === 'needs_decision') {
+        const detail = `后台同步等待你的决定：远端仓库已有 ${result.remote_rows ?? '?'} 行数据，请到「设置 → 数据同步」选择合并方式`
+        this.handle?.backend.setMeta('sync.pending_notice', JSON.stringify({ at: Date.now(), detail }))
+      } else if (result.result === 'initialized') {
+        this.handle?.backend.setMeta(
+          'sync.pending_notice',
+          JSON.stringify({ at: Date.now(), detail: `后台已完成首次上传（${result.pushed ?? 0} 行）` }),
+        )
+      }
+    } catch (e) {
+      // 后台同步失败（离线/凭据过期等）不打断使用；留痕后手动同步时会看到具体错误
+      const detail = `后台自动同步失败：${e instanceof Error ? e.message : String(e)}`
+      try {
+        this.handle?.backend.setMeta('sync.pending_notice', JSON.stringify({ at: Date.now(), detail }))
+      } catch {
+        /* 库都打不开时无处可写，只能放弃 */
+      }
     }
   }
 

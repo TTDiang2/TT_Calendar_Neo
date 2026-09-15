@@ -19,8 +19,14 @@ import type { SqliteBackend } from '../backend'
 import { SyncService } from '../sync-service'
 
 export interface SyncRemote {
-  /** 远端数据；null = 空仓/分支不存在 */
-  readData(): Promise<{ snapshot: Snapshot; tombstones: Tombstones; commitSha: string } | null>
+  /** 远端数据；null = 空仓/分支不存在。legacy=true 表示远端是旧版
+   *  TT_Calendar 的每表一文件布局（已由 GitHubDataRepo 合成 Neo 快照）。 */
+  readData(): Promise<{
+    snapshot: Snapshot
+    tombstones: Tombstones
+    commitSha: string
+    legacy: boolean
+  } | null>
   writeData(
     snapshot: Snapshot,
     tombstones: Tombstones,
@@ -55,6 +61,7 @@ const K_ON_CLOSE = 'sync.sync_on_close'
 const K_LAST_AT = 'sync.last_at'
 const K_LAST_OK = 'sync.last_ok'
 const K_LAST_COMMIT = 'sync.last_commit'
+const K_PENDING_NOTICE = 'sync.pending_notice'
 
 export interface LocalSyncBase {
   snapshot: Snapshot
@@ -143,14 +150,25 @@ export class SyncFacade {
     ok?: boolean
     report?: Record<string, number>
     commit?: string | null
+    notice?: string
   } {
     const cfg = this.getConfig()
     const at = this.backend.getMeta(K_LAST_AT) ?? undefined
+    let notice: string | undefined
+    const rawNotice = this.backend.getMeta(K_PENDING_NOTICE)
+    if (rawNotice) {
+      try {
+        notice = (JSON.parse(rawNotice) as { detail?: string }).detail
+      } catch {
+        notice = undefined
+      }
+    }
     return {
       configured: cfg.repo !== '' && cfg.has_token,
       at,
       ok: this.backend.getMeta(K_LAST_OK) === '1',
       commit: this.backend.getMeta(K_LAST_COMMIT) ?? null,
+      notice,
     }
   }
 
@@ -164,6 +182,12 @@ export class SyncFacade {
       const data = await remote.readData()
       if (!data) return { ok: true, detail: `连接成功：分支 ${cfg.branch} 尚不存在（首次同步将创建）` }
       const rows = rowCountOf(data.snapshot)
+      if (data.legacy) {
+        return {
+          ok: true,
+          detail: `连接成功：检测到旧版 TT_Calendar 数据仓（${rows} 行）——可直接合并迁移，无需旧版 app`,
+        }
+      }
       return rows === 0
         ? { ok: true, detail: '连接成功：远端数据仓为空（首次同步将上传本地数据）' }
         : { ok: true, detail: `连接成功：远端已有 ${rows} 行数据` }

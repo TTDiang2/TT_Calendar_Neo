@@ -30,7 +30,7 @@ function fakeRemote(initial?: { snapshot: Snapshot; tombstones: Tombstones; head
   const remote: SyncRemote = {
     async readData() {
       if (head === null) return null
-      return { snapshot: structuredClone(snapshot), tombstones: structuredClone(tombstones), commitSha: head }
+      return { snapshot: structuredClone(snapshot), tombstones: structuredClone(tombstones), commitSha: head, legacy: false }
     },
     async writeData(snap, tombs, parentSha) {
       if (pendingConflicts > 0) {
@@ -169,7 +169,7 @@ describe('SyncFacade 端到端（假远端）', () => {
           head = 'rival0'
           return null
         }
-        return { snapshot: structuredClone(snapshot), tombstones: structuredClone(tombstones), commitSha: head }
+        return { snapshot: structuredClone(snapshot), tombstones: structuredClone(tombstones), commitSha: head, legacy: false }
       },
       async writeData(snap, tombs, parentSha) {
         writes += 1

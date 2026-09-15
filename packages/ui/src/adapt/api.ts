@@ -78,6 +78,8 @@ export interface SyncStatus {
   ok?: boolean
   report?: SyncReport
   commit?: string | null
+  /** 后台自动同步留下的待办提示（如 needs_decision 等待用户决定） */
+  notice?: string
 }
 
 export interface SyncResult {

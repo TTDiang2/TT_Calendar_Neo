@@ -22,6 +22,16 @@ const API_ROOT = 'https://api.github.com'
 export const SNAPSHOT_PATH = 'data/snapshot.json'
 export const TOMBSTONES_PATH = 'data/tombstones.json'
 
+/** 旧版 TT_Calendar 数据仓的每表一文件布局（data/{table}.json）识别 */
+function isLegacyTablePath(path: string): boolean {
+  return (
+    path.startsWith('data/') &&
+    path.endsWith('.json') &&
+    path !== SNAPSHOT_PATH &&
+    path !== TOMBSTONES_PATH
+  )
+}
+
 /** 422 = ref 非快进（远端被并发推进） */
 export class SyncConflictError extends Error {
   constructor(message = '远端分支已被并发更新（非快进），需要重拉重并') {
@@ -239,8 +249,17 @@ export class GitHubDataRepo {
     return { commitSha: commit.sha, htmlUrl: commit.html_url ?? null }
   }
 
-  /** 读远端数据（快照+墓碑）；空仓/分支不存在返回 null */
-  async readData(): Promise<{ snapshot: Snapshot; tombstones: Tombstones; commitSha: string } | null> {
+  /** 读远端数据（快照+墓碑）；空仓/分支不存在返回 null。
+   *  兼容旧版 TT_Calendar 数据仓：新版是单文件 data/snapshot.json；旧版是
+   *  manifest.json + data/{table}.json（每表一文件 {"rows":[...]}）。两者
+   *  表名/行身份（sync_uid）/墓碑格式完全同构，旧版仓可直接合成 Neo 快照，
+   *  数据无需迁移即可跨版本互通。legacy=true 标记来源为旧版布局。 */
+  async readData(): Promise<{
+    snapshot: Snapshot
+    tombstones: Tombstones
+    commitSha: string
+    legacy: boolean
+  } | null> {
     const head = await this.headSha()
     if (!head) return null
     // 只取一次 tree：快照与墓碑必须来自同一 commit，否则合并会拿
@@ -254,25 +273,57 @@ export class GitHubDataRepo {
       this.blobFromTree(tree, SNAPSHOT_PATH),
       this.blobFromTree(tree, TOMBSTONES_PATH),
     ])
-    const snapshot: Snapshot = snap ? (JSON.parse(textDecoder.decode(snap)) as Snapshot) : {}
     const tombstones: Tombstones = tombs ? (JSON.parse(textDecoder.decode(tombs)) as Tombstones) : {}
-    return { snapshot, tombstones, commitSha: head }
+    if (snap) {
+      const snapshot = JSON.parse(textDecoder.decode(snap)) as Snapshot
+      return { snapshot, tombstones, commitSha: head, legacy: false }
+    }
+    // 新版快照缺失：探测旧版每表一文件布局（data/*.json，排除 tombstones）
+    const legacyTables = tree.tree.filter(
+      (t) => t.type === 'blob' && isLegacyTablePath(t.path),
+    )
+    if (legacyTables.length === 0) {
+      // 分支存在但完全无文件（空树提交）：视为空的 Neo 仓
+      return { snapshot: {}, tombstones, commitSha: head, legacy: false }
+    }
+    const snapshot: Snapshot = {}
+    await Promise.all(
+      legacyTables.map(async (entry) => {
+        const table = entry.path.slice('data/'.length, -'.json'.length)
+        try {
+          const blob = await this.blobFromTree(tree, entry.path)
+          if (!blob) return
+          const parsed = JSON.parse(textDecoder.decode(blob)) as { rows?: unknown[] }
+          if (Array.isArray(parsed.rows)) {
+            ;(snapshot as Record<string, unknown[]>)[table] = parsed.rows
+          }
+        } catch {
+          // 单表损坏：跳过该表，不让整仓不可读
+        }
+      }),
+    )
+    return { snapshot, tombstones, commitSha: head, legacy: true }
   }
 
-  /** 写远端数据（一次提交两个文件） */
+  /** 写远端数据（一次提交：Neo 单文件快照 + 旧版兼容双写每表一文件）。
+   *  双写让旧版 TT_Calendar 桌面端与 Neo 共用同一数据仓（旧版读不到
+   *  snapshot.json；墓碑两版格式相同，天然共享）。空表也写 {"rows":[]}，
+   *  防止旧版客户端看到已清空表的残影。 */
   async writeData(
     snapshot: Snapshot,
     tombstones: Tombstones,
     parentSha: string | null,
     message: string,
   ): Promise<{ commitSha: string; htmlUrl: string | null }> {
-    return this.commitFiles(
-      [
-        { path: SNAPSHOT_PATH, text: JSON.stringify(snapshot) },
-        { path: TOMBSTONES_PATH, text: JSON.stringify(tombstones) },
-      ],
-      parentSha,
-      message,
-    )
+    const files: { path: string; text: string }[] = [
+      { path: SNAPSHOT_PATH, text: JSON.stringify(snapshot) },
+      { path: TOMBSTONES_PATH, text: JSON.stringify(tombstones) },
+    ]
+    for (const [table, rows] of Object.entries(snapshot)) {
+      if (Array.isArray(rows)) {
+        files.push({ path: `data/${table}.json`, text: JSON.stringify({ rows }) })
+      }
+    }
+    return this.commitFiles(files, parentSha, message)
   }
 }

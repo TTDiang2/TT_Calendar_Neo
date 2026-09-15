@@ -78,7 +78,7 @@ describe('GitHubDataRepo', () => {
 
     const repo = new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' })
     const data = await repo.readData()
-    expect(data).toEqual({ snapshot: {}, tombstones: {}, commitSha: 'h' })
+    expect(data).toEqual({ snapshot: {}, tombstones: {}, commitSha: 'h', legacy: false })
   })
 
   it('非快进 422 → SyncConflictError（不重试）', async () => {
@@ -145,5 +145,80 @@ describe('GitHubDataRepo', () => {
     withFetch(() => new Response('not found', { status: 404 }))
     const repo = new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' })
     expect(await repo.readData()).toBeNull()
+  })
+
+  it('旧版 TT_Calendar 数据仓（每表一文件）→ readData 合成 Neo 快照，legacy=true', async () => {
+    const LEGACY_ROWS = { rows: [{ sync_uid: 'u1', title: '旧版事件', date: '2026-01-01' }] }
+    withFetch((method, path) => {
+      if (path === '/repos/u/d/git/ref/heads/main') {
+        return okJson({ object: { sha: 'head-old' } })
+      }
+      if (path.startsWith('/repos/u/d/git/trees/head-old')) {
+        return okJson({
+          tree: [
+            { path: 'manifest.json', type: 'blob', sha: 'b-manifest' },
+            { path: 'data/events.json', type: 'blob', sha: 'b-events' },
+            { path: 'data/todo_list.json', type: 'blob', sha: 'b-todolist' },
+            { path: 'data/tombstones.json', type: 'blob', sha: 'b-tombs' },
+          ],
+        })
+      }
+      if (path.startsWith('/repos/u/d/git/blobs/b-events')) {
+        return okJson({ content: B64(LEGACY_ROWS), encoding: 'base64' })
+      }
+      if (path.startsWith('/repos/u/d/git/blobs/b-tombs')) {
+        return okJson({ content: B64({ 'events|u9': '2026-01-02 08:00:00+08:00' }), encoding: 'base64' })
+      }
+      if (path.startsWith('/repos/u/d/git/blobs/b-todolist')) {
+        return okJson({ content: B64({ rows: [] }), encoding: 'base64' })
+      }
+      if (path.startsWith('/repos/u/d/git/blobs/b-manifest')) return okJson({ content: B64({}), encoding: 'base64' })
+      return new Response('nope', { status: 404 })
+    })
+
+    const repo = new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' })
+    const data = await repo.readData()
+    expect(data).not.toBeNull()
+    expect(data!.legacy).toBe(true)
+    expect(data!.snapshot['events']).toEqual(LEGACY_ROWS.rows)
+    expect(data!.snapshot['todo_list']).toEqual([])
+    expect(data!.tombstones['events|u9']).toBe('2026-01-02 08:00:00+08:00')
+  })
+
+  it('writeData 双写：除 Neo 快照外，还为每张表写旧版兼容文件', async () => {
+    const created: { path: string; text: string }[] = []
+    withFetch((method, path, body) => {
+      if (path === '/repos/u/d/git/blobs' && method === 'POST') {
+        const parsed = JSON.parse(String(body)) as { content: string }
+        const text = Buffer.from(parsed.content, 'base64').toString('utf8')
+        created.push({ path: '', text })
+        return okJson({ sha: `b${created.length}`, html_url: 'x' })
+      }
+      if (path === '/repos/u/d/git/trees' && method === 'POST') {
+        const parsed = JSON.parse(String(body)) as { tree: { path: string }[] }
+        for (const t of parsed.tree) created.push({ path: t.path, text: '' })
+        return okJson({ sha: 'tree1' })
+      }
+      if (path === '/repos/u/d/git/commits' && method === 'POST') return okJson({ sha: 'c1', html_url: 'x' })
+      if (path.startsWith('/repos/u/d/git/refs/heads/main') && method === 'PATCH') return okJson({})
+      if (path === '/repos/u/d/git/refs' && method === 'POST') return okJson({ sha: 'c1' })
+      return new Response('nope', { status: 404 })
+    })
+
+    const repo = new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' })
+    await repo.writeData(
+      { todo: [{ id: 't1', title: 'x' }], events: [{ sync_uid: 'e1' }], marks: [] },
+      {},
+      null,
+      'm',
+    )
+    const paths = created.filter((c) => c.path).map((c) => c.path)
+    expect(paths).toContain('data/snapshot.json')
+    expect(paths).toContain('data/tombstones.json')
+    expect(paths).toContain('data/todo.json')
+    expect(paths).toContain('data/events.json')
+    expect(paths).toContain('data/marks.json') // 空表也写 {"rows":[]}，防旧客户端残影
+    const rowsFile = created.find((c) => c.text.includes('"rows"'))
+    expect(rowsFile!.text).toContain('"rows"')
   })
 })
