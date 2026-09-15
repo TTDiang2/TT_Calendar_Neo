@@ -134,12 +134,21 @@ jobs:
           fi
           echo "project: $PROJ"
           # 取 iOS scheme（形如 tt-calendar-mobile_iOS），去掉首尾空白
-          SCHEME=$(xcodebuild -project "$PROJ" -list 2>/dev/null \
-            | awk '/Schemes:/{f=1;next} f&&/iOS/{print;exit}' \
+          # set -e + pipefail 下 xcodebuild -list 失败会直接终止脚本、吞掉错误信息；
+          # 这里显式接住并打印原始输出（如 pbxproj 被注入脚本改坏时能立刻看到）
+          set +e
+          LIST_OUT=$(xcodebuild -project "$PROJ" -list 2>&1)
+          LIST_RC=$?
+          set -e
+          printf '%s\n' "$LIST_OUT" | head -40
+          if [ "$LIST_RC" != "0" ]; then
+            echo "xcodebuild -list 失败（退出码 $LIST_RC）：工程文件可能有问题"
+            exit 1
+          fi
+          SCHEME=$(printf '%s\n' "$LIST_OUT" | awk '/Schemes:/{f=1;next} f&&/iOS/{print;exit}' \
             | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           if [ -z "$SCHEME" ]; then
-            echo "找不到 iOS scheme，列出全部 scheme："
-            xcodebuild -project "$PROJ" -list || true
+            echo "找不到 iOS scheme（见上方 list 输出）"
             exit 1
           fi
           echo "scheme: $SCHEME"
@@ -296,12 +305,21 @@ jobs:
             exit 1
           fi
           echo "project: $PROJ"
-          SCHEME=$(xcodebuild -project "$PROJ" -list 2>/dev/null \
-            | awk '/Schemes:/{f=1;next} f&&/iOS/{print;exit}' \
+          # set -e + pipefail 下 xcodebuild -list 失败会直接终止脚本、吞掉错误信息；
+          # 这里显式接住并打印原始输出（如 pbxproj 被注入脚本改坏时能立刻看到）
+          set +e
+          LIST_OUT=$(xcodebuild -project "$PROJ" -list 2>&1)
+          LIST_RC=$?
+          set -e
+          printf '%s\n' "$LIST_OUT" | head -40
+          if [ "$LIST_RC" != "0" ]; then
+            echo "xcodebuild -list 失败（退出码 $LIST_RC）：工程文件可能有问题"
+            exit 1
+          fi
+          SCHEME=$(printf '%s\n' "$LIST_OUT" | awk '/Schemes:/{f=1;next} f&&/iOS/{print;exit}' \
             | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           if [ -z "$SCHEME" ]; then
-            echo "找不到 iOS scheme，列出全部 scheme："
-            xcodebuild -project "$PROJ" -list || true
+            echo "找不到 iOS scheme（见上方 list 输出）"
             exit 1
           fi
           echo "scheme: $SCHEME"
