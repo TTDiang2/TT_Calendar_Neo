@@ -42,15 +42,20 @@ struct TodayEntry: TimelineEntry {
 }
 
 struct Provider: TimelineProvider {
+    // 显式绑定关联类型：只用 placeholder 的返回类型不足以让编译器把 Entry
+    // 解析出来（CI 实测报 "reference to invalid associated type 'Entry'"），
+    // 且下面三个方法一律用具体类型 TodayEntry，不写裸 Entry。
+    typealias Entry = TodayEntry
+
     func placeholder(in context: Context) -> TodayEntry {
         TodayEntry(date: Date(), snap: nil)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) {
+    func getSnapshot(in context: Context, completion: @escaping (TodayEntry) -> Void) {
         completion(TodayEntry(date: Date(), snap: loadSnapshot()))
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
+    func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
         let entry = TodayEntry(date: Date(), snap: loadSnapshot())
         // 兜底刷新：30 分钟后（主 App 每次写数据时会请求更即时的重载）
         let next = Calendar.current.date(byAdding: .minute, value: 30, to: Date())
