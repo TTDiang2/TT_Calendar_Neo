@@ -110,10 +110,10 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
         maxLabels >= 6 ? 'min-h-[104px] md:min-h-[160px]' : 'min-h-[44px] md:min-h-[104px]',
         'hover:shadow-md hover:-translate-y-0.5',
         day.is_today
-          ? 'border-2 border-blue-500'
+          ? 'border-2 border-pink-400 md:border-blue-500'
           : 'border-gray-200',
         day.is_other_month && 'opacity-40',
-        selected && 'ring-2 ring-blue-300',
+        selected && 'ring-2 ring-pink-300 md:ring-blue-300',
         dragOver && 'ring-2 ring-green-400 scale-[1.02]',
       )}
     >

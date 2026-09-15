@@ -6,7 +6,10 @@
 # 两个 job（都用「直接 xcodebuild」而非 `tauri ios build`，原因见文件末尾注释）：
 #   · simulator（模拟器包）：iphonesimulator sdk，无需签名，产物 .zip
 #     → Appetize.io 浏览器跑 / Mac Simulator 跑。
-#   · device-unsigned（真机未签名包）：iphoneos sdk + CODE_SIGNING_ALLOWED=NO
+#   · device-unsigned（真机包）：iphoneos sdk + ad-hoc 签名（CODE_SIGN_IDENTITY=-）
+#     带 App Group entitlements 的 WidgetKit extension 需要签名才能真正嵌入，
+#     故真机 job 改用 ad-hoc 自签；侧载工具（Sideloadly/iLoader）重签时保留
+#     entitlements，主屏小组件才能读到 App Group 共享数据
 #     → 未签名 .app → 打成 Payload/*.app 的 .ipa，iLoader/SideStore/Sideloadly
 #     免费自签装机。
 #
@@ -90,6 +93,9 @@ jobs:
 
       - name: 注入 Info.plist 权限键（ATS + 本地网络）
         run: node scripts/patch-ios-plist.mjs
+
+      - name: 注入主屏小组件 target（WidgetKit）
+        run: node scripts/patch-add-widget.mjs
 
       - name: 构建模拟器版 App（直接 xcodebuild）
         working-directory: apps/mobile
@@ -249,6 +255,9 @@ jobs:
       - name: 注入 Info.plist 权限键（ATS + 本地网络）
         run: node scripts/patch-ios-plist.mjs
 
+      - name: 注入主屏小组件 target（WidgetKit）
+        run: node scripts/patch-add-widget.mjs
+
       - name: 上传生成的 Xcode 工程（小组件注入脚本的分析输入）
         uses: actions/upload-artifact@v4
         with:
@@ -309,12 +318,11 @@ jobs:
             CI=true \
             npm_config_confirm_modules_purge=false \
             npm_config_verify_deps_before_run=false \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=YES \
             DEVELOPMENT_TEAM="" \
             CODE_SIGN_STYLE=Manual \
-            AD_HOC_CODE_SIGNING_ALLOWED=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             > /tmp/xcb.log 2>&1
           XB=$?
           echo "xcodebuild 退出码: $XB"
@@ -353,6 +361,12 @@ jobs:
           EXE=$(find "$APP" -maxdepth 1 -type f -perm -111 | head -1)
           if [ -z "$EXE" ]; then echo ".app 内无可执行文件，产物无效: $APP"; exit 1; fi
           echo "可执行: $EXE ($(du -h "$EXE" | cut -f1))"
+          # 主屏小组件必须真的嵌进 PlugIns/，否则装上也没有小组件可选
+          if [ -d "$APP/PlugIns" ]; then
+            echo "已嵌入 extension："; find "$APP/PlugIns" -maxdepth 2 | sed 's/^/  /'
+          else
+            echo "警告：PlugIns 目录缺失——小组件未嵌入"
+          fi
           rm -rf Payload
           mkdir -p Payload
           cp -R "$APP" Payload/

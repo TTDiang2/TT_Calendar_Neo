@@ -121,15 +121,15 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
             </div>
           )}
 
-          {/* 模式切换：手机最后一行整行横滚，桌面保持原位置 */}
+          {/* 模式切换：手机最后一行整行横滚，桌面保持原位置（移动端胶囊化加大触点） */}
           <div className="order-4 md:order-3 w-full md:w-auto md:ml-4 -mx-2 px-2 md:mx-0 md:px-0 overflow-x-auto flex-shrink-0">
-            <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+            <div className="inline-flex rounded-full border border-gray-200 p-0.5 bg-gray-50">
               {MODES.map((m) => (
                 <button
                   key={m.key}
                   onClick={() => onModeChange(m.key)}
                   className={clsx(
-                    'flex-1 md:flex-none px-1.5 md:px-3 py-1 text-sm rounded-md transition whitespace-nowrap',
+                    'flex-1 md:flex-none px-3 md:px-3 py-1.5 md:py-1 text-sm rounded-full transition whitespace-nowrap',
                     mode === m.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
                   )}
                 >
@@ -139,7 +139,8 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
             </div>
           </div>
 
-          {/* 右侧操作：手机并入第 1 行（order-1）靠最右，桌面回单行最右 */}
+          {/* 右侧操作：手机并入第 1 行（order-1）靠最右，桌面回单行最右。
+              手机隐藏订阅入口（收进设置），减少小屏拥挤 */}
           <div className="order-1 md:order-4 ml-auto md:ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
             {onOpenLayers && (
               <button onClick={onOpenLayers} className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="图层">
@@ -160,7 +161,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
               <Search size={14} className="mr-2" />
               搜索事件…
             </button>
-            <button onClick={onOpenSubscription} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
+            <button onClick={onOpenSubscription} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
               <Rss size={18} />
             </button>
             <button onClick={onOpenSettings} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
@@ -176,13 +177,13 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
           </div>
 
           <div className="order-4 md:order-3 w-full md:w-auto md:ml-4 -mx-2 px-2 md:mx-0 md:px-0 overflow-x-auto flex-shrink-0">
-            <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+            <div className="inline-flex rounded-full border border-gray-200 p-0.5 bg-gray-50">
               {TODO_MODES.map((m) => (
                 <button
                   key={m.key}
                   onClick={() => onTodoViewChange(m.key)}
                   className={clsx(
-                    'flex-1 md:flex-none px-1.5 md:px-3 py-1 text-sm rounded-md transition whitespace-nowrap',
+                    'flex-1 md:flex-none px-3 md:px-3 py-1.5 md:py-1 text-sm rounded-full transition whitespace-nowrap',
                     todoView === m.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
                   )}
                 >
@@ -193,7 +194,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
           </div>
 
           <div className="order-1 md:order-4 ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
-            <button onClick={onOpenSubscription} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
+            <button onClick={onOpenSubscription} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
               <Rss size={18} />
             </button>
             <button onClick={onOpenSettings} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
