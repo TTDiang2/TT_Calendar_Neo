@@ -1,13 +1,14 @@
 // TT 日历 · 主屏小组件（WidgetKit extension）。
 // 数据来源：主 App 通过 Tauri command 把当日概览 JSON 写进 App Group 容器
 // （group.com.tt.calendar.mobile/widget-snapshot.json），本进程只读该文件，
-// 不访问网络、不访问主 App 沙盒。时间线在 30 分钟后兜底刷新（数据变更由
-// 主 App 在前台时主动重写文件并触发 WidgetCenter 重载的路径见主工程）。
+// 不访问网络、不访问主 App 沙盒。时间线 30 分钟兜底刷新；App 前台数据变化时
+// 会在写文件后由系统尽快重载更及时的版本。
 
 import WidgetKit
 import SwiftUI
 
 private let appGroupID = "group.com.tt.calendar.mobile"
+private let snapshotFileName = "widget-snapshot.json"
 
 struct WSnapshot: Decodable {
     var generatedAt: String?
@@ -30,27 +31,27 @@ func loadSnapshot() -> WSnapshot? {
     guard let dir = FileManager.default.containerURL(
         forSecurityApplicationGroupIdentifier: appGroupID
     ) else { return nil }
-    let fileURL = dir.appendingPathComponent("widget-snapshot.json")
+    let fileURL = dir.appendingPathComponent(snapshotFileName)
     guard let data = try? Data(contentsOf: fileURL) else { return nil }
     return try? JSONDecoder().decode(WSnapshot.self, from: data)
 }
 
-struct TimelineEntry: TimelineEntry {
+struct TodayEntry: TimelineEntry {
     let date: Date
     let snap: WSnapshot?
 }
 
 struct Provider: TimelineProvider {
-    func placeholder(in context: Context) -> TimelineEntry {
-        TimelineEntry(date: Date(), snap: nil)
+    func placeholder(in context: Context) -> TodayEntry {
+        TodayEntry(date: Date(), snap: nil)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (TimelineEntry) -> Void) {
-        completion(TimelineEntry(date: Date(), snap: loadSnapshot()))
+    func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) {
+        completion(TodayEntry(date: Date(), snap: loadSnapshot()))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
-        let entry = TimelineEntry(date: Date(), snap: loadSnapshot())
+        let entry = TodayEntry(date: Date(), snap: loadSnapshot())
         // 兜底刷新：30 分钟后（主 App 每次写数据时会请求更即时的重载）
         let next = Calendar.current.date(byAdding: .minute, value: 30, to: Date())
             ?? Date().addingTimeInterval(1800)
@@ -66,7 +67,7 @@ private func shortDate(_ d: Date) -> String {
 }
 
 struct TodayWidgetView: View {
-    var entry: TimelineEntry
+    var entry: TodayEntry
 
     var body: some View {
         let snap = entry.snap
@@ -127,7 +128,14 @@ struct TodayWidgetView: View {
 struct TodayWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "TTTodayWidget", provider: Provider()) { entry in
-            TodayWidgetView(entry: entry)
+            // iOS 17+ 要求 widget 用 containerBackground 声明背景，否则系统会
+            // 警告并在部分场景下背景显示异常；旧的 .systemSmall/Medium 布局不变。
+            if #available(iOS 17.0, *) {
+                TodayWidgetView(entry: entry)
+                    .containerBackground(.fill.tertiary, for: .widget)
+            } else {
+                TodayWidgetView(entry: entry)
+            }
         }
         .configurationDisplayName("今日概览")
         .description("今天的日程与待办一览")
