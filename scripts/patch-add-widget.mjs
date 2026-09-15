@@ -74,6 +74,8 @@ if (pbx.includes('/* TTWidget */')) {
     widgetProductBuildFile: 'TT0WIDGET0000000000000000D6',
     embedPhase: 'TT0WIDGET0000000000000000E7',
     embedBuildFile: 'TT0WIDGET0000000000000000F8',
+    containerProxy: 'TT0WIDGET000000000000000109',
+    targetDependency: 'TT0WIDGET00000000000000011A',
   }
 
   // 1) PBXBuildFile
@@ -187,6 +189,52 @@ if (pbx.includes('/* TTWidget */')) {
       ' /* Embed Foundation Extensions */,\n',
   )
 
+  // 6.6) 关键：target 依赖（app → widget）。
+  // 嵌入 appex 不会产生「隐式依赖」（隐式依赖只来自链接），scheme 的
+  // BuildAction 又只列了主 App target——没有这条显式依赖，xcodebuild 不会
+  // 编译 widget，Embed phase 会拿不到产物。
+  const projectObjectId = (pbx.match(/rootObject = (\w+) \/\* Project object \*\//) ?? [])[1]
+  if (!projectObjectId) {
+    console.error('[widget] 无法解析 rootObject（Project object ID），target 依赖注入失败')
+    process.exit(1)
+  }
+  const containerProxySection = `
+/* Begin PBXContainerItemProxy section */
+		${ids.containerProxy} /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ${projectObjectId} /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ${ids.widgetTarget};
+			remoteInfo = TTWidget;
+		};
+/* End PBXContainerItemProxy section */
+`
+  pbx = pbx.replace('/* Begin PBXCopyFilesBuildPhase section */', `${containerProxySection}\n/* Begin PBXCopyFilesBuildPhase section */`)
+
+  const targetDependencySection = `
+/* Begin PBXTargetDependency section */
+		${ids.targetDependency} /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ${ids.widgetTarget} /* TTWidget */;
+			targetProxy = ${ids.containerProxy} /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+`
+  pbx = pbx.replace('/* Begin PBXFrameworksBuildPhase section */', `${targetDependencySection}\n/* Begin PBXFrameworksBuildPhase section */`)
+
+  // 挂到主 App target 的 dependencies。文件里第一处 `dependencies = (` 属于主 App
+  // target（widget target 追加在 PBXNativeTarget 段末尾），且此处替换不带 /g
+  // 只改第一处，故锚点稳定（早先按 target 行 3 个 tab 缩进匹配是错的——实际 2 个 tab）。
+  const depsAnchor = '\n\t\t\tdependencies = (\n\t\t\t);'
+  if (!pbx.includes(depsAnchor)) {
+    console.error('[widget] 未找到主 App 的 dependencies 锚点，target 依赖未注入')
+    process.exit(1)
+  }
+  pbx = pbx.replace(
+    depsAnchor,
+    `\n\t\t\tdependencies = (\n\t\t\t\t${ids.targetDependency} /* PBXTargetDependency */,\n\t\t\t);`,
+  )
+
   // 7) widget 的 Sources / Frameworks build phase
   const phasesSection = `
 /* Begin TTWidget build phases（patch-add-widget.mjs 注入） */
@@ -267,7 +315,43 @@ ${fmtSettings(baseSettings)}
   pbx = pbx.replace('/* End XCConfigurationList section */', `${configList}/* End XCConfigurationList section */`)
 
   writeFileSync(projPath, pbx)
-  console.log('[widget] project.pbxproj 注入完成：TTWidget target（app-extension）+ Embed PlugIns phase')
+  console.log('[widget] project.pbxproj 注入完成：TTWidget target（app-extension）+ Embed PlugIns phase + target 依赖')
+}
+
+// 11) scheme 补丁：把 widget 加进 BuildActionEntries。
+// xcodebuild 用 scheme 构建，scheme 默认只列主 App target；虽然 target 依赖已能
+// 让构建系统先编 widget，但显式列进 scheme 与「Xcode 里手动加小组件」的行为一致，
+// 更稳（也便于在 Xcode 里直接 Run widget 调试）。
+{
+  const schemeDir = join(genApple, projDir, 'xcshareddata', 'xcschemes')
+  if (existsSync(schemeDir)) {
+    for (const f of readdirSync(schemeDir)) {
+      if (!f.endsWith('.xcscheme')) continue
+      const schemePath = join(schemeDir, f)
+      let scheme = readFileSync(schemePath, 'utf8')
+      if (scheme.includes('TTWidget.appex')) continue // 幂等
+      const entry = `         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "TT0WIDGET00000000000000001A"
+               BuildableName = "TTWidget.appex"
+               BlueprintName = "TTWidget"
+               ReferencedContainer = "container:${projDir}">
+            </BuildableReference>
+         </BuildActionEntry>
+`
+      scheme = scheme.replace('      </BuildActionEntries>', entry + '      </BuildActionEntries>')
+      writeFileSync(schemePath, scheme)
+      console.log('[widget] scheme 已追加 widget BuildActionEntry：', f)
+    }
+  } else {
+    console.warn('[widget] 未找到 xcschemes 目录：', schemeDir)
+  }
 }
 
 // 10) 主 App entitlements 追加 App Group（幂等；兼容 <dict/> 自闭合与 CRLF）

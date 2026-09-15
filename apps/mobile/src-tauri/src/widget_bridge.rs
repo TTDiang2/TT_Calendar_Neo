@@ -6,13 +6,18 @@
 //! 原子写入 group.com.tt.calendar.mobile/widget-snapshot.json →
 //! extension 读同一文件。
 //!
-//! 实现走 ObjC runtime 直调（objc_msgSend 按 arm64 固定寄存器约定声明
-//! 具体签名），零第三方依赖——不引 objc2 是为了避免与 tauri 依赖树里
-//! 的 objc2 版本打架。
+//! 实现走 ObjC runtime 直调，零第三方依赖（不引 objc2 是为了避免与 tauri
+//! 依赖树里的 objc2 版本打架）。
+//!
+//! ⚠️ objc_msgSend 是**可变参数**函数：同一条符号按不同签名重复声明会触发
+//! rustc 的 "signature doesn't match the previous declaration" 硬错误
+//! （2026-09-15 本地类型检查发现）。这里只声明一次，再按调用点 transmute 成
+//! 具体签名——arm64 上 objc_msgSend 走固定寄存器传参，这种做法是标准且安全的。
 
 #[cfg(target_os = "ios")]
 pub fn write_shared_snapshot(content: &str) -> Result<String, String> {
     use std::ffi::{c_char, CStr, CString};
+    use std::mem::transmute;
 
     const GROUP_ID: &str = "group.com.tt.calendar.mobile";
     const FILE_NAME: &str = "widget-snapshot.json";
@@ -27,28 +32,18 @@ pub fn write_shared_snapshot(content: &str) -> Result<String, String> {
         _private: [u8; 0],
     }
 
+    type MsgSendToObject = unsafe extern "C" fn(*mut ObjCObject, *mut ObjCSelector) -> *mut ObjCObject;
+    type MsgSendToObjectWithObject =
+        unsafe extern "C" fn(*mut ObjCObject, *mut ObjCSelector, *mut ObjCObject) -> *mut ObjCObject;
+    type MsgSendToObjectWithCStr =
+        unsafe extern "C" fn(*mut ObjCObject, *mut ObjCSelector, *const c_char) -> *mut ObjCObject;
+    type MsgSendToCStr = unsafe extern "C" fn(*mut ObjCObject, *mut ObjCSelector) -> *const c_char;
+
     extern "C" {
+        // 原始符号：可变参数，必须先声明成无签名形式再按调用点转型
+        fn objc_msgSend();
         fn objc_getClass(name: *const c_char) -> *mut ObjCObject;
         fn sel_registerName(name: *const c_char) -> *mut ObjCSelector;
-
-        // arm64 上 objc_msgSend 按固定寄存器传参（receiver=x0, SEL=x1, 参数
-        // =x2..），按具体签名声明即可正确链接与调用。
-        #[link_name = "objc_msgSend"]
-        fn msg_send_object(receiver: *mut ObjCObject, sel: *mut ObjCSelector) -> *mut ObjCObject;
-        #[link_name = "objc_msgSend"]
-        fn msg_send_object_arg(
-            receiver: *mut ObjCObject,
-            sel: *mut ObjCSelector,
-            arg: *mut ObjCObject,
-        ) -> *mut ObjCObject;
-        #[link_name = "objc_msgSend"]
-        fn msg_send_cstr_arg(
-            receiver: *mut ObjCObject,
-            sel: *mut ObjCSelector,
-            arg: *const c_char,
-        ) -> *mut ObjCObject;
-        #[link_name = "objc_msgSend"]
-        fn msg_send_return_cstr(receiver: *mut ObjCObject, sel: *mut ObjCSelector) -> *const c_char;
     }
 
     fn cls(name: &str) -> *mut ObjCObject {
@@ -63,12 +58,16 @@ pub fn write_shared_snapshot(content: &str) -> Result<String, String> {
 
     fn ns_string(s: &str) -> *mut ObjCObject {
         let c = CString::new(s).expect("字符串不含 NUL");
-        unsafe { msg_send_cstr_arg(cls("NSString"), sel("stringWithUTF8String:"), c.as_ptr()) }
+        unsafe {
+            let f: MsgSendToObjectWithCStr = transmute(objc_msgSend as *const ());
+            f(cls("NSString"), sel("stringWithUTF8String:"), c.as_ptr())
+        }
     }
 
     fn ns_to_string(s: *mut ObjCObject) -> String {
         unsafe {
-            let ptr = msg_send_return_cstr(s, sel("UTF8String"));
+            let f: MsgSendToCStr = transmute(objc_msgSend as *const ());
+            let ptr = f(s, sel("UTF8String"));
             if ptr.is_null() {
                 return String::new();
             }
@@ -78,13 +77,14 @@ pub fn write_shared_snapshot(content: &str) -> Result<String, String> {
 
     // 先写临时文件再原子替换，防写一半被 extension 读到半截 JSON。
     unsafe {
-        let manager = objc_getClass(b"NSFileManager\0".as_ptr() as *const c_char);
-        let manager = msg_send_object(manager, sel("defaultManager"));
+        let f_default_manager: MsgSendToObject = transmute(objc_msgSend as *const ());
+        let f_with_object: MsgSendToObjectWithObject = transmute(objc_msgSend as *const ());
+        let manager = f_default_manager(cls("NSFileManager"), sel("defaultManager"));
         if manager.is_null() {
             return Err("NSFileManager 不可用".into());
         }
         let group = ns_string(GROUP_ID);
-        let url = msg_send_object_arg(
+        let url = f_with_object(
             manager,
             sel("containerURLForSecurityApplicationGroupIdentifier:"),
             group,
@@ -95,8 +95,7 @@ pub fn write_shared_snapshot(content: &str) -> Result<String, String> {
                     .into(),
             );
         }
-        let dir_ns = msg_send_object(url, sel("path"));
-        let dir = ns_to_string(dir_ns);
+        let dir = ns_to_string(f_default_manager(url, sel("path")));
         if dir.is_empty() {
             return Err("App Group 容器路径为空".into());
         }
