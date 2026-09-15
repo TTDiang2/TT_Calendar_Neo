@@ -185,40 +185,53 @@ describe('GitHubDataRepo', () => {
     expect(data!.tombstones['events|u9']).toBe('2026-01-02 08:00:00+08:00')
   })
 
-  it('writeData 双写：除 Neo 快照外，还为每张表写旧版兼容文件', async () => {
-    const created: { path: string; text: string }[] = []
-    withFetch((method, path, body) => {
-      if (path === '/repos/u/d/git/blobs' && method === 'POST') {
-        const parsed = JSON.parse(String(body)) as { content: string }
-        const text = Buffer.from(parsed.content, 'base64').toString('utf8')
-        created.push({ path: '', text })
-        return okJson({ sha: `b${created.length}`, html_url: 'x' })
-      }
-      if (path === '/repos/u/d/git/trees' && method === 'POST') {
-        const parsed = JSON.parse(String(body)) as { tree: { path: string }[] }
-        for (const t of parsed.tree) created.push({ path: t.path, text: '' })
-        return okJson({ sha: 'tree1' })
-      }
-      if (path === '/repos/u/d/git/commits' && method === 'POST') return okJson({ sha: 'c1', html_url: 'x' })
-      if (path.startsWith('/repos/u/d/git/refs/heads/main') && method === 'PATCH') return okJson({})
-      if (path === '/repos/u/d/git/refs' && method === 'POST') return okJson({ sha: 'c1' })
-      return new Response('nope', { status: 404 })
-    })
+  it('writeData：旧版布局仓双写每表文件；纯 Neo 仓只写快照+墓碑（不无谓翻倍）', async () => {
+    const run = async (treePaths: string[], snapshot: Record<string, unknown[]>) => {
+      const created: { path: string; text: string }[] = []
+      withFetch((method, path, body) => {
+        if (path === '/repos/u/d/git/ref/heads/main') return okJson({ object: { sha: 'h1' } })
+        if (path.startsWith('/repos/u/d/git/trees/h1')) {
+          return okJson({
+            tree: treePaths.map((p) => ({ path: p, type: 'blob', sha: `b-${p}` })),
+          })
+        }
+        if (path === '/repos/u/d/git/blobs' && method === 'POST') {
+          const parsed = JSON.parse(String(body)) as { content: string }
+          created.push({ path: '', text: Buffer.from(parsed.content, 'base64').toString('utf8') })
+          return okJson({ sha: `b${created.length}`, html_url: 'x' })
+        }
+        if (path === '/repos/u/d/git/trees' && method === 'POST') {
+          const parsed = JSON.parse(String(body)) as { tree: { path: string }[] }
+          for (const t of parsed.tree) created.push({ path: t.path, text: '' })
+          return okJson({ sha: 'tree1' })
+        }
+        if (path === '/repos/u/d/git/commits' && method === 'POST') return okJson({ sha: 'c1', html_url: 'x' })
+        if (path.startsWith('/repos/u/d/git/commits/')) return okJson({ tree: { sha: 'baseroot' } })
+        if (path.startsWith('/repos/u/d/git/refs/heads/main') && method === 'PATCH') return okJson({})
+        if (path.startsWith('/repos/u/d/git/blobs/')) {
+          return okJson({ content: B64({ rows: [] }), encoding: 'base64' })
+        }
+        return new Response('nope', { status: 404 })
+      })
+      const repo = new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' })
+      await repo.readData() // 探测布局（真实链路里 readData 总在 writeData 之前）
+      await repo.writeData(snapshot, {}, 'h1', 'm')
+      return created.filter((c) => c.path).map((c) => c.path)
+    }
 
-    const repo = new GitHubDataRepo({ repo: 'u/d', branch: 'main', token: 't' })
-    await repo.writeData(
-      { todo: [{ id: 't1', title: 'x' }], events: [{ sync_uid: 'e1' }], marks: [] },
-      {},
-      null,
-      'm',
+    // ① 纯 Neo 仓：双写关闭
+    const neoPaths = await run(['data/snapshot.json', 'data/tombstones.json'], { todo: [{ id: 't1' }] })
+    expect(neoPaths).toContain('data/snapshot.json')
+    expect(neoPaths).toContain('data/tombstones.json')
+    expect(neoPaths).not.toContain('data/todo.json')
+
+    // ② 旧版布局仓（manifest.json + 每表文件）：双写开启
+    const legacyPaths = await run(
+      ['data/snapshot.json', 'manifest.json', 'data/todo.json'],
+      { todo: [{ id: 't1' }], marks: [] },
     )
-    const paths = created.filter((c) => c.path).map((c) => c.path)
-    expect(paths).toContain('data/snapshot.json')
-    expect(paths).toContain('data/tombstones.json')
-    expect(paths).toContain('data/todo.json')
-    expect(paths).toContain('data/events.json')
-    expect(paths).toContain('data/marks.json') // 空表也写 {"rows":[]}，防旧客户端残影
-    const rowsFile = created.find((c) => c.text.includes('"rows"'))
-    expect(rowsFile!.text).toContain('"rows"')
+    expect(legacyPaths).toContain('data/snapshot.json')
+    expect(legacyPaths).toContain('data/todo.json')
+    expect(legacyPaths).toContain('data/marks.json') // 空表也写，防旧客户端残影
   })
 })

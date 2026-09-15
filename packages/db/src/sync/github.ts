@@ -83,6 +83,10 @@ export class GitHubDataRepo {
   private readonly repo: string
   private readonly branch: string
   private readonly token: string
+  /** 远端存在旧版布局（manifest.json 或 data/{table}.json）→ 写回时保持双写。
+   *  由 readData 探测设置、同一次 sync 调用内 writeData 读取，因此无需持久化；
+   *  我们自己的双写产物会让后续 readData 持续判定为旧版布局，自动维持。 */
+  private legacyLayout = false
 
   constructor(opts: GithubDataRepoOptions) {
     this.repo = opts.repo
@@ -274,18 +278,22 @@ export class GitHubDataRepo {
       this.blobFromTree(tree, TOMBSTONES_PATH),
     ])
     const tombstones: Tombstones = tombs ? (JSON.parse(textDecoder.decode(tombs)) as Tombstones) : {}
+    // 旧版布局探测（与快照是否存在无关）：manifest.json 或任一 data/{table}.json
+    const legacyTables = tree.tree.filter(
+      (t) => t.type === 'blob' && isLegacyTablePath(t.path),
+    )
+    const hasManifest = tree.tree.some((t) => t.type === 'blob' && t.path === 'manifest.json')
+    this.legacyLayout = hasManifest || legacyTables.length > 0
+
     if (snap) {
       const snapshot = JSON.parse(textDecoder.decode(snap)) as Snapshot
       return { snapshot, tombstones, commitSha: head, legacy: false }
     }
-    // 新版快照缺失：探测旧版每表一文件布局（data/*.json，排除 tombstones）
-    const legacyTables = tree.tree.filter(
-      (t) => t.type === 'blob' && isLegacyTablePath(t.path),
-    )
     if (legacyTables.length === 0) {
       // 分支存在但完全无文件（空树提交）：视为空的 Neo 仓
       return { snapshot: {}, tombstones, commitSha: head, legacy: false }
     }
+    // 新版快照缺失：逐表合成（每表一文件 {"rows":[...]}）
     const snapshot: Snapshot = {}
     await Promise.all(
       legacyTables.map(async (entry) => {
@@ -305,10 +313,12 @@ export class GitHubDataRepo {
     return { snapshot, tombstones, commitSha: head, legacy: true }
   }
 
-  /** 写远端数据（一次提交：Neo 单文件快照 + 旧版兼容双写每表一文件）。
+  /** 写远端数据（快照 + 墓碑；旧版布局时额外双写每表一文件）。
+   *
    *  双写让旧版 TT_Calendar 桌面端与 Neo 共用同一数据仓（旧版读不到
-   *  snapshot.json；墓碑两版格式相同，天然共享）。空表也写 {"rows":[]}，
-   *  防止旧版客户端看到已清空表的残影。 */
+   *  snapshot.json；墓碑两版格式相同，天然共享）。双写**只在检测到旧版
+   *  布局时**进行——新用户的仓库不会被无谓地写成一式两份（体积翻倍）。
+   *  空表也写 {"rows":[]}，防旧版客户端看到已清空表的残影。 */
   async writeData(
     snapshot: Snapshot,
     tombstones: Tombstones,
@@ -319,9 +329,11 @@ export class GitHubDataRepo {
       { path: SNAPSHOT_PATH, text: JSON.stringify(snapshot) },
       { path: TOMBSTONES_PATH, text: JSON.stringify(tombstones) },
     ]
-    for (const [table, rows] of Object.entries(snapshot)) {
-      if (Array.isArray(rows)) {
-        files.push({ path: `data/${table}.json`, text: JSON.stringify({ rows }) })
+    if (this.legacyLayout) {
+      for (const [table, rows] of Object.entries(snapshot)) {
+        if (Array.isArray(rows)) {
+          files.push({ path: `data/${table}.json`, text: JSON.stringify({ rows }) })
+        }
       }
     }
     return this.commitFiles(files, parentSha, message)
