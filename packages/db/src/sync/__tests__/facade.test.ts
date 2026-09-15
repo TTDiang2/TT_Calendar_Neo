@@ -136,6 +136,43 @@ describe('SyncFacade 端到端（假远端）', () => {
     phone.sqlite.close()
   })
 
+  it('首绑·远端是旧版 TT_Calendar 格式（legacy）→ needs_decision 而非静默建空基线（回归：手机看不到电脑数据）', async () => {
+    const wasmBinary = readFileSync(require.resolve('sql.js/dist/sql-wasm.wasm'))
+    const phone = await openLocalDb({ wasmBinary, autosaveMs: 0, skipLoad: true })
+    // 旧版仓：GitHubDataRepo 已把每表一文件合成 Neo 快照并标 legacy=true。
+    // 修复前：Neo 只找 data/snapshot.json → 读不到 → rows=0 → auto-initialized
+    // 空基线 → 此后每次同步永远 "拉取0/推送0"（用户实测现象）。
+    const legacyRemote: SyncRemote = {
+      async readData() {
+        return {
+          snapshot: {
+            todo_list: [{ id: 'L1', display_name: '电脑清单' }],
+            todo: [{ id: 'T1', list_id: 'L1', title: '电脑上的待办', status: 'notStarted' }],
+          },
+          tombstones: {},
+          commitSha: 'legacy-head',
+          legacy: true,
+        }
+      },
+      async writeData(snap, tombs, parentSha) {
+        if (parentSha !== 'legacy-head') throw new SyncConflictError()
+        return { commitSha: 'merged-1', htmlUrl: null }
+      },
+    }
+    const f = makeFacade(phone, legacyRemote)
+    f.saveConfig({ repo: 'u/data', branch: 'main', token: 't', auto_on_start: false, sync_on_close: false })
+
+    const r1 = await f.sync()
+    expect(r1.result).toBe('needs_decision')
+    expect(r1.remote_rows).toBe(2)
+
+    // 用户选「用远端覆盖本地」→ 电脑数据进手机
+    await f.resolveFirstBind('pull_overwrite')
+    expect(phone.backend.getTodoLists().map((l) => l.display_name)).toContain('电脑清单')
+    expect(phone.backend.getTodos().map((t) => t.title)).toContain('电脑上的待办')
+    phone.sqlite.close()
+  })
+
   it('首绑·远端分支已存在但快照为空 → 以远端头为父前进，不再重建 ref（422 already exists 回归）', async () => {
     const h = await openDevice()
     // 分支已初始化过但数据被清空：head 存在、快照 0 行。

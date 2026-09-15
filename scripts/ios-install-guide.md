@@ -1,7 +1,11 @@
 # iOS 真机安装说明（iLoader + SideStore，免费）
 
-本工程 CI 产出一个**未签名**的真机 .ipa（`tt-calendar-ios-unsigned.ipa`，App 名 `TTCalendar`），
-用免费 Apple ID 自签后即可装到自己的 iPhone。无需 $99 开发者账号。
+本工程 CI 产出一个 **ad-hoc 签名**的真机 .ipa（`tt-calendar-ios-unsigned.ipa`，App 名 `TTCalendar`），
+用免费 Apple ID 重签后即可装到自己的 iPhone。无需 $99 开发者账号。
+
+> 为什么是 ad-hoc 而不是完全未签名：主屏小组件（WidgetKit extension）带着
+> App Group entitlements，未签名的 extension 无法被正确嵌入与加载；ad-hoc 签名
+> 让 CI 产物结构完整，侧载工具重签时会把 entitlements 一并替换成你的账号。
 
 > 2026-09-13 之前的旧包有「dev 模式白屏」bug（报 `localhost:5175` / local network），
 > 请务必装**最新一次 CI run** 的产物。装完若仍白屏，先确认下载的 run 日期。
@@ -48,3 +52,21 @@
 2. SideStore/Sideloadly 日志里常见：Apple ID 密码错、双重认证、未信任电脑、**3 App 上限已满**。
 3. 首次打开闪退 → 多半是没做「信任开发者」。
 4. 仍不行：把工具日志 + iPhone 型号/iOS 版本发出来。
+
+## 主屏小组件（iOS 14+）
+
+包内含一个 WidgetKit 小组件 **「今日概览」**（小/中两种尺寸）：显示今天的日程与待办。
+
+**怎么添加**：装好 App 后，长按主屏幕空白处 → 左上角「+」→ 搜索「TT 日历」
+（或翻到列表里的 TTCalendar）→ 选尺寸 → 添加。
+
+**数据怎么来的**：App 在前台时会把「今日概览」快照写入 App Group 共享容器
+（`group.com.tt.calendar.mobile`），小组件读同一份文件渲染；App 每次打开、
+同步完成、以及每 15 分钟（前台时）会自动刷新一次。
+
+**已知限制（如实说明）**：
+- 小组件与 App 共享数据依赖 App Group capability。**免费 Apple ID 自签时，
+  部分侧载工具不会注册 App Group**，此时小组件能装上、但只会显示
+  「打开 App 同步数据」占位文案（日期仍正常显示），不会崩溃。
+- 用 $99 开发者账号签名（或侧载工具支持 App Group 的场景）则数据共享正常。
+- 小组件刷新时机由 iOS 系统调度（我们请求 30 分钟兜底），不是秒级实时。
