@@ -296,7 +296,9 @@ export const TodoView = forwardRef<TodoViewHandle, {
         </div>
 
         <div className="flex items-center justify-between gap-2 mb-3 flex-shrink-0 flex-wrap">
-          <div className="flex items-center gap-2 md:gap-3 overflow-x-auto">
+          {/* 不加 overflow-x-auto：一轴 auto 会把另一轴的 visible 算成 auto，
+              FilterSelect 的 absolute 下拉会被裁进行高里（20260916 智者 P0-4） */}
+          <div className="flex items-center gap-2 md:gap-3">
             <FilterSelect
               label="排序"
               value={sort}
@@ -313,8 +315,9 @@ export const TodoView = forwardRef<TodoViewHandle, {
             )}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <label className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer" title="CSV 导入">
-              <Upload size={14} /> <span className="hidden sm:inline">CSV 导入</span>
+            {/* CSV 导入桌面专属：手机文件选择器体验边缘，与移动瘦身方针一致（20260916 智者 P2-8） */}
+            <label className="hidden md:flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer" title="CSV 导入">
+              <Upload size={14} /> CSV 导入
               <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
             </label>
             <button

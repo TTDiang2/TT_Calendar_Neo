@@ -530,12 +530,16 @@ export default function App() {
         onOpenSettings={() => setDialog({ kind: 'settings' })}
       />
       <ReminderBanner onJumpToTodo={() => setTopTab('todo')} />
-      {/* 手机手势面：左右滑切 tab、左右缘滑呼出抽屉；内层承接入场/跟手位移动画。
-          touch-action: pan-y —— 横向手势归 JS、纵向滚动归浏览器，互不打架 */}
+      {/* 手机手势面：左右滑切一级 tab；内层承接入场/跟手位移动画。
+          touch-action: manipulation —— 禁双击缩放但放行全部原生滚动方向：
+          pan-y 会与子树 overflow-x 容器取交集，把甘特图/热力图/忙度条的
+          原生横向滚动禁成死区（手势不接管+浏览器不滚，20260916 智者 P0-1）；
+          横滑切页的接管已由 useSwipeNav 锁横向后的非被动 touchmove
+          preventDefault 确定性解决，不依赖 touch-action。 */}
       <div
         ref={gestureRef}
         className="flex-1 flex overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:pb-0"
-        style={{ touchAction: 'pan-y' }}
+        style={{ touchAction: 'manipulation' }}
       >
       <div ref={contentRef} className="flex-1 flex min-w-0">
         {topTab === 'todo' ? (

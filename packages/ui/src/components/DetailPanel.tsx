@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, CalendarPlus, CheckCircle2, Clock, Palette, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { CalendarClock, CalendarDays, CalendarPlus, CheckCircle2, Clock, Palette, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import type { CalEvent, Day, Layer } from '../adapt/types'
 import { COLORING_COLORS, parseDate, TODO_BUSY_PREDICT_COLORS, TODO_BUSY_DONE_COLORS } from '../adapt/data'
@@ -116,6 +116,14 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
             <CalendarPlus size={12} /> 事件
           </button>
         )}
+        {/* 日程快捷入口常驻：手机端没有桌面右键菜单，「编辑日程」又只在已有日程时出现，
+            缺了它空日程日在手机上永远无法添加日程（20260916 智者 P0-3） */}
+        <button
+          onClick={() => onEditSchedule(day.date)}
+          className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"
+        >
+          <CalendarClock size={12} /> 日程
+        </button>
         <button
           onClick={() => onAddDot(day.date)}
           className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"

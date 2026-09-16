@@ -74,9 +74,17 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
     const max = Math.max(...ends, dayIndex(today)) + 2
     const span = max - min
     // 手机：列宽固定 10px——跨度再长也只是横向滚动，绝不把条压成细丝；
+    // 月份刻度/周末列照常生成（月首间距 ≥280px 表头直接全渲染，周末底纹保留方位感）；
     // 桌面：维持原「按视口算列宽」的逻辑
     if (isMobile) {
-      return { t0: min, totalDays: span + 1, dayW: M_DAY_W, months: [] as { start: number; label: string }[], weekendCols: [] as number[] }
+      const monthsM: { start: number; label: string }[] = []
+      const weekendColsM: number[] = []
+      for (let i = 0; i <= span; i += 1) {
+        const d = new Date((min + i) * DAY)
+        if (d.getDate() === 1 || i === 0) monthsM.push({ start: i, label: `${d.getMonth() + 1} 月` })
+        if (d.getDay() === 0 || d.getDay() === 6) weekendColsM.push(i)
+      }
+      return { t0: min, totalDays: span + 1, dayW: M_DAY_W, months: monthsM, weekendCols: weekendColsM }
     }
     const w = viewW > LABEL_W + 40 ? Math.max((viewW - LABEL_W) / VISIBLE_DAYS, 3) : 24
     const months: { start: number; label: string }[] = []
@@ -124,9 +132,25 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
           <div className="sticky left-0 z-30 bg-white border-r border-gray-100 flex-shrink-0" style={{ width: labelW }} />
           <div className="relative flex-shrink-0" style={{ width: laneW }}>
             {isMobile ? (
-              <div className="absolute top-0 bottom-0 flex items-center pl-1.5 text-[11px] text-gray-500 font-medium">
-                今天 {todayDayNum} 日 →
-              </div>
+              <>
+                {/* 月份刻度：10px/天 下相邻月首天然相距 ≥280px，直接全渲染（9px 小字） */}
+                {geo.months.map((m) => (
+                  <div
+                    key={m.start}
+                    className="absolute top-0 h-1/2 flex items-center text-[9px] text-gray-500 font-medium border-l border-gray-200 pl-0.5"
+                    style={{ left: m.start * geo.dayW }}
+                  >
+                    {m.label}
+                  </div>
+                ))}
+                {/* 今天标签贴今日线（水平 clamp 防溢出泳道两端） */}
+                <div
+                  className="absolute top-0 bottom-0 flex items-center text-[10px] text-rose-500 font-semibold whitespace-nowrap"
+                  style={{ left: todayX, transform: `translateX(${todayX < 24 ? 0 : todayX > laneW - 24 ? '-100%' : '-50%'})` }}
+                >
+                  今天 {todayDayNum} 日
+                </div>
+              </>
             ) : (
               <>
                 {geo.months.map((m) => (

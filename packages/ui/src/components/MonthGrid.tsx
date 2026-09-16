@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { CalendarClock, ClipboardList, ListTodo } from 'lucide-react'
+import { CalendarClock, Check, ClipboardList, ListTodo } from 'lucide-react'
 import type { Day, Layer, MonthData, Todo } from '../adapt/types'
 import { COLORING_COLORS, getBusyColors, parseDate, pickContrastColor, todayStr } from '../adapt/data'
-import { getTodoBusyConfig, type TodoBusyConfig } from '../adapt/api'
+import { getTodoBusyConfig, updateTodo, type TodoBusyConfig } from '../adapt/api'
 import { useIsMobile } from '../hooks/useMedia'
 import { DayCell } from './DayCell'
 import { collectDayVisuals } from './dayVisuals'
@@ -32,8 +32,18 @@ export function MonthGrid(props: Props) {
    今天=玫瑰色实心圆、选中=粉色圆环；点击日期弹出底部详情（右上 FAB 新建）。 */
 function MobileMonthGrid({ monthData, layers, selectedDate, onSelect }: Props) {
   const today = todayStr()
+  const qc = useQueryClient()
   // 忙度配色整个网格只查一次配置（桌面 DayCell 是每格一查，量级不同）
   const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
+  // 今日议程里的待办可直接勾选（20260916 智者 P1-5：议程是手机月视图下半屏主体）
+  const toggleTodoMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => updateTodo(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['todos'] })
+      qc.invalidateQueries({ queryKey: ['todoStats'] })
+      qc.invalidateQueries({ queryKey: ['view'] })
+    },
+  })
 
   const todayDay = useMemo(() => monthData.days.find((d) => d.date === today) ?? null, [monthData, today])
 
@@ -65,7 +75,15 @@ function MobileMonthGrid({ monthData, layers, selectedDate, onSelect }: Props) {
       </div>
 
       {/* 今日 agenda 占满月视图剩余空间（翻到不含今天的月份时隐藏，整月铺满） */}
-      {todayDay && <TodayAgenda day={todayDay} layers={layers} className="flex-1 min-h-0" />}
+      {todayDay && (
+        <TodayAgenda
+          day={todayDay}
+          layers={layers}
+          className="flex-1 min-h-0"
+          onSelect={onSelect}
+          onToggleTodo={(t, done) => toggleTodoMut.mutate({ id: t.id, data: { ...t, id: t.id, status: done ? 'completed' : 'notStarted' } })}
+        />
+      )}
     </div>
   )
 }
@@ -204,7 +222,7 @@ function DesktopMonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleC
 
       {/* 今日 agenda 仅 <md 显示（桌面月格子已铺满） */}
       {showAgenda && todayDay && (
-        <TodayAgenda day={todayDay} layers={layers} className="md:hidden flex-1 min-h-0" />
+        <TodayAgenda day={todayDay} layers={layers} className="md:hidden flex-1 min-h-0" onSelect={onSelect} />
       )}
     </div>
   )
@@ -212,8 +230,24 @@ function DesktopMonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleC
 
 const WEEK_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
-/** 手机月视图下方常驻的「今日」议程卡：日程 / 事件 / 待办一屏扫完，最大化利用格子铺不满的留白 */
-function TodayAgenda({ day, layers, className }: { day: Day; layers: Layer[]; className?: string }) {
+/**
+ * 手机月视图下方常驻的「今日」议程卡：日程 / 事件 / 待办一屏扫完，最大化利用格子铺不满的留白。
+ * 行可点：点日程/事件行 = 打开当日详情抽屉（编辑/删除都在里面，20260916 智者 P1-5）；
+ * 待办行可直接勾选完成。
+ */
+function TodayAgenda({
+  day,
+  layers,
+  className,
+  onSelect,
+  onToggleTodo,
+}: {
+  day: Day
+  layers: Layer[]
+  className?: string
+  onSelect?: (date: string) => void
+  onToggleTodo?: (todo: Todo, done: boolean) => void
+}) {
   const { y, m, d } = parseDate(day.date)
   const weekday = WEEK_NAMES[new Date(y, m - 1, d).getDay()]
 
@@ -268,7 +302,11 @@ function TodayAgenda({ day, layers, className }: { day: Day; layers: Layer[]; cl
                   <CalendarClock size={12} /> 日程
                 </p>
                 {schedules.map((it) => (
-                  <div key={it.id ?? `${it.title}-${it.start_time}`} className="flex items-center gap-2 rounded-md bg-blue-50/50 border border-blue-100 px-2 py-1.5">
+                  <div
+                    key={it.id ?? `${it.title}-${it.start_time}`}
+                    onClick={onSelect ? () => onSelect(day.date) : undefined}
+                    className={clsx('flex items-center gap-2 rounded-md bg-blue-50/50 border border-blue-100 px-2 py-1.5', onSelect && 'active:bg-blue-100/70 cursor-pointer transition-colors')}
+                  >
                     <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: it.color ?? '#3D6BFB' }} />
                     {it.start_time && (
                       <span className="text-[11px] text-gray-500 tabular-nums flex-shrink-0">
@@ -288,7 +326,11 @@ function TodayAgenda({ day, layers, className }: { day: Day; layers: Layer[]; cl
                   <ClipboardList size={12} /> 事件
                 </p>
                 {events.map((ev) => (
-                  <div key={ev.id ?? ev.title} className="flex items-center gap-2 rounded-md bg-gray-50 border border-gray-100 px-2 py-1.5">
+                  <div
+                    key={ev.id ?? ev.title}
+                    onClick={onSelect ? () => onSelect(day.date) : undefined}
+                    className={clsx('flex items-center gap-2 rounded-md bg-gray-50 border border-gray-100 px-2 py-1.5', onSelect && 'active:bg-gray-100 cursor-pointer transition-colors')}
+                  >
                     <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: ev.color ?? colorFor(ev.layer_id) ?? '#9ca3af' }} />
                     <span className="text-xs text-gray-800 truncate flex-1">{ev.title}</span>
                     {(() => {
@@ -307,7 +349,7 @@ function TodayAgenda({ day, layers, className }: { day: Day; layers: Layer[]; cl
                   {doneCount > 0 && <span className="text-[10px] font-normal text-gray-400">已完成 {doneCount}</span>}
                 </p>
                 {openTodos.slice(0, 6).map((t) => (
-                  <AgendaTodoRow key={t.id} todo={t} />
+                  <AgendaTodoRow key={t.id} todo={t} onToggle={onToggleTodo} />
                 ))}
                 {openTodos.length > 6 && (
                   <p className="text-[10px] text-gray-300 text-center pt-0.5">还有 {openTodos.length - 6} 条未完成待办</p>
@@ -321,18 +363,25 @@ function TodayAgenda({ day, layers, className }: { day: Day; layers: Layer[]; cl
   )
 }
 
-function AgendaTodoRow({ todo }: { todo: Todo }) {
+function AgendaTodoRow({ todo, onToggle }: { todo: Todo; onToggle?: (todo: Todo, done: boolean) => void }) {
   const overdue = todo.due_date && todo.due_date < todayStr()
+  const done = todo.status === 'completed'
   return (
     <div className="flex items-center gap-2 rounded-md border border-gray-100 bg-white px-2 py-1.5">
-      <span
+      <button
+        aria-label={done ? '标记为未完成' : '标记为已完成'}
+        onClick={onToggle ? () => onToggle(todo, !done) : undefined}
         className={clsx(
-          'w-3.5 h-3.5 rounded-full flex-shrink-0 flex items-center justify-center',
-          todo.importance === 'high' ? 'bg-red-100 text-red-500' : 'bg-gray-100 text-gray-400',
+          'w-3.5 h-3.5 rounded-full flex-shrink-0 flex items-center justify-center border active:scale-90 transition-transform',
+          done
+            ? 'bg-emerald-500 border-emerald-500 text-white'
+            : todo.importance === 'high'
+              ? 'bg-red-100 border-red-200 text-red-500'
+              : 'bg-gray-100 border-gray-200 text-gray-400',
         )}
       >
-        {todo.importance === 'high' && <span className="w-1 h-1 rounded-full bg-current" />}
-      </span>
+        {done ? <Check size={10} /> : todo.importance === 'high' && <span className="w-1 h-1 rounded-full bg-current" />}
+      </button>
       <span className="text-xs text-gray-800 truncate flex-1">{todo.title}</span>
       {todo.due_date && (
         <span className={clsx('text-[10px] flex-shrink-0', overdue ? 'text-red-500 font-medium' : 'text-gray-400')}>

@@ -59,7 +59,7 @@ export function DayView({ monthData, layers, selectedDate: _selectedDate, onSele
     <div className="flex-1 flex flex-col min-h-0 gap-2">
       {/* 头部：日期 / 农历 / 放假 / 染色状态 */}
       <div
-        className="flex items-center gap-3 px-3 py-2 md:px-4 md:py-3 bg-white rounded-xl border border-gray-200 flex-shrink-0 cursor-pointer"
+        className="glass-card rounded-3xl md:rounded-xl md:bg-white md:border md:border-gray-200 md:shadow-none flex items-center gap-3 px-3 py-2 md:px-4 md:py-3 flex-shrink-0 cursor-pointer"
         onClick={() => onSelect(day.date)}
         onDoubleClick={() => onDoubleClick(day.date)}
       >
@@ -88,14 +88,14 @@ export function DayView({ monthData, layers, selectedDate: _selectedDate, onSele
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onDoubleClick(day.date) }}
-          className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-xs md:text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 active:bg-pink-600 flex-shrink-0"
+          className="flex items-center gap-1 px-3 md:px-3 py-1.5 text-xs md:text-sm bg-pink-500 text-white rounded-full md:rounded-lg hover:bg-pink-600 active:bg-pink-600 flex-shrink-0"
         >
           <Plus size={14} /> 新建
         </button>
       </div>
 
       {/* 主内容：分区卡片流，纵向铺满、超高可滚 */}
-      <div className="flex-1 min-h-0 overflow-y-auto bg-white rounded-xl border border-gray-200">
+      <div className="glass-card rounded-3xl md:rounded-xl md:bg-white md:border md:border-gray-200 md:shadow-none flex-1 min-h-0 overflow-y-auto">
         {isEmpty ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 py-10">
             <p className="text-sm text-gray-400">这天还没有安排</p>

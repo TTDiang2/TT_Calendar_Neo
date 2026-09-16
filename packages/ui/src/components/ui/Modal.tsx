@@ -1,6 +1,11 @@
 import { useEffect, useRef, type ReactNode } from 'react'
-import { animSpringIn } from '../../anim'
+import { animSheetUp, animSpringIn } from '../../anim'
+import { useIsMobile } from '../../hooks/useMedia'
 
+/**
+ * 通用弹窗。桌面（md+）：居中玻璃卡；手机（<md）：iOS 心智的底部 sheet——
+ * 大圆角贴底、安全区内边距、上滑入场（20260916 智者 P2-9，全部编辑弹窗一次受益）。
+ */
 export function Modal({
   title,
   children,
@@ -13,23 +18,39 @@ export function Modal({
   width?: number
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null)
+  // useIsMobile 惰性初始化：首帧即拿到真实断点，避免手机首开弹窗先闪一帧桌面布局
+  const isMobile = useIsMobile()
 
-  // 玻璃弹窗入场：弹簧缩放 + 上浮（reduced-motion 时 animSpringIn 自动跳过）
+  // 入场动效：手机底部上滑，桌面弹簧缩放（reduced-motion 时两者都自动跳过）
   useEffect(() => {
-    animSpringIn(panelRef.current)
-  }, [])
+    if (isMobile) animSheetUp(panelRef.current)
+    else animSpringIn(panelRef.current)
+  }, [isMobile])
 
   return (
     <div
-      className="fixed inset-0 bg-black/25 backdrop-blur-[2px] flex items-center justify-center z-50 p-4"
+      className={
+        isMobile
+          ? 'fixed inset-0 bg-black/25 backdrop-blur-[2px] flex items-end z-50'
+          : 'fixed inset-0 bg-black/25 backdrop-blur-[2px] flex items-center justify-center z-50 p-4'
+      }
       onClick={onClose}
     >
       <div
         ref={panelRef}
-        className="glass-sheet rounded-3xl flex flex-col max-h-[90vh]"
-        style={{ width, maxWidth: 'calc(100vw - 2rem)' }}
+        className={
+          isMobile
+            ? 'glass-sheet rounded-t-3xl flex flex-col max-h-[88dvh] w-full pb-[max(0.75rem,env(safe-area-inset-bottom))]'
+            : 'glass-sheet rounded-3xl flex flex-col max-h-[90vh]'
+        }
+        style={isMobile ? { maxWidth: '100vw' } : { width, maxWidth: 'calc(100vw - 2rem)' }}
         onClick={(e) => e.stopPropagation()}
       >
+        {isMobile && (
+          <div className="flex justify-center pt-2">
+            <div className="w-10 h-1 rounded-full bg-gray-300" />
+          </div>
+        )}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-black/5">
           <h2 className="text-base font-semibold text-gray-800">{title}</h2>
           <button

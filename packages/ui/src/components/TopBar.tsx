@@ -144,9 +144,12 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
           </div>
 
           {/* 右侧操作：手机并入第 1 行（order-1）靠最右，桌面回单行最右。
-              20260916 任务书：手机端搜索条目与图层/设置按钮全部撤出 Top Bar——
+              手机只保留搜索图标（搜索是日历页刚需，20260916 智者 P0-2）；
               图层/详情走 dock 左右按钮，设置收进左侧边栏抽屉；桌面保持原样 */}
           <div className="order-1 md:order-4 ml-auto md:ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
+            <button onClick={onOpenSearch} className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="搜索事件" aria-label="搜索事件">
+              <Search size={18} />
+            </button>
             <button
               onClick={onOpenSearch}
               className="relative hidden md:flex items-center w-48 pl-2.5 pr-3 py-1.5 text-sm text-gray-400 bg-white/60 border border-white/80 rounded-lg hover:bg-white hover:text-gray-600 transition"
