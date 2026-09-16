@@ -40,7 +40,8 @@ export function SettingsDialog({ layers, onToggleLayer, defaultStart, defaultEnd
   return (
     <Modal title="设置" onClose={onClose} width={720}>
       <div className="flex flex-col gap-5">
-        <section>
+        {/* 集思录=订阅数据源：手机不允许订阅，入口整节隐藏（桌面保留） */}
+        <section className="hidden md:block">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">事件导入</h3>
           <div className="flex gap-2 mb-2">
             <Field label="开始">
@@ -67,7 +68,7 @@ export function SettingsDialog({ layers, onToggleLayer, defaultStart, defaultEnd
             <button
               onClick={() => importMut.mutate()}
               disabled={importMut.isPending}
-              className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
+              className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
               {importMut.isPending ? '导入中…' : '开始导入'}
             </button>
@@ -76,7 +77,7 @@ export function SettingsDialog({ layers, onToggleLayer, defaultStart, defaultEnd
         </section>
 
         {jisilu.length > 0 && (
-          <section>
+          <section className="hidden md:block">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">集思录投资日历</h3>
             <div className="flex flex-col gap-1">
               {jisilu.map((l) => (
@@ -231,7 +232,7 @@ function BusyConfigSection() {
             <button
               onClick={() => saveMut.mutate()}
               disabled={saveMut.isPending}
-              className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
+              className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
               {saveMut.isPending ? '保存中…' : '保存并重算'}
             </button>
@@ -289,7 +290,7 @@ function ReminderConfigSection() {
             checked={local.enabled}
             onChange={(e) => saveMut.mutate({ ...local, enabled: e.target.checked })}
             disabled={saveMut.isPending}
-            className="rounded border-gray-300 text-blue-500 focus:ring-blue-400"
+            className="rounded border-gray-300 text-pink-500 focus:ring-pink-400"
           />
           <span className="text-sm text-gray-700">启用每日提醒</span>
         </label>
@@ -399,7 +400,7 @@ function SyncConfigSection() {
           <p className="mb-2">远端仓库已有 {decision} 行数据，本地是首次绑定。如何处理？</p>
           <div className="flex gap-2">
             <button disabled={busy !== null} onClick={() => onResolve('merge_push')}
-              className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40">
+              className="px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40">
               合并两边并上传（推荐）
             </button>
             <button disabled={busy !== null} onClick={() => onResolve('pull_overwrite')}
@@ -449,7 +450,7 @@ function SyncConfigSection() {
             {busy === 'test' ? '测试中…' : '测试连接'}
           </button>
           <button onClick={onSync} disabled={busy !== null || !repo || !cfg?.has_token}
-            className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40">
+            className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40">
             {busy === 'sync' ? '同步中…' : '立即同步'}
           </button>
           {msg && <span className={`text-sm ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>{msg.text}</span>}
@@ -479,7 +480,7 @@ function CustomLayerRow({ layer, onToggle }: { layer: Layer; onToggle: (id: stri
         aria-pressed={layer.enabled}
         className={clsx(
           'relative inline-flex items-center w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
-          layer.enabled ? 'bg-blue-500' : 'bg-gray-300',
+          layer.enabled ? 'bg-pink-500' : 'bg-gray-300',
         )}
       >
         <span
@@ -520,7 +521,7 @@ function LayerAccordion({ layer, onToggle }: { layer: Layer; onToggle: (id: stri
         <span className="flex-1 text-sm text-gray-700 truncate">{layer.display_name}</span>
         <button
           onClick={() => setOpen((v) => !v)}
-          className="text-[11px] text-blue-600 hover:text-blue-700 px-2"
+          className="text-[11px] text-pink-600 hover:text-pink-700 px-2"
         >
           {open ? '收起子动作' : '展开子动作'}
         </button>
@@ -529,7 +530,7 @@ function LayerAccordion({ layer, onToggle }: { layer: Layer; onToggle: (id: stri
           aria-pressed={layer.enabled}
           className={clsx(
             'relative inline-flex items-center w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
-            layer.enabled ? 'bg-blue-500' : 'bg-gray-300',
+            layer.enabled ? 'bg-pink-500' : 'bg-gray-300',
           )}
         >
           <span
@@ -604,7 +605,7 @@ function LayerSubActions({ layer }: { layer: Layer }) {
           <div className="flex items-center justify-between mb-1.5">
             <p className="text-[11px] text-gray-500">{isAllOn ? '当前全部显示' : `已过滤 ${current.length}/${pairs.length}`}</p>
             {!isAllOn && (
-              <button onClick={resetAll} className="text-[11px] text-blue-600 hover:text-blue-700">恢复全部</button>
+              <button onClick={resetAll} className="text-[11px] text-pink-600 hover:text-pink-700">恢复全部</button>
             )}
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -616,7 +617,7 @@ function LayerSubActions({ layer }: { layer: Layer }) {
                   onClick={() => toggle(p.qtype, p.sub_action)}
                   className={clsx(
                     'px-2 py-0.5 text-xs rounded border transition',
-                    checked ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300',
+                    checked ? 'bg-pink-50 border-pink-300 text-pink-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300',
                   )}
                 >
                   {p.sub_action}

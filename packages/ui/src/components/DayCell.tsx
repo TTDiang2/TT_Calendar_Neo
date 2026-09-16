@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import type { Day, Layer } from '../adapt/types'
 import { COLORING_COLORS, getBusyColors, parseDate, pickContrastColor, todayStr } from '../adapt/data'
 import { getTodoBusyConfig } from '../adapt/api'
+import { collectDayVisuals } from './dayVisuals'
 
 interface Props {
   day: Day
@@ -23,42 +24,10 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
   const { d } = parseDate(day.date)
   const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
 
-  const visibleEvents = useMemo(() => {
-    // important/schedule 图层的事件始终显示（开关只控染色）；其他图层按开关过滤
-    const enabledSet = new Set(layers.filter((l) => l.enabled).map((l) => l.layer_id))
-    return Object.entries(day.events_by_layer)
-      .filter(([lid]) => lid === 'important' || lid === 'schedule' || enabledSet.has(lid))
-      .flatMap(([, evs]) => evs)
-      .sort((a, b) => a.sort_key - b.sort_key)
-  }, [day, layers])
-
-  const dots = useMemo(() => {
-    const seen = new Set<string>()
-    const out: string[] = []
-    for (const lid of Object.keys(day.events_by_layer)) {
-      const layer = layers.find((l) => l.layer_id === lid)
-      if (!layer?.enabled && lid !== 'important') continue
-      const c = layer?.color ?? '#9ca3af'
-      if (!seen.has(c) && visibleEvents.some((e) => e.layer_id === lid)) {
-        seen.add(c)
-        out.push(c)
-      }
-    }
-    // 日程类型点点图层：按图层 config.category 匹配当日 schedule_items 的 category
-    const items = day.schedule_items ?? []
-    if (items.length > 0) {
-      const catSet = new Set<string>(items.map((i) => i.category ?? 'work'))
-      for (const layer of layers) {
-        if (layer.kind !== 'dot' || !layer.enabled) continue
-        const cat = (layer.config as Record<string, unknown>)?.category as string | undefined
-        if (cat && catSet.has(cat) && layer.color && !seen.has(layer.color)) {
-          seen.add(layer.color)
-          out.push(layer.color)
-        }
-      }
-    }
-    return out.slice(0, 5)
-  }, [day, layers, visibleEvents])
+  const { visibleEvents, dots } = useMemo(
+    () => collectDayVisuals(day, layers),
+    [day, layers],
+  )
 
   const layerById = new Map(layers.map((l) => [l.layer_id, l]))
   const colorLayers: { id: string; color: string }[] = []
@@ -110,10 +79,10 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
         maxLabels >= 6 ? 'min-h-[104px] md:min-h-[160px]' : 'min-h-[44px] md:min-h-[104px]',
         'hover:shadow-md hover:-translate-y-0.5',
         day.is_today
-          ? 'border-2 border-pink-400 md:border-blue-500'
+          ? 'border-2 border-rose-500'
           : 'border-gray-200',
         day.is_other_month && 'opacity-40',
-        selected && 'ring-2 ring-pink-300 md:ring-blue-300',
+        selected && 'ring-2 ring-pink-400',
         dragOver && 'ring-2 ring-green-400 scale-[1.02]',
       )}
     >
@@ -137,7 +106,7 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
         <span
           className={clsx(
             'text-xs md:text-sm font-semibold',
-            day.is_today && 'bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs',
+            day.is_today && 'bg-rose-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs',
           )}
           style={day.is_today ? undefined : (() => {
             const last = colorLayers[colorLayers.length - 1]

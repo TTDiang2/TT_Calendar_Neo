@@ -4,9 +4,14 @@
  * 链路：这里组装快照 JSON → Tauri command（export_widget_snapshot）→
  * Rust 写 App Group 容器 → extension 读文件渲染（见 apps/mobile/widget/）。
  * 非 Tauri 环境（web/dev server）自动跳过。
+ *
+ * 类型全部取自 @tt-calendar/contracts：曾因手写内联类型把 ScheduleItem 的
+ * start_time 写成 time，字段错位静默了近一年（20260915 智者复审抓出）——
+ * 这条链路禁止再用自造类型。
  */
 
 import { invoke } from '@tauri-apps/api/core'
+import type { CountdownItem, MonthData } from '@tt-calendar/contracts'
 import { getBackend } from '@tt-calendar/ui'
 import { todayStr } from '@tt-calendar/ui/adapt/data'
 
@@ -18,17 +23,26 @@ interface WidgetSnapshot {
   today: string
   todos: { title: string; overdue: boolean }[]
   events: { title: string; time: string }[]
+  /** 最近 3 个倒数日（next_date 距今天数） */
+  countdowns: { name: string; daysLeft: number; date: string }[]
+  /** 本月涂色热力：有涂色的日子（level 0-4），供主屏「本月涂色」小组件渲染 */
+  coloring: { date: string; level: number }[]
+  /** 待办完成概览 */
+  stats: { total: number; completed: number; incomplete: number }
 }
 
 async function buildSnapshot(): Promise<WidgetSnapshot> {
   const be = getBackend()
   const today = todayStr()
-  const todos = await be.getTodos({ status: 'notStarted', sort: 'due_importance' })
-  const monthKey = `${new Date().getFullYear()}-${new Date().getMonth() + 1}`
-  const view = (await be.getView('month', monthKey)) as
-    | { days?: { date: string; events_by_layer: Record<string, { title: string }[]>; schedule_items?: { title?: string; time?: string | null }[] }[] }
-    | undefined
-  const day = view?.days?.find((d) => d.date === today)
+  const now = new Date()
+  const monthKey = `${now.getFullYear()}-${now.getMonth() + 1}`
+  const [todos, monthView, countdownList, stats] = await Promise.all([
+    be.getTodos({ status: 'notStarted', sort: 'due_importance' }),
+    be.getView('month', monthKey) as Promise<MonthData>,
+    be.getCountdownList().catch(() => [] as CountdownItem[]),
+    be.getTodoStats(undefined).catch(() => ({ total: 0, completed: 0, incomplete: 0 })),
+  ])
+  const day = monthView.days.find((d) => d.date === today)
 
   const events: { title: string; time: string }[] = []
   if (day) {
@@ -38,9 +52,14 @@ async function buildSnapshot(): Promise<WidgetSnapshot> {
       }
     }
     for (const item of day.schedule_items ?? []) {
-      events.push({ title: item.title ?? '(日程)', time: item.time ?? '' })
+      events.push({ title: item.title, time: item.start_time ?? '' })
     }
   }
+
+  // 本月涂色：取涂色图层（coloring_level）非空的日子
+  const coloring = monthView.days
+    .filter((d) => d.coloring_level != null)
+    .map((d) => ({ date: d.date, level: d.coloring_level as number }))
 
   return {
     generatedAt: new Date().toISOString(),
@@ -50,6 +69,17 @@ async function buildSnapshot(): Promise<WidgetSnapshot> {
       overdue: !!(t.due_date && t.due_date < today),
     })),
     events: events.slice(0, 5),
+    countdowns: countdownList
+      .slice()
+      .sort((a, b) => a.days_left - b.days_left)
+      .slice(0, 3)
+      .map((c) => ({ name: c.name, daysLeft: c.days_left, date: c.next_date })),
+    coloring,
+    stats: {
+      total: stats.total,
+      completed: stats.completed,
+      incomplete: stats.incomplete,
+    },
   }
 }
 

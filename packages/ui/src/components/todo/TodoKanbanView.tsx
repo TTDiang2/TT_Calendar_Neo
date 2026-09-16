@@ -203,7 +203,7 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
         {droppable && <span className="hidden md:inline text-xs text-gray-400">拖动卡片到其他列即可改变状态；勾选圆形按钮直接完成</span>}
       </div>
 
-      <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
+      <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4 snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none]">
         <div className="flex gap-2.5 md:gap-3 h-full min-w-max items-stretch">
           {columns.map((c) => (
             <div
@@ -217,9 +217,9 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
               onDragLeave={() => overCol === c.key && setOverCol(null)}
               onDrop={() => dropOn(c.key)}
               className={clsx(
-                'w-[82vw] max-w-[300px] md:w-60 flex flex-col rounded-xl border min-h-0 transition',
+                'w-[78vw] max-w-[300px] md:w-60 flex flex-col rounded-xl border min-h-0 transition snap-start',
                 c.tone ?? 'bg-gray-50/60',
-                overCol === c.key ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-200',
+                overCol === c.key ? 'border-pink-400 ring-2 ring-pink-200' : 'border-gray-200',
               )}
             >
               <div className="px-3 py-2 flex items-center justify-between border-b border-black/5 flex-shrink-0">
@@ -261,7 +261,7 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
                 'flex flex-col rounded-xl border border-gray-200 bg-emerald-50/50 min-h-0 overflow-hidden',
                 // 折叠=窄边条、展开=整列（手机同主体列等宽，桌面 240），宽度动画让过渡自然而非突兀弹开
                 'transition-all duration-300 ease-in-out',
-                showCompletedCol ? 'w-[82vw] max-w-[300px] md:w-60' : 'w-11',
+                showCompletedCol ? 'w-[78vw] max-w-[300px] md:w-60 snap-start' : 'w-11',
               )}
             >
               {showCompletedCol ? (

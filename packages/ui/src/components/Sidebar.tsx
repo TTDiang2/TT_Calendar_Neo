@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import type { Layer } from '../adapt/types'
 import { createLayer, getSubscriptions } from '../adapt/api'
 import { COLOR_PRESETS, GRADED_PALETTES } from '../adapt/data'
+import { animDrawerIn } from '../anim'
 import { Modal, Field } from './ui/Modal'
 
 interface Props {
@@ -16,19 +17,23 @@ interface Props {
 /* 桌面：固定左侧栏（md+ 才显示，手机上由 App 渲染 MobileLayersDrawer） */
 export function Sidebar({ layers, onToggle, countdown }: Props) {
   return (
-    <aside className="hidden md:flex w-60 bg-white border-r border-gray-200 p-4 overflow-y-auto flex-col">
+    <aside className="hidden md:flex w-60 bg-white/55 border-r border-white/60 flex-shrink-0 p-4 overflow-y-auto flex-col">
       <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} />
     </aside>
   )
 }
 
-/* 手机：左侧滑出抽屉（点顶栏「图层」按钮唤出） */
+/* 手机：左侧滑出抽屉（点顶栏「图层」按钮或左缘右滑手势唤出），液态玻璃材质 + 弹簧滑入 */
 export function MobileLayersDrawer({ open, onClose, layers, onToggle, countdown }: Props & { open: boolean; onClose: () => void }) {
+  const panelRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    if (open) animDrawerIn(panelRef.current, -1)
+  }, [open])
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 md:hidden">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <aside className="absolute inset-y-0 left-0 w-[290px] max-w-[85vw] bg-white shadow-xl p-4 pt-3 overflow-y-auto flex flex-col">
+      <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={onClose} />
+      <aside ref={panelRef} className="glass-sheet absolute inset-y-0 left-0 w-[290px] max-w-[85vw] rounded-r-3xl p-4 pt-3 overflow-y-auto flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">图层</h2>
           <button
@@ -38,13 +43,13 @@ export function MobileLayersDrawer({ open, onClose, layers, onToggle, countdown 
             ×
           </button>
         </div>
-        <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} />
+        <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} showSubscriptions={false} />
       </aside>
     </div>
   )
 }
 
-function LayerTree({ layers, onToggle, countdown }: Props) {
+function LayerTree({ layers, onToggle, countdown, showSubscriptions = true }: Props & { showSubscriptions?: boolean }) {
   const qc = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
@@ -64,10 +69,12 @@ function LayerTree({ layers, onToggle, countdown }: Props) {
     })
   }
 
-  // 第一级：涂色 / 点点（基于 layer.kind）；第二级：group（layer.group）；第三级：图层本身
+  // 第一级：涂色 / 点点（基于 layer.kind）；第二级：group（layer.group）；第三级：图层本身。
+  // 手机端（showSubscriptions=false）：订阅来源的图层组整体排除——订阅内容不在手机展示
   const tree = useMemo(() => {
     const byKind: Record<string, Record<string, Layer[]>> = { color: {}, dot: {} }
     for (const l of layers) {
+      if (!showSubscriptions && l.sort_order >= 10) continue // 集思录等订阅图层（sort_order ≥ 10）
       const kind = l.kind === 'dot' ? 'dot' : 'color'
       const grp = l.group ?? ''
       ;(byKind[kind][grp] ??= []).push(l)
@@ -78,7 +85,7 @@ function LayerTree({ layers, onToggle, countdown }: Props) {
       }
     }
     return byKind
-  }, [layers])
+  }, [layers, showSubscriptions])
 
   // 订阅超级组：组名与订阅 display_name 相同的图层组（集思录等）挂在「订阅」下
   const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
@@ -198,7 +205,7 @@ function LayerTree({ layers, onToggle, countdown }: Props) {
         })}
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md mt-0.5"
+          className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-md mt-0.5"
         >
           <Plus size={14} /> 新建图层
         </button>
@@ -229,7 +236,7 @@ function LayerRow({ layer, onToggle }: { layer: Layer; onToggle: (id: string) =>
         aria-pressed={layer.enabled}
         className={clsx(
           'relative inline-flex items-center w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
-          layer.enabled ? 'bg-blue-500' : 'bg-gray-300',
+          layer.enabled ? 'bg-pink-500' : 'bg-gray-300',
         )}
       >
         <span
@@ -298,7 +305,7 @@ function CreateLayerDialog({ onClose, onCreated }: { onClose: () => void; onCrea
                 onClick={() => setKind(t.k)}
                 className={clsx(
                   'flex flex-col items-center gap-0.5 px-2 py-2 rounded-lg border text-sm transition',
-                  kind === t.k ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50',
+                  kind === t.k ? 'border-pink-400 bg-pink-50 text-pink-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50',
                 )}
               >
                 <span className="font-medium">{t.label}</span>
@@ -341,7 +348,7 @@ function CreateLayerDialog({ onClose, onCreated }: { onClose: () => void; onCrea
                     onClick={() => setMode(t.k)}
                     className={clsx(
                       'flex flex-col items-center gap-0.5 px-2 py-2 rounded-lg border text-sm transition',
-                      mode === t.k ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50',
+                      mode === t.k ? 'border-pink-400 bg-pink-50 text-pink-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50',
                     )}
                   >
                     <span className="font-medium">{t.label}</span>
@@ -360,7 +367,7 @@ function CreateLayerDialog({ onClose, onCreated }: { onClose: () => void; onCrea
                       onClick={() => setPaletteName(pk)}
                       className={clsx(
                         'flex items-center gap-1 px-2 py-1.5 rounded-lg border text-sm',
-                        paletteName === pk ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600',
+                        paletteName === pk ? 'border-pink-400 bg-pink-50 text-pink-700' : 'border-gray-200 text-gray-600',
                       )}
                     >
                       {pk}
@@ -382,7 +389,7 @@ function CreateLayerDialog({ onClose, onCreated }: { onClose: () => void; onCrea
                       onClick={() => setColor(c)}
                       className={clsx(
                         'w-7 h-7 rounded-full transition',
-                        color === c && 'ring-2 ring-blue-400 ring-offset-2',
+                        color === c && 'ring-2 ring-pink-400 ring-offset-2',
                       )}
                       style={{ backgroundColor: c }}
                     />
@@ -416,7 +423,7 @@ function CreateLayerDialog({ onClose, onCreated }: { onClose: () => void; onCrea
           <button
             onClick={() => mut.mutate()}
             disabled={mut.isPending}
-            className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
+            className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
           >
             {mut.isPending ? '创建中…' : '创建'}
           </button>

@@ -96,7 +96,7 @@ export function WidgetsView() {
   return (
     <main className="flex-1 flex flex-col overflow-y-auto min-w-0 bg-gray-50">
       {/* 页头 */}
-      <div className="sticky top-0 z-10 bg-gray-50/90 backdrop-blur px-3 md:px-5 pt-3 pb-2 flex items-center gap-2">
+      <div className="sticky top-0 z-10 bg-white/45 backdrop-blur-xl px-3 md:px-5 pt-3 pb-2 flex items-center gap-2">
         <h2 className="text-base font-semibold text-gray-800 flex items-center gap-1.5">
           <Sparkles size={16} className="text-pink-500" /> 小组件
         </h2>
@@ -160,10 +160,10 @@ export function WidgetsView() {
       {/* 添加小组件选择器（底部弹层，移动端友好） */}
       {pickerOpen && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setPickerOpen(false)} />
+          <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={() => setPickerOpen(false)} />
           <div
             ref={pickerRef}
-            className="relative bg-white rounded-t-3xl sm:rounded-3xl shadow-xl w-full sm:max-w-md max-h-[70vh] flex flex-col"
+            className="relative glass-sheet rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[70vh] flex flex-col"
           >
             <div className="flex items-center justify-between px-5 pt-4 pb-2">
               <h3 className="text-sm font-semibold text-gray-800">添加小组件</h3>

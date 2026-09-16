@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { animSpringIn } from '../../anim'
 
 export function Modal({
   title,
@@ -11,21 +12,29 @@ export function Modal({
   onClose: () => void
   width?: number
 }) {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+
+  // 玻璃弹窗入场：弹簧缩放 + 上浮（reduced-motion 时 animSpringIn 自动跳过）
+  useEffect(() => {
+    animSpringIn(panelRef.current)
+  }, [])
+
   return (
     <div
-      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/25 backdrop-blur-[2px] flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh]"
+        ref={panelRef}
+        className="glass-sheet rounded-3xl flex flex-col max-h-[90vh]"
         style={{ width, maxWidth: 'calc(100vw - 2rem)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-black/5">
           <h2 className="text-base font-semibold text-gray-800">{title}</h2>
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md text-lg"
+            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-lg transition-colors"
           >
             ×
           </button>

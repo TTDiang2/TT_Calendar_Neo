@@ -59,7 +59,9 @@ export function WidgetCard({ title, icon, tone = 'light', className, editing, on
   return (
     <div
       className={clsx(
-        'relative h-full w-full rounded-3xl border p-4 flex flex-col gap-2 overflow-hidden shadow-sm hover:shadow-md transition-shadow',
+        'relative h-full w-full rounded-3xl border p-4 flex flex-col gap-2 overflow-hidden',
+        'shadow-[0_1px_2px_rgba(16,24,40,0.03),0_8px_20px_rgba(16,24,40,0.06)] hover:shadow-[0_2px_4px_rgba(16,24,40,0.05),0_14px_32px_rgba(16,24,40,0.10)]',
+        'transition-shadow',
         TONE_CLASS[tone],
         className,
       )}

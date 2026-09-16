@@ -151,7 +151,7 @@ export function EventEditor({
             <button
               onClick={() => saveMut.mutate()}
               disabled={!title.trim() || saveMut.isPending}
-              className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
+              className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
               保存
             </button>
@@ -273,7 +273,7 @@ export function ScheduleEditor({
         <div className="flex justify-between items-center mt-2">
           <button
             onClick={addRow}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm text-pink-600 hover:bg-pink-50 rounded-lg"
           >
             <Plus size={14} /> 添加日程
           </button>
@@ -284,7 +284,7 @@ export function ScheduleEditor({
             <button
               onClick={() => saveMut.mutate()}
               disabled={saveMut.isPending || effective.some((r) => !r.title.trim())}
-              className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
+              className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
               保存
             </button>
@@ -337,7 +337,7 @@ export function ColoringPicker({
             style={{ backgroundColor: c }}
             className={`h-14 rounded-lg text-xs font-medium transition hover:scale-105 ${
               i >= 3 ? 'text-white' : 'text-gray-700'
-            } ${current === i ? 'ring-2 ring-blue-400' : ''}`}
+            } ${current === i ? 'ring-2 ring-pink-500' : ''}`}
           >
             {COLORING_LABELS[i]}
           </button>
@@ -494,7 +494,7 @@ export function SubscriptionDialog({ onClose }: { onClose: () => void }) {
                     aria-pressed={s.enabled}
                     className={clsx(
                       'relative inline-flex items-center w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
-                      s.enabled ? 'bg-blue-500' : 'bg-gray-300',
+                      s.enabled ? 'bg-pink-500' : 'bg-gray-300',
                     )}
                     title={s.enabled ? '关闭订阅' : '开启订阅'}
                   >
@@ -532,7 +532,7 @@ export function SubscriptionDialog({ onClose }: { onClose: () => void }) {
                     <button
                       onClick={() => onRefresh(s)}
                       disabled={refreshing === s.id}
-                      className="text-[11px] text-blue-600 hover:text-blue-700 disabled:opacity-40"
+                      className="text-[11px] text-pink-600 hover:text-pink-700 disabled:opacity-40"
                     >
                       {refreshing === s.id ? '更新中…' : '立即更新'}
                     </button>
@@ -554,7 +554,7 @@ export function SubscriptionDialog({ onClose }: { onClose: () => void }) {
         {msg && <p className="text-xs text-gray-600 bg-gray-50 rounded-md px-3 py-2">{msg}</p>}
 
         {adding ? (
-          <div className="p-3 rounded-lg border border-blue-100 bg-blue-50/40 space-y-2">
+          <div className="p-3 rounded-lg border border-gray-200 bg-gray-50/60 space-y-2">
             <Field label="标题">
               <input className="tt-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="如：高金讲座日历" />
             </Field>
@@ -574,7 +574,7 @@ export function SubscriptionDialog({ onClose }: { onClose: () => void }) {
               <button
                 onClick={() => createMut.mutate()}
                 disabled={!name.trim() || createMut.isPending}
-                className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
+                className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
               >
                 {createMut.isPending ? '提交中…' : '确认订阅'}
               </button>
@@ -583,7 +583,7 @@ export function SubscriptionDialog({ onClose }: { onClose: () => void }) {
         ) : (
           <button
             onClick={() => setAdding(true)}
-            className="flex items-center justify-center gap-1 px-3 py-2 text-sm text-gray-500 border border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:text-blue-600"
+            className="flex items-center justify-center gap-1 px-3 py-2 text-sm text-gray-500 border border-dashed border-gray-300 rounded-lg hover:border-pink-400 hover:text-pink-600"
           >
             <Plus size={14} /> 新增订阅
           </button>
@@ -627,15 +627,15 @@ export function ContextMenu({
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose() }} />
       <div
-        className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[180px]"
+        className="fixed z-50 glass-sheet rounded-2xl py-1 min-w-[180px]"
         style={{ left: Math.min(x, window.innerWidth - 200), top: Math.min(y, window.innerHeight - 140) }}
       >
-        <div className="px-3 py-1 text-[11px] text-gray-400 border-b border-gray-100 mb-1">{date}</div>
+        <div className="px-3 py-1 text-[11px] text-gray-400 border-b border-black/5 mb-1">{date}</div>
         {items.map((it) => (
           <button
             key={it.label}
             onClick={it.action}
-            className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+            className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-pink-50/80 hover:text-pink-600 transition-colors"
           >
             {it.label}
           </button>
@@ -757,7 +757,7 @@ export function DotEntryDialog({
           <button
             onClick={() => saveMut.mutate()}
             disabled={saveMut.isPending || !title.trim()}
-            className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
+            className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
           >
             添加
           </button>
@@ -862,7 +862,7 @@ export function ColorEntryDialog({
                   key={i}
                   onClick={() => setLevel(i)}
                   style={{ backgroundColor: c }}
-                  className={clsx('h-12 rounded-lg text-xs font-medium', i >= 3 ? 'text-white' : 'text-gray-700', level === i && 'ring-2 ring-blue-400')}
+                  className={clsx('h-12 rounded-lg text-xs font-medium', i >= 3 ? 'text-white' : 'text-gray-700', level === i && 'ring-2 ring-pink-500')}
                 >
                   {COLORING_LABELS[i]}
                 </button>
@@ -877,7 +877,7 @@ export function ColorEntryDialog({
                   key={i}
                   onClick={() => setLevel(i)}
                   style={{ backgroundColor: c }}
-                  className={clsx('h-12 rounded-lg', level === i && 'ring-2 ring-blue-400')}
+                  className={clsx('h-12 rounded-lg', level === i && 'ring-2 ring-pink-500')}
                 />
               ))}
             </div>
@@ -901,7 +901,7 @@ export function ColorEntryDialog({
           <button
             onClick={() => saveMut.mutate()}
             disabled={saveMut.isPending}
-            className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
+            className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
           >
             标记
           </button>

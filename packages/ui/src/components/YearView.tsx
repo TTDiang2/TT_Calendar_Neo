@@ -73,8 +73,8 @@ export function YearView({ yearData, layers, selectedDate, onSelectDate }: Props
                       className={clsx(
                         'aspect-square w-full text-[8px] leading-none rounded-[2px]',
                         day.is_other_month ? 'opacity-30' : 'text-gray-600',
-                        day.is_today && 'ring-1 ring-blue-500',
-                        isSel && 'ring-1 ring-blue-300',
+                        day.is_today && 'ring-1 ring-rose-500',
+                        isSel && 'ring-1 ring-pink-300',
                       )}
                     >
                       {d}

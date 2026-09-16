@@ -147,14 +147,14 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
             return (
               <div
                 key={t.id}
-                className={clsx('flex border-b border-gray-50 hover:bg-blue-50/30 cursor-pointer relative z-[5]', selected && 'bg-blue-50/60')}
+                className={clsx('flex border-b border-gray-50 hover:bg-pink-50/30 cursor-pointer relative z-[5]', selected && 'bg-pink-50/60')}
                 onClick={() => onSelect(t.id)}
                 style={{ height: ROW_H }}
               >
                 <div
                   className={clsx(
                     'sticky left-0 z-10 flex-shrink-0 px-2 flex items-center gap-1.5 border-r border-gray-100',
-                    selected ? 'bg-blue-50' : 'bg-white',
+                    selected ? 'bg-pink-50' : 'bg-white',
                   )}
                   style={{ width: LABEL_W }}
                   onClick={(e) => e.stopPropagation()}
@@ -170,7 +170,7 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
                     className={clsx(
                       'absolute rounded-md border text-[9px] text-white flex items-center px-1.5 overflow-hidden whitespace-nowrap',
                       r.overdue ? 'bg-red-400 border-red-500' : BAR_STYLE[t.status] ?? BAR_STYLE.notStarted,
-                      selected && 'ring-2 ring-blue-400',
+                      selected && 'ring-2 ring-pink-400',
                     )}
                     style={{ left: x, width: w, top: (ROW_H - BAR_H) / 2, height: BAR_H }}
                     title={`${r.start} → ${r.end}${r.overdue ? '（已过期）' : ''} · ${STATUS_LABELS[t.status] ?? t.status}`}

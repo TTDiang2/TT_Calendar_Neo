@@ -23,6 +23,9 @@ struct WSnapshot: Decodable {
     var today: String?
     var todos: [WTodo]?
     var events: [WEvent]?
+    var countdowns: [WCountdown]?
+    var coloring: [WColoring]?
+    var stats: WStats?
 }
 
 struct WTodo: Decodable {
@@ -33,6 +36,23 @@ struct WTodo: Decodable {
 struct WEvent: Decodable {
     var title: String
     var time: String?
+}
+
+struct WCountdown: Decodable {
+    var name: String
+    var daysLeft: Int?
+    var date: String?
+}
+
+struct WColoring: Decodable {
+    var date: String
+    var level: Int?
+}
+
+struct WStats: Decodable {
+    var total: Int?
+    var completed: Int?
+    var incomplete: Int?
 }
 
 func loadSnapshot() -> WSnapshot? {
@@ -156,9 +176,202 @@ struct TodayWidget: Widget {
     }
 }
 
+// ── 倒数日小组件 ──────────────────────────────────────────────────────
+
+struct CountdownWidgetView: View {
+    var entry: TodayEntry
+
+    var body: some View {
+        let items = entry.snap?.countdowns ?? []
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 4) {
+                Image(systemName: "hourglass")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.pink)
+                Text("倒数日")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+                Spacer(minLength: 0)
+            }
+            if items.isEmpty {
+                Text(snapEmptyText(entry.snap))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            } else {
+                ForEach(items.prefix(3).indices, id: \.self) { i in
+                    HStack(spacing: 4) {
+                        Text(items[i].name)
+                            .font(.system(size: 12))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        if let left = items[i].daysLeft {
+                            Text(left == 0 ? "今天" : "\(left)天")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(left <= 7 ? .pink : .secondary)
+                        }
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(6)
+    }
+}
+
+private func snapEmptyText(_ snap: WSnapshot?) -> String {
+    snap == nil ? "打开 App 同步数据" : "暂无倒数日"
+}
+
+struct TTCCountdownWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "TTCountdownWidget", provider: Provider()) { entry in
+            if #available(iOS 17.0, *) {
+                CountdownWidgetView(entry: entry)
+                    .containerBackground(.fill.tertiary, for: .widget)
+            } else {
+                CountdownWidgetView(entry: entry)
+            }
+        }
+        .configurationDisplayName("倒数日")
+        .description("最近的三个倒数日")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
+// ── 本月涂色小组件（当月热力网格） ────────────────────────────────────
+
+/// 与前端 COLORING_COLORS 一致的 5 档绿色
+private let coloringPalette = [
+    Color(red: 0.945, green: 0.973, blue: 0.957),
+    Color(red: 0.784, green: 0.902, blue: 0.788),
+    Color(red: 0.506, green: 0.780, blue: 0.518),
+    Color(red: 0.220, green: 0.557, blue: 0.235),
+    Color(red: 0.106, green: 0.369, blue: 0.125),
+]
+
+struct ColoringWidgetView: View {
+    var entry: TodayEntry
+
+    /// 当月日期 → (日号, 档位)；没有涂色记录的日子不画点
+    private func monthCells(_ snap: WSnapshot?) -> [(day: Int, level: Int)] {
+        let list = snap?.coloring ?? []
+        guard !list.isEmpty else { return [] }
+        let dayPrefix = String((snap?.today ?? "").prefix(8)) // YYYY-MM-
+        return list.compactMap { c in
+            guard c.date.hasPrefix(dayPrefix), let level = c.level else { return nil }
+            let dayNum = Int(c.date.suffix(2)) ?? Int(c.date.suffix(1)) ?? 0
+            return dayNum > 0 ? (dayNum, max(0, min(4, level))) : nil
+        }.sorted { $0.day < $1.day }
+    }
+
+    var body: some View {
+        let cells = monthCells(entry.snap)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 4) {
+                Image(systemName: "paintpalette")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.pink)
+                Text("本月涂色")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+                Spacer(minLength: 0)
+            }
+            if cells.isEmpty {
+                Text(snapEmptyText(entry.snap))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            } else {
+                let cols = [GridItem(.adaptive(minimum: 14), spacing: 3)]
+                LazyVGrid(columns: cols, alignment: .leading, spacing: 3) {
+                    ForEach(cells, id: \.day) { cell in
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(coloringPalette[min(4, max(0, cell.level))])
+                            .aspectRatio(1, contentMode: .fit)
+                            .overlay(
+                                Text("\(cell.day)")
+                                    .font(.system(size: 8))
+                                    .foregroundColor(cell.level >= 3 ? .white : .secondary)
+                            )
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(6)
+    }
+}
+
+struct TTCColoringWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "TTColoringWidget", provider: Provider()) { entry in
+            if #available(iOS 17.0, *) {
+                ColoringWidgetView(entry: entry)
+                    .containerBackground(.fill.tertiary, for: .widget)
+            } else {
+                ColoringWidgetView(entry: entry)
+            }
+        }
+        .configurationDisplayName("本月涂色")
+        .description("当月充实度热力图")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+// ── 完成概览小组件 ────────────────────────────────────────────────────
+
+struct StatsWidgetView: View {
+    var entry: TodayEntry
+
+    var body: some View {
+        let stats = entry.snap?.stats
+        let done = stats?.completed ?? 0
+        let total = max(stats?.total ?? 0, 1)
+        let rate = stats?.total == nil || stats?.total == 0 ? 0.0 : Double(done) / Double(total)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 4) {
+                Image(systemName: "chart.pie.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.pink)
+                Text("完成概览")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+                Spacer(minLength: 0)
+            }
+            Spacer(minLength: 0)
+            Text("\(Int((rate * 100).rounded()))%")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundColor(.pink)
+            Text("已完成 \(done) / 共 \(stats?.total ?? 0) 项")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(6)
+    }
+}
+
+struct TTCStatsWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "TTStatsWidget", provider: Provider()) { entry in
+            if #available(iOS 17.0, *) {
+                StatsWidgetView(entry: entry)
+                    .containerBackground(.fill.tertiary, for: .widget)
+            } else {
+                StatsWidgetView(entry: entry)
+            }
+        }
+        .configurationDisplayName("完成概览")
+        .description("待办完成率一览")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
 @main
 struct TTCalendarWidgets: WidgetBundle {
     var body: some Widget {
         TodayWidget()
+        TTCCountdownWidget()
+        TTCColoringWidget()
+        TTCStatsWidget()
     }
 }

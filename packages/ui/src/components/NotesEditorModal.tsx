@@ -51,7 +51,7 @@ export function NotesEditorModal({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         placeholder={placeholder}
-        className="w-full min-h-[320px] max-h-[60vh] text-sm border border-gray-200 rounded-md p-3 focus:border-blue-400 focus:outline-none resize-y leading-relaxed"
+        className="w-full min-h-[320px] max-h-[60vh] text-sm border border-gray-200 rounded-md p-3 focus:border-pink-400 focus:outline-none resize-y leading-relaxed"
       />
       <p className="mt-2 text-[11px] text-gray-400 text-right">
         ESC 或点击空白处关闭（自动保存）

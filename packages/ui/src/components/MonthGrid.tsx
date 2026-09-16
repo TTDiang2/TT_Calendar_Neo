@@ -1,9 +1,13 @@
 import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { CalendarClock, ClipboardList, ListTodo } from 'lucide-react'
 import type { Day, Layer, MonthData, Todo } from '../adapt/types'
-import { parseDate, todayStr } from '../adapt/data'
+import { COLORING_COLORS, getBusyColors, parseDate, pickContrastColor, todayStr } from '../adapt/data'
+import { getTodoBusyConfig, type TodoBusyConfig } from '../adapt/api'
+import { useIsMobile } from '../hooks/useMedia'
 import { DayCell } from './DayCell'
+import { collectDayVisuals } from './dayVisuals'
 
 interface Props {
   monthData: MonthData
@@ -17,41 +21,161 @@ interface Props {
 }
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const WEEKDAYS_SHORT = ['一', '二', '三', '四', '五', '六', '日']
 
-export function MonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleClick, onContextMenu, onDragStart, onDrop }: Props) {
+export function MonthGrid(props: Props) {
+  const isMobile = useIsMobile()
+  return isMobile ? <MobileMonthGrid {...props} /> : <DesktopMonthGrid {...props} />
+}
+
+/* 手机：iOS 风格月视图 —— 无边框格子、大数字圆片、点点一行，涂色=圆底、
+   今天=玫瑰色实心圆、选中=粉色圆环；点击日期弹出底部详情（右上 FAB 新建）。 */
+function MobileMonthGrid({ monthData, layers, selectedDate, onSelect }: Props) {
+  const today = todayStr()
+  // 忙度配色整个网格只查一次配置（桌面 DayCell 是每格一查，量级不同）
+  const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
+
+  const todayDay = useMemo(() => monthData.days.find((d) => d.date === today) ?? null, [monthData, today])
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 gap-1.5">
+      <div className="flex flex-col min-h-0 glass-card rounded-3xl p-2 pt-1 flex-shrink-0">
+        <div className="grid grid-cols-7 mb-0.5 flex-shrink-0">
+          {WEEKDAYS_SHORT.map((w, i) => (
+            <div
+              key={w}
+              className={`text-center text-[11px] font-medium py-1 ${i >= 5 ? 'text-weekend' : 'text-gray-500'}`}
+            >
+              {w}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-y-0.5 flex-shrink-0">
+          {monthData.days.map((day: Day, i) => (
+            <MobileDayCell
+              key={i}
+              day={day}
+              layers={layers}
+              busyConfig={busyConfig}
+              selected={selectedDate === day.date}
+              onClick={onSelect}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* 今日 agenda 占满月视图剩余空间（翻到不含今天的月份时隐藏，整月铺满） */}
+      {todayDay && <TodayAgenda day={todayDay} layers={layers} className="flex-1 min-h-0" />}
+    </div>
+  )
+}
+
+/** 手机月格：数字圆片 + 点点行（iOS 日历风格，无边框无事件标题） */
+function MobileDayCell({
+  day,
+  layers,
+  busyConfig,
+  selected,
+  onClick,
+}: {
+  day: Day
+  layers: Layer[]
+  busyConfig: TodoBusyConfig | undefined
+  selected: boolean
+  onClick: (date: string) => void
+}) {
+  const { d } = parseDate(day.date)
+  const today = todayStr()
+
+  // 涂色/图层圆底：与桌面 DayCell 同一套 colorLayers 叠层逻辑，取最后一层为主色
+  const layerById = new Map(layers.map((l) => [l.layer_id, l]))
+  const colorLayers: { id: string; color: string }[] = []
+  if (layerById.get('important')?.enabled && day.gradient_bg && day.gradient_bg.toLowerCase() !== '#ffffff') {
+    colorLayers.push({ id: 'important', color: day.gradient_bg })
+  }
+  if (layerById.get('coloring')?.enabled && day.coloring_level != null) {
+    colorLayers.push({ id: 'coloring', color: COLORING_COLORS[day.coloring_level] })
+  }
+  if (layerById.get('holiday')?.enabled && day.holiday?.name) {
+    colorLayers.push({ id: 'holiday', color: layerById.get('holiday')!.color ?? '#8E24AA' })
+  }
+  for (const b of getBusyColors(day, today, busyConfig)) {
+    if (layerById.get(b.id)?.enabled) colorLayers.push(b)
+  }
+  if (day.custom_bg && day.custom_bg.color) {
+    colorLayers.push({ id: 'custom', color: day.custom_bg.color })
+  }
+  const circleColor = colorLayers.length > 0 ? colorLayers[colorLayers.length - 1]!.color : null
+
+  const { dots } = collectDayVisuals(day, layers)
+  const isToday = day.is_today
+
+  return (
+    <button
+      onClick={() => onClick(day.date)}
+      className="relative flex flex-col items-center gap-0.5 py-1 rounded-2xl active:bg-pink-50/70 transition-colors"
+      aria-label={`${day.date}${isToday ? '，今天' : ''}${selected ? '，已选中' : ''}`}
+    >
+      <span className="relative flex items-center justify-center w-9 h-9">
+        {circleColor && !isToday && (
+          <span
+            className="absolute inset-0 rounded-full"
+            style={{ backgroundColor: circleColor, opacity: 0.85 }}
+          />
+        )}
+        {isToday && <span className="absolute inset-0 rounded-full bg-rose-500 shadow-md shadow-rose-500/30" />}
+        {selected && (
+          <span className={clsx('absolute -inset-[3px] rounded-full ring-2', isToday ? 'ring-pink-300' : 'ring-pink-400')} />
+        )}
+        <span
+          className={clsx(
+            'relative z-10 text-[15px] font-semibold tabular-nums',
+            isToday ? 'text-white' : !circleColor && 'text-gray-800',
+          )}
+          style={!isToday && circleColor ? { color: pickContrastColor(circleColor) } : undefined}
+        >
+          {d}
+        </span>
+        {day.holiday?.is_workday_made_up && (
+          <span className="absolute -top-0.5 -right-1.5 text-[8px] leading-none bg-amber-500 text-white px-1 py-px rounded-full z-20">班</span>
+        )}
+      </span>
+      {/* 点点行：高度固定防跳动，没有点点时占位 */}
+      <span className="flex items-center gap-[3px] h-1.5">
+        {dots.slice(0, 4).map((c, i) => (
+          <span key={i} className="w-1 h-1 rounded-full flex-shrink-0" style={{ backgroundColor: c }} />
+        ))}
+      </span>
+    </button>
+  )
+}
+
+/* 桌面：原有月视图（格子大、可承载事件标题与拖拽） */
+function DesktopMonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleClick, onContextMenu, onDragStart, onDrop }: Props) {
   const [dragOver, setDragOver] = useState<string | null>(null)
   const today = todayStr()
 
-  // 今日 agenda：只有当「本视图月份恰好包含今天」时，手机版月视图下方才有可常驻的今日总览；
-  // 翻到不含今天的月份时隐藏，让月格子铺满、专注整月浏览（桌面始终铺满、不显示该面板）。
   const todayDay = useMemo(() => monthData.days.find((d) => d.date === today) ?? null, [monthData, today])
   const showAgenda = !!todayDay
 
   return (
     <div className="flex-1 flex flex-col min-h-0 gap-1.5 md:gap-0">
-      {/* 手机：月份网格包进圆角卡片（与小组件/分析页同一视觉语言）；桌面保持铺满无卡片 */}
-      <div className="flex flex-col min-h-0 rounded-3xl bg-white border border-gray-100 shadow-sm p-3 md:contents">
+      {/* 桌面保持铺满无卡片（玻璃卡片语言仅用于 <md，本组件在手机分支已被 MobileMonthGrid 接管） */}
+      <div className="flex flex-col min-h-0 md:contents">
         <div className="grid grid-cols-7 gap-1 mb-2 md:mb-1 flex-shrink-0">
           {WEEKDAYS.map((w, i) => (
             <div
               key={w}
-              className={`text-center text-[11px] md:text-xs font-medium py-1 ${i >= 5 ? 'text-pink-400' : 'text-gray-400'}`}
+              className={`text-center text-[11px] md:text-xs font-medium py-1 ${i >= 5 ? 'text-weekend' : 'text-gray-500'}`}
             >
               {w}
             </div>
           ))}
         </div>
 
-        {/* 月份网格：
-            手机且含今日 agenda → 压缩到上半（shrink-0，超高时自身可滚，最大占 ~58% 屏留给 agenda）；
-            否则（桌面 / 不含今日的月份）→ 占满剩余高度、超高整月可滚 */}
+        {/* 月份网格：占满剩余高度，超高整月可滚 */}
         <div
-          className={clsx(
-            'grid grid-cols-7 gap-1',
-            showAgenda
-              ? 'md:flex-1 md:min-h-0 md:overflow-y-auto shrink-0 min-h-0 max-h-[58dvh] overflow-y-auto'
-              : 'flex-1 min-h-0 overflow-y-auto',
-          )}
+          className="grid grid-cols-7 gap-1 flex-1 min-h-0 overflow-y-auto"
           onDragEnd={() => setDragOver(null)}
         >
           {monthData.days.map((day: Day, i) => (
@@ -78,7 +202,7 @@ export function MonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleC
         </div>
       </div>
 
-      {/* 手机：今日 agenda 占满月视图剩余空间（md 以上隐藏，因桌面月格子已铺满） */}
+      {/* 今日 agenda 仅 <md 显示（桌面月格子已铺满） */}
       {showAgenda && todayDay && (
         <TodayAgenda day={todayDay} layers={layers} className="md:hidden flex-1 min-h-0" />
       )}
@@ -118,8 +242,8 @@ function TodayAgenda({ day, layers, className }: { day: Day; layers: Layer[]; cl
   const colorFor = (lid: string): string | undefined => layerById.get(lid)?.color ?? undefined
 
   return (
-    <section className={clsx('flex flex-col bg-white rounded-xl border border-gray-200 overflow-hidden', className)}>
-      <header className="px-3 py-2 border-b border-gray-100 flex items-center justify-between gap-2 bg-gray-50/50 flex-shrink-0">
+    <section className={clsx('flex flex-col glass-card rounded-2xl overflow-hidden', className)}>
+      <header className="px-3 py-2 border-b border-black/5 flex items-center justify-between gap-2 bg-white/40 flex-shrink-0 rounded-t-2xl">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-semibold text-gray-400 flex-shrink-0">今日</span>
           <span className="text-sm font-bold text-gray-800 flex-shrink-0">{m}月{d}日</span>

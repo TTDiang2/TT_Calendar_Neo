@@ -82,7 +82,7 @@ export function TodoEditor({ todo, lists, onClose, onSave, onDelete }: Props) {
                 status,
               })}
               disabled={!title.trim() || !listId}
-              className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
+              className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
               保存
             </button>

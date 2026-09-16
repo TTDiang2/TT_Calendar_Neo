@@ -238,12 +238,12 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* 左列表栏 — 桌面（md+）固定列，手机隐藏 */}
-      <div className="hidden md:flex w-60 bg-white border-r border-gray-200 p-3 overflow-y-auto flex flex-col flex-shrink-0">
+      <div className="hidden md:flex w-60 bg-white/55 border-r border-white/60 p-3 overflow-y-auto flex flex-col flex-shrink-0">
         <button
           onClick={() => { setSelectedList(null); setSelectedTodoId(null); setManualOrder(null) }}
           className={clsx(
             'flex items-center justify-between px-2 py-1.5 rounded-md text-sm mb-1',
-            selectedList === null ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
+            selectedList === null ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
           )}
         >
           <span className="flex items-center gap-1.5"><Inbox size={14} /> 全部</span>
@@ -274,7 +274,7 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
               }}
               className={clsx(
                 'group flex items-center justify-between px-2 py-1.5 rounded-md text-sm cursor-pointer mb-0.5 transition-colors select-none',
-                selectedList === l.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100',
+                selectedList === l.id ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-100',
               )}
               onClick={() => { setSelectedList(l.id); setSelectedTodoId(null); setManualOrder(null) }}
             >
@@ -292,7 +292,7 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
                       else if (e.key === 'Escape') { e.preventDefault(); cancelRename() }
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    className="flex-1 min-w-0 bg-white border border-blue-300 rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="flex-1 min-w-0 bg-white border border-pink-300 rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-pink-400"
                   />
                 ) : (
                   l.display_name
@@ -309,7 +309,7 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); setRenamingListId(l.id); setRenameDraft(l.display_name) }}
-                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-500"
+                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-pink-500"
                   title="重命名"
                 >
                   <Pencil size={12} />
@@ -414,7 +414,7 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
                 setSelectedTodoId('__NEW__')
               }}
               disabled={autoList}
-              className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40"
+              className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
               <Plus size={14} /> 新建待办
             </button>
@@ -495,7 +495,7 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
                     className={clsx(
                       'transition-opacity rounded-lg select-none cursor-grab active:cursor-grabbing',
                       draggingId === t.id && 'opacity-30',
-                      dragOverId === t.id && draggingId !== t.id && 'ring-2 ring-blue-400 ring-offset-1',
+                      dragOverId === t.id && draggingId !== t.id && 'ring-2 ring-pink-400 ring-offset-1',
                     )}
                   >
                     <TodoRow
@@ -618,7 +618,7 @@ function FilterSelect({ label, value, options, onChange }: {
         className={clsx(
           'flex items-center gap-1.5 pl-2.5 pr-2 py-1.5 text-sm rounded-lg border transition',
           open
-            ? 'border-blue-300 bg-blue-50 text-blue-700 shadow-sm'
+            ? 'border-pink-300 bg-pink-50 text-pink-700 shadow-sm'
             : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300',
         )}
       >
@@ -639,12 +639,12 @@ function FilterSelect({ label, value, options, onChange }: {
               className={clsx(
                 'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-left transition',
                 o.value === value
-                  ? 'text-blue-600 font-medium'
+                  ? 'text-pink-600 font-medium'
                   : 'text-gray-700 hover:bg-gray-50',
               )}
             >
               <span>{o.label}</span>
-              {o.value === value && <Check size={14} className="text-blue-600 flex-shrink-0" />}
+              {o.value === value && <Check size={14} className="text-pink-600 flex-shrink-0" />}
             </button>
           ))}
         </div>
@@ -719,7 +719,7 @@ function TodoRow({ todo, listName, isDone, overdue, selected, leaving, onSelect,
             </span>
           )}
           {(todo.tags ?? []).map((tag) => (
-            <span key={tag} className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{tag}</span>
+            <span key={tag} className="text-[10px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">{tag}</span>
           ))}
         </div>
       </div>
@@ -731,7 +731,7 @@ function TodoRow({ todo, listName, isDone, overdue, selected, leaving, onSelect,
           </span>
         )}
         {plannedToday && !isDone && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">今日计划</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-pink-50 text-pink-600">今日计划</span>
         )}
         {plannedTomorrow && !isDone && (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-600">明日计划</span>

@@ -66,7 +66,7 @@ export function DayView({ monthData, layers, selectedDate: _selectedDate, onSele
         <div
           className={clsx(
             'w-11 h-11 md:w-14 md:h-14 rounded-xl flex-shrink-0 flex flex-col items-center justify-center text-white shadow-sm',
-            day.is_today ? 'bg-blue-500' : 'bg-gray-300',
+            day.is_today ? 'bg-rose-500' : 'bg-gray-300',
           )}
           style={!day.is_today && barColor ? { backgroundColor: barColor } : undefined}
         >
@@ -88,7 +88,7 @@ export function DayView({ monthData, layers, selectedDate: _selectedDate, onSele
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onDoubleClick(day.date) }}
-          className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-xs md:text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 active:bg-blue-600 flex-shrink-0"
+          className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-xs md:text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 active:bg-pink-600 flex-shrink-0"
         >
           <Plus size={14} /> 新建
         </button>
@@ -101,7 +101,7 @@ export function DayView({ monthData, layers, selectedDate: _selectedDate, onSele
             <p className="text-sm text-gray-400">这天还没有安排</p>
             <button
               onClick={() => onDoubleClick(day.date)}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-500 text-white rounded-full shadow-sm hover:bg-blue-600 active:bg-blue-600"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm bg-pink-500 text-white rounded-full shadow-sm hover:bg-pink-600 active:bg-pink-600"
             >
               <Plus size={15} /> 添加事件
             </button>

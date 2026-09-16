@@ -245,14 +245,14 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         <textarea
           autoFocus
           rows={2}
-          className="w-full text-base font-medium border-0 border-b border-transparent hover:border-gray-200 focus:border-blue-400 focus:outline-none py-1 resize-none break-words whitespace-pre-wrap"
+          className="w-full text-base font-medium border-0 border-b border-transparent hover:border-gray-200 focus:border-pink-400 focus:outline-none py-1 resize-none break-words whitespace-pre-wrap"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="标题"
         />
 
         <textarea
-          className="w-full text-sm border border-gray-200 rounded-md p-2 min-h-[80px] focus:border-blue-400 focus:outline-none resize-y cursor-text"
+          className="w-full text-sm border border-gray-200 rounded-md p-2 min-h-[80px] focus:border-pink-400 focus:outline-none resize-y cursor-text"
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onDoubleClick={() => setNotesModalOpen(true)}
@@ -327,7 +327,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
           {tags.length > 0 && (
             <span className="flex flex-wrap gap-1 mt-1.5">
               {tags.map((t) => (
-                <span key={t} className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{t}</span>
+                <span key={t} className="text-[10px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">{t}</span>
               ))}
             </span>
           )}
@@ -351,7 +351,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
           <button
             onClick={save}
             disabled={!title.trim() || !listId || saving}
-            className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40 whitespace-nowrap"
+            className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40 whitespace-nowrap"
           >
             {saving ? '保存中…' : '保存'}
           </button>

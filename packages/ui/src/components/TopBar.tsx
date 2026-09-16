@@ -50,9 +50,9 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
     /* 布局：手机竖屏（<md）flex-wrap 拆行——一级 tab 交给底部标签栏（md:hidden），
          本栏只剩：第 1 行 标题+操作、第 2 行 视图模式横滚。
        桌面（md+）：md:flex-nowrap 合并单行（tab → 标题/导航 → 模式 → 操作） */
-    <header className="bg-white border-b border-gray-200 flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 md:px-4 py-1.5 md:py-0 md:h-14 md:flex-nowrap">
+    <header className="glass-topbar flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 md:px-4 py-1.5 md:py-0 md:h-14 md:flex-nowrap flex-shrink-0">
       {/* 一级 tab：仅桌面显示（手机用底部标签栏，避免双份导航） */}
-      <div className="hidden md:inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50 md:mr-3 flex-shrink-0">
+      <div className="hidden md:inline-flex rounded-xl border border-white/70 p-0.5 bg-white/50 md:mr-3 flex-shrink-0">
         {TOP_TABS.map((t) => (
           <button
             key={t.key}
@@ -77,7 +77,8 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
             </h1>
           </div>
           <div className="order-1 md:order-4 ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
-            <button onClick={onOpenSubscription} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
+            {/* 手机不允许订阅（20260915 任务书）：订阅入口只在桌面显示 */}
+            <button onClick={onOpenSubscription} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
               <Rss size={18} />
             </button>
             <button onClick={onOpenSettings} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
@@ -109,7 +110,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
               </button>
               <button
                 onClick={onToday}
-                className="ml-1 md:ml-2 px-2.5 md:px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 active:bg-blue-50 rounded-lg transition flex-shrink-0"
+                className="ml-1 md:ml-2 px-2.5 md:px-3 py-1.5 text-sm font-medium text-pink-600 hover:bg-pink-50 active:bg-pink-50 rounded-lg transition flex-shrink-0"
               >
                 今天
               </button>
@@ -123,7 +124,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
 
           {/* 模式切换：手机最后一行整行横滚，桌面保持原位置（移动端胶囊化加大触点） */}
           <div className="order-4 md:order-3 w-full md:w-auto md:ml-4 -mx-2 px-2 md:mx-0 md:px-0 overflow-x-auto flex-shrink-0">
-            <div className="inline-flex rounded-full border border-gray-200 p-0.5 bg-gray-50">
+            <div className="inline-flex rounded-full border border-white/70 p-0.5 bg-white/50">
               {MODES.map((m) => (
                 <button
                   key={m.key}
@@ -156,7 +157,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
             </button>
             <button
               onClick={onOpenSearch}
-              className="relative hidden md:flex items-center w-48 pl-2.5 pr-3 py-1.5 text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-lg hover:bg-white hover:text-gray-600 transition"
+              className="relative hidden md:flex items-center w-48 pl-2.5 pr-3 py-1.5 text-sm text-gray-400 bg-white/60 border border-white/80 rounded-lg hover:bg-white hover:text-gray-600 transition"
             >
               <Search size={14} className="mr-2" />
               搜索事件…
@@ -177,7 +178,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
           </div>
 
           <div className="order-4 md:order-3 w-full md:w-auto md:ml-4 -mx-2 px-2 md:mx-0 md:px-0 overflow-x-auto flex-shrink-0">
-            <div className="inline-flex rounded-full border border-gray-200 p-0.5 bg-gray-50">
+            <div className="inline-flex rounded-full border border-white/70 p-0.5 bg-white/50">
               {TODO_MODES.map((m) => (
                 <button
                   key={m.key}

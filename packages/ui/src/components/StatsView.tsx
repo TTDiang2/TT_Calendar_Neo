@@ -59,8 +59,9 @@ export function StatsView({ onGoTodo }: { onGoTodo?: () => void }) {
     staleTime: 30_000,
   })
 
-  // 每日完成柱状图：窗口大小 + 相对末端的偏移（< 向历史翻，> 向今天回）
-  const [windowSize, setWindowSize] = useState<7 | 14 | 30>(7)
+  // 每日完成柱状图：窗口大小 + 相对末端的偏移（< 向历史翻，> 向今天回）。
+  // 默认 30 天：7 天太窄，近期无完成记录时整版全零柱，看起来像「图表坏了」
+  const [windowSize, setWindowSize] = useState<7 | 14 | 30>(30)
   const [windowOffset, setWindowOffset] = useState(0)
 
   const gridRef = useRef<HTMLDivElement | null>(null)
@@ -148,7 +149,7 @@ export function StatsView({ onGoTodo }: { onGoTodo?: () => void }) {
     <main className="flex-1 flex flex-col overflow-y-auto min-w-0 bg-gray-50">
       <div ref={gridRef} className="p-3 md:p-5 grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 pb-24 md:pb-6 max-w-5xl w-full mx-auto">
         {/* 任务概述 */}
-        <section className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 md:p-5 lg:col-span-2">
+        <section className="glass-card rounded-2xl p-4 md:p-5 lg:col-span-2">
           <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5 mb-4">
             <BarChart3 size={16} className="text-pink-500" /> 任务概述
           </h2>
@@ -185,7 +186,7 @@ export function StatsView({ onGoTodo }: { onGoTodo?: () => void }) {
         </section>
 
         {/* 每日任务完成 */}
-        <section className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 md:p-5">
+        <section className="glass-card rounded-2xl p-4 md:p-5">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-semibold text-gray-700">每日任务完成</h3>
             <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
@@ -222,16 +223,25 @@ export function StatsView({ onGoTodo }: { onGoTodo?: () => void }) {
               <ChevronRight size={15} />
             </button>
           </div>
-          <div className="flex items-end gap-1.5 h-40" aria-label="每日完成任务数柱状图">
+          {windowDates.every((d) => d.count === 0) ? (
+            <div className="h-40 flex flex-col items-center justify-center gap-1 text-gray-300">
+              <BarChart3 size={22} strokeWidth={1.5} className="opacity-50" />
+              <p className="text-xs">该时间窗内没有完成记录</p>
+              <p className="text-[11px]">换个更长的时间范围，或先去完成几个待办试试</p>
+            </div>
+          ) : (
+          <div className="flex items-stretch gap-1.5 h-40" aria-label="每日完成任务数柱状图">
             {windowDates.map((d, i) => {
               const h = Math.max(4, (d.count / maxCount) * 100)
               const dt = new Date(d.date + 'T00:00:00')
               return (
                 <div key={d.date} className="flex-1 flex flex-col items-center gap-1 min-w-0" title={`${d.date}：完成 ${d.count} 项`}>
-                  <div className="w-full flex items-end justify-center" style={{ height: '100%' }}>
+                  {/* 关键：容器必须 items-stretch（列高才有定值）、百分比高度才解析得出来；
+                      旧版 items-end + height:100% 让每根柱子高度恒为 0（图表看起来「坏了」） */}
+                  <div className="w-full flex-1 flex items-end justify-center min-h-0">
                     <div
                       ref={(el) => { if (el) barsRef.current[i] = el }}
-                      className={clsx('w-full max-w-7 rounded-t-md origin-bottom', d.count > 0 ? 'bg-pink-500' : 'bg-pink-100')}
+                      className={clsx('w-full max-w-7 rounded-t-md origin-bottom', d.count > 0 ? 'bg-pink-500' : 'bg-pink-200/70')}
                       style={{ height: `${h}%` }}
                     />
                   </div>
@@ -240,10 +250,11 @@ export function StatsView({ onGoTodo }: { onGoTodo?: () => void }) {
               )
             })}
           </div>
+          )}
         </section>
 
         {/* 未完成任务分类 */}
-        <section className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 md:p-5">
+        <section className="glass-card rounded-2xl p-4 md:p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-700">未完成任务分类</h3>
             <span className="text-[11px] text-gray-400">{data.quadrant.length} 项未完成</span>
@@ -285,7 +296,7 @@ export function StatsView({ onGoTodo }: { onGoTodo?: () => void }) {
         </section>
 
         {/* 近期完成 */}
-        <section className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 md:p-5 lg:col-span-2">
+        <section className="glass-card rounded-2xl p-4 md:p-5 lg:col-span-2">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">近期完成</h3>
           {recent.length === 0 ? (
             <p className="text-sm text-gray-400 py-6 text-center">还没有已完成任务</p>
@@ -320,7 +331,7 @@ export function StatsView({ onGoTodo }: { onGoTodo?: () => void }) {
         </section>
 
         {/* 待办四象限（桌面宽屏附加值） */}
-        <section className="hidden lg:block rounded-2xl bg-white border border-gray-100 shadow-sm p-4 lg:col-span-2">
+        <section className="hidden lg:block glass-card rounded-2xl p-4 lg:col-span-2">
           <h3 className="text-sm font-semibold text-gray-700 mb-1">待办四象限</h3>
           <p className="text-[11px] text-gray-400 mb-2">横轴：到期紧迫度 → 纵轴：重要性 ↑（点 = 未完成待办）</p>
           <Quadrant data={data} />

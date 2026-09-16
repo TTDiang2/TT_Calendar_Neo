@@ -11,8 +11,46 @@
 @source "../../../apps";  /* 各端 app 自己的源码 */
 
 @theme {
-  --color-weekend: #dc2626;
-  --color-accent: #3b82f6;
+  /* 周末红 / 品牌粉（accent 统一粉色系，全 app 不再有第二套交互蓝） */
+  --color-weekend: #e11d48;
+  --color-accent: #ec4899;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Liquid Glass 设计系统 —— 苹果 HIG 风格的材质 / 深度 / 动效基建。
+
+   用法约定（克制审美，见 docs/PHILOSOPHY）：
+   · .ambient-root   根容器的极光环境光背景（渐变 blob 缓慢漂移）
+   · .glass-bar      顶栏 / 底部 dock / 抽屉：真·backdrop-blur 玻璃（少量元素）
+   · .glass-card     内容卡片：半透明白 + 发丝边 + 内高光（无 blur，量大防卡顿）
+   · .glass-sheet    底部弹层 / 模态：强玻璃 + 大圆角 + 深阴影
+   · .pressable      触控按压反馈（缩放回弹，弹簧曲线）
+   · 动效一律尊重 prefers-reduced-motion
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* 玻璃材质参数（集中在变量里，方便整体调浓淡） */
+  --glass-fill: rgba(255, 255, 255, 0.62);
+  --glass-fill-strong: rgba(255, 255, 255, 0.78);
+  --glass-fill-thin: rgba(255, 255, 255, 0.42);
+  --glass-hairline: rgba(255, 255, 255, 0.65);
+  --glass-edge: rgba(255, 255, 255, 0.9);
+  --glass-blur: 24px;
+  --glass-saturate: 170%;
+
+  /* 深度阴影：近影贴边、远影大而淡，营造浮起层次 */
+  --shadow-lift:
+    0 1px 1px rgba(16, 24, 40, 0.04),
+    0 8px 24px rgba(16, 24, 40, 0.08),
+    0 24px 48px rgba(16, 24, 40, 0.06);
+  --shadow-float:
+    0 2px 6px rgba(16, 24, 40, 0.08),
+    0 16px 40px rgba(16, 24, 40, 0.14),
+    0 32px 72px rgba(16, 24, 40, 0.10);
+
+  /* 弹簧动效时长/曲线（CSS 侧降级版；JS 侧用 anime.js eases.spring） */
+  --spring-ease: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spring-slow: cubic-bezier(0.22, 1.2, 0.36, 1);
 }
 
 html, body, #root {
@@ -47,10 +85,126 @@ html, body, #root {
 /* 去掉移动端点击灰色高亮 */
 * { -webkit-tap-highlight-color: transparent; }
 
-/* 滚动条美化 */
+/* 滚动条美化（细+圆+悬浮才现身，减少对玻璃材质的视觉干扰） */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.45); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.6); }
+
+/* ── 环境光背景：三团柔光极缓漂移（呼吸感），纯装饰不响应交互 ────── */
+@layer components {
+  .ambient-root {
+    position: relative;
+    background: linear-gradient(160deg, #fdf4f8 0%, #f6f4fd 38%, #f2f8fd 72%, #fdf6ef 100%);
+  }
+  .ambient-root::before,
+  .ambient-root::after {
+    content: "";
+    position: fixed;
+    inset: -20%;
+    pointer-events: none;
+    z-index: 0;
+    background-repeat: no-repeat;
+  }
+  .ambient-root::before {
+    background-image:
+      radial-gradient(42rem 42rem at 12% 8%, rgba(244, 114, 182, 0.16), transparent 62%),
+      radial-gradient(38rem 38rem at 88% 16%, rgba(129, 140, 248, 0.14), transparent 60%),
+      radial-gradient(46rem 46rem at 50% 110%, rgba(45, 212, 191, 0.12), transparent 64%);
+    animation: ambient-drift 36s ease-in-out infinite alternate;
+  }
+  .ambient-root::after {
+    background-image:
+      radial-gradient(30rem 30rem at 78% 82%, rgba(251, 191, 36, 0.10), transparent 62%),
+      radial-gradient(34rem 34rem at 8% 72%, rgba(96, 165, 250, 0.12), transparent 60%);
+    animation: ambient-drift 44s ease-in-out infinite alternate-reverse;
+  }
+
+  /* 内容层要盖在环境光之上 */
+  .ambient-content { position: relative; z-index: 1; }
+
+  /* ── 玻璃材质 ──────────────────────────────────────────────────── */
+
+  /* 真·玻璃（少量元素）：模糊 + 提饱和 + 发丝边 + 顶部内高光。
+     inset 高光模拟玻璃上缘折光，外阴影把元素从背景「托」起来。 */
+  .glass-bar {
+    background: var(--glass-fill);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 0.5px solid var(--glass-hairline);
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-edge),
+      inset 0 -0.5px 0 0 rgba(255, 255, 255, 0.35),
+      var(--shadow-lift);
+  }
+
+  /* 卡片玻璃（量大）：半透明+材质观感，不挂 backdrop-filter（滚动性能） */
+  .glass-card {
+    background: var(--glass-fill-thin);
+    border: 0.5px solid var(--glass-hairline);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.85),
+      0 1px 2px rgba(16, 24, 40, 0.03),
+      0 8px 20px rgba(16, 24, 40, 0.05);
+  }
+
+  /* 弹层玻璃（模态/sheet/dock）：强填充 + 大模糊 + 深浮影 */
+  .glass-sheet {
+    background: var(--glass-fill-strong);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    backdrop-filter: blur(40px) saturate(180%);
+    border: 0.5px solid var(--glass-edge);
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-edge),
+      var(--shadow-float);
+  }
+
+  /* 顶栏玻璃：只留底部发丝线与浅投影，不抢内容 */
+  .glass-topbar {
+    background: var(--glass-fill);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border-bottom: 0.5px solid rgba(255, 255, 255, 0.55);
+    box-shadow: 0 1px 24px rgba(16, 24, 40, 0.04);
+  }
+
+  /* 底部 dock：悬浮胶囊（iOS 风格），强玻璃 + 胶囊描边 */
+  .glass-dock {
+    background: var(--glass-fill-strong);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    backdrop-filter: blur(32px) saturate(180%);
+    border: 0.5px solid var(--glass-edge);
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-edge),
+      0 2px 8px rgba(16, 24, 40, 0.08),
+      0 16px 40px rgba(16, 24, 40, 0.16);
+  }
+
+  /* ── 触控按压反馈：弹簧回缩（active 即触发，松手弹回） ─────────── */
+  @media (hover: hover) {
+    .pressable { transition: transform 0.18s var(--spring-ease), box-shadow 0.18s ease; }
+    .pressable:hover { transform: translateY(-1px); }
+    .pressable:active { transform: scale(0.96); }
+  }
+  @media (hover: none) {
+    .pressable { transition: transform 0.18s var(--spring-ease); }
+    .pressable:active { transform: scale(0.95); }
+  }
+}
+
+@keyframes ambient-drift {
+  from { transform: translate3d(-1.5%, -1%, 0) scale(1); }
+  to   { transform: translate3d(1.5%, 1.5%, 0) scale(1.06); }
+}
+
+/* 「减弱动态效果」时关掉环境光漂移、按压位移与行入场动画 */
+@media (prefers-reduced-motion: reduce) {
+  .ambient-root::before,
+  .ambient-root::after { animation: none; }
+  .pressable,
+  .pressable:hover,
+  .pressable:active { transform: none; transition: none; }
+  .tt-row-enter { animation: none; }
+}
 
 .tt-input {
   width: 100%;
@@ -58,13 +212,13 @@ html, body, #root {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   font-size: 14px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.85);
   color: #1f2937;
   transition: border-color 0.15s;
 }
 .tt-input:focus {
   outline: none;
-  border-color: #60a5fa;
+  border-color: var(--color-accent);
 }
 
 /* 待办新建/切换行进入动画 */

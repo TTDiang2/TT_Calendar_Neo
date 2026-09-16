@@ -7,7 +7,7 @@
  * - 尊重系统「减弱动态效果」设置（prefers-reduced-motion）时直接跳过。
  */
 
-import { animate, stagger } from 'animejs'
+import { animate, easings, stagger, utils } from 'animejs'
 
 /** 系统「减弱动态效果」开启时跳过一切动画（可访问性硬要求） */
 export function prefersReducedMotion(): boolean {
@@ -93,5 +93,69 @@ export function animPress(el: HTMLElement | null): void {
   if (!el || prefersReducedMotion()) return
   animate(el, {
     scale: [{ to: 0.94, duration: 90, ease: 'out(2)' }, { to: 1, duration: 220, ease: 'out(3)' }],
+  })
+}
+
+/* ── 苹果化补充：物理弹簧与方向性滑动 ──────────────────────────────
+   曲线参数对齐 iOS 默认 spring 的手感：轻阻尼、快速收敛、末端微回弹。 */
+
+/** 共享弹簧曲线：随手势松手归位 / 弹层入场 / 指示器滑动共用一份手感 */
+export function springEase(stiffness = 170, damping = 22): ReturnType<typeof easings.spring> {
+  return easings.spring({ mass: 1, stiffness, damping, velocity: 0 })
+}
+
+/**
+ * 方向性内容滑动：内容朝 delta 方向滑出淡出再从反侧滑回（翻月/翻日/切 Tab）。
+ * negative delta = 向左滑入（前进到下一页），positive = 向右滑入（退回上一页）。
+ * 返回 cleanup：动画未完成时移除监听用（当前实现动画自成一体，直接忽略）。
+ */
+export function animSlideDirection(el: HTMLElement | null, delta: number, opts?: { distance?: number; duration?: number }): void {
+  if (!el || prefersReducedMotion()) return
+  const dist = opts?.distance ?? 32
+  const dir = delta < 0 ? -1 : 1
+  utils.remove(el, undefined, 'translateX')
+  animate(el, {
+    opacity: [0, 1],
+    translateX: [dir * dist, 0],
+    duration: opts?.duration ?? 320,
+    ease: 'out(3)',
+  })
+}
+
+/** 跟手位移的松手归位：手势未越过阈值时把内容弹回原位 */
+export function animSpringBack(el: HTMLElement | null, fromX: number): void {
+  if (!el) return
+  if (prefersReducedMotion()) {
+    el.style.transform = ''
+    return
+  }
+  utils.remove(el, undefined, 'translateX')
+  animate(el, {
+    translateX: [fromX, 0],
+    duration: 380,
+    ease: springEase(220, 26),
+  })
+}
+
+/** 抽屉滑入：direction -1 从左缘滑入，1 从右缘滑入（弹簧曲线，跟手感的替代） */
+export function animDrawerIn(el: HTMLElement | null, direction: -1 | 1): void {
+  if (!el || prefersReducedMotion()) return
+  utils.remove(el, undefined, 'translateX')
+  animate(el, {
+    translateX: [`${direction * 100}%`, '0%'],
+    duration: 420,
+    ease: springEase(190, 22),
+  })
+}
+
+/** 弹簧入场：轻微放大 + 上浮，带一次柔软的过冲（sheet / 弹窗 / dock 首现） */
+export function animSpringIn(el: HTMLElement | null, opts?: { distance?: number; duration?: number }): void {
+  if (!el || prefersReducedMotion()) return
+  animate(el, {
+    opacity: [0, 1],
+    translateY: [opts?.distance ?? 18, 0],
+    scale: [0.96, 1],
+    duration: opts?.duration ?? 480,
+    ease: springEase(180, 20),
   })
 }

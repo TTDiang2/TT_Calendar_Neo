@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react'
 import { useViewData, useCountdown } from './hooks/useApi'
 import { toggleLayer, moveDay, getTodoStats, getTodos, getSyncStatus, getSyncConfig, syncNow, refreshDueSubscriptions } from './adapt/api'
 import { shiftMonthKey, shiftYearKey, todayStr } from './adapt/data'
-import type { CalEvent, Layer, MonthData, TopTab, TodoViewMode, ViewMode, YearData } from './adapt/types'
+import type { CalEvent, Day, Layer, MonthData, TopTab, TodoViewMode, ViewMode, YearData } from './adapt/types'
 import { TopBar } from './components/TopBar'
 import { Sidebar, MobileLayersDrawer } from './components/Sidebar'
 import { MonthGrid } from './components/MonthGrid'
@@ -17,7 +17,8 @@ import { CountdownView } from './components/CountdownView'
 import { StatsView } from './components/StatsView'
 import { WidgetsView } from './components/WidgetsView'
 import { BottomTabBar } from './components/BottomTabBar'
-import { animEnter, animSheetUp } from './anim'
+import { animDrawerIn, animEnter, animSheetUp, animSlideDirection, animSpringBack } from './anim'
+import { useEdgeSwipe, useSwipeTabs } from './hooks/useSwipeNav'
 import {
   EventEditor,
   ScheduleEditor,
@@ -48,6 +49,48 @@ interface CtxMenuState {
   date: string
 }
 
+/** 手机右侧详情抽屉：右缘左滑呼出（等同桌面的右侧边栏），玻璃材质 + 弹簧滑入 */
+function RightDetailDrawer(props: {
+  day: Day | null
+  layers: Layer[]
+  onClose: () => void
+  onEditEvent: (date: string, event: CalEvent) => void
+  onEditSchedule: (date: string) => void
+  onSetColoring: (date: string) => void
+  onAddDot: (date: string) => void
+  onAddColor: (date: string) => void
+  onAddEvent: (date: string) => void
+}) {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    animDrawerIn(panelRef.current, 1)
+  }, [])
+  return (
+    <div className="md:hidden fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={props.onClose} />
+      <aside
+        ref={panelRef}
+        className="glass-sheet absolute inset-y-0 right-0 w-[300px] max-w-[85vw] rounded-l-3xl overflow-y-auto"
+      >
+        <div className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <DetailPanel
+            variant="drawer"
+            day={props.day}
+            layers={props.layers}
+            onEditEvent={props.onEditEvent}
+            onEditSchedule={props.onEditSchedule}
+            onSetColoring={props.onSetColoring}
+            onAddDot={props.onAddDot}
+            onAddColor={props.onAddColor}
+            onAddEvent={props.onAddEvent}
+            onClose={props.onClose}
+          />
+        </div>
+      </aside>
+    </div>
+  )
+}
+
 export default function App() {
   // 初始锚点 = 当前月（不能硬编码：三端冷启动都会落在写死的月份上，
   // 真机验收时极易被误读成「数据没保存/白屏没修好」）。注意 monthKey
@@ -75,15 +118,72 @@ export default function App() {
   const [exitSync, setExitSync] = useState<{ state: 'syncing' } | { state: 'failed'; error: string } | null>(null)
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
   const [mobileLayersOpen, setMobileLayersOpen] = useState(false)
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false)
+  const [dockSuspended, setDockSuspended] = useState(false)
   const dragSource = useRef<string | null>(null)
   const qc = useQueryClient()
 
-  // 一级 tab / 视图切换的内容入场动效（ anime.js；reduced-motion 时自动跳过）
+  // 一级 tab / 视图切换的内容入场动效（ anime.js；reduced-motion 时自动跳过）。
+  // 方向记忆：目标位次 > 来源位次 → 内容从右滑入（前进），反之从左（退回）。
   const contentRef = useRef<HTMLDivElement | null>(null)
   const sheetRef = useRef<HTMLDivElement | null>(null)
+  const lastNavIndex = useRef(0)
+  useEffect(() => {
+    const idx = topTab === 'todo' ? 1 : topTab === 'stats' ? 2 : topTab === 'widgets' ? 3 : 0
+    animSlideDirection(contentRef.current, idx - lastNavIndex.current, { distance: 26 })
+    lastNavIndex.current = idx
+  }, [topTab])
+  // 日历内 月/周/日/年/倒数日 切换保持轻量上浮入场
   useEffect(() => {
     animEnter(contentRef.current, { distance: 8, duration: 260 })
-  }, [topTab, mode])
+  }, [mode])
+
+  // ── 手机手势（<md）：左右滑切一级 tab + 左右缘滑呼出两侧抽屉 ──────
+  const gestureRef = useRef<HTMLDivElement | null>(null)
+  const gestureDx = useRef(0)
+  const gestureDisabled = useCallback(
+    () =>
+      !!dialog ||
+      !!ctxMenu ||
+      mobileLayersOpen ||
+      rightDrawerOpen ||
+      (typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches),
+    [dialog, ctxMenu, mobileLayersOpen, rightDrawerOpen],
+  )
+  const TAB_ORDER: TopTab[] = ['calendar', 'todo', 'stats']
+  useSwipeTabs(gestureRef, {
+    disabled: gestureDisabled,
+    onMove: (dx) => {
+      const idx = TAB_ORDER.indexOf(topTab)
+      const atEdge = (idx === 0 && dx > 0) || (idx === TAB_ORDER.length - 1 && dx < 0)
+      const applied = atEdge ? dx * 0.25 : dx // 边缘阻尼：告诉用户没有更多页了
+      gestureDx.current = applied
+      if (contentRef.current) contentRef.current.style.transform = `translateX(${applied}px)`
+      setDockSuspended(true)
+    },
+    onCommit: (dir) => {
+      const idx = TAB_ORDER.indexOf(topTab)
+      const next = TAB_ORDER[Math.min(TAB_ORDER.length - 1, Math.max(0, idx + (dir === -1 ? 1 : -1)))]
+      if (contentRef.current) contentRef.current.style.transform = ''
+      gestureDx.current = 0
+      // 滑入动画统一交给 [topTab] effect（animSlideDirection），这里不手动触发避免双重动画
+      if (next !== topTab) setTopTab(next)
+      setDockSuspended(false)
+    },
+    onCancel: () => {
+      animSpringBack(contentRef.current, gestureDx.current)
+      gestureDx.current = 0
+      setDockSuspended(false)
+    },
+  })
+  useEdgeSwipe(gestureRef, {
+    disabled: gestureDisabled,
+    onFromLeft: () => setMobileLayersOpen(true),
+    onFromRight: () => {
+      // 与渲染条件对齐：年视图没有详情抽屉，设置了 open 状态就必须有 UI 可关
+      if (topTab === 'calendar' && mode !== 'year') setRightDrawerOpen(true)
+    },
+  })
 
   const isDayWeek = mode === 'week' || mode === 'day'
   const prevIsDayWeek = useRef<boolean | null>(null)
@@ -322,13 +422,14 @@ export default function App() {
   const importEnd = monthData2?.days[36]?.date ?? '2026-08-31'
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="h-full flex flex-col ambient-root">
+      <div className="ambient-content flex flex-col flex-1 min-h-0">
       {exitSync && (
         <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center">
           <div className="bg-white rounded-2xl shadow-xl px-8 py-6 w-[360px] max-w-[calc(100vw-2rem)] text-center">
             {exitSync.state === 'syncing' ? (
               <>
-                <div className="mx-auto mb-3 w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <div className="mx-auto mb-3 w-6 h-6 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
                 <p className="text-sm text-gray-700">正在同步，同步完成后会自动退出……</p>
               </>
             ) : (
@@ -347,7 +448,7 @@ export default function App() {
                         setExitSync({ state: 'failed', error: e instanceof Error ? e.message : String(e) })
                       }
                     }}
-                    className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                    className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600"
                   >
                     重试同步
                   </button>
@@ -391,7 +492,14 @@ export default function App() {
         onOpenLayers={() => setMobileLayersOpen(true)}
       />
       <ReminderBanner onJumpToTodo={() => setTopTab('todo')} />
-      <div ref={contentRef} className="flex-1 flex overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
+      {/* 手机手势面：左右滑切 tab、左右缘滑呼出抽屉；内层承接入场/跟手位移动画。
+          touch-action: pan-y —— 横向手势归 JS、纵向滚动归浏览器，互不打架 */}
+      <div
+        ref={gestureRef}
+        className="flex-1 flex overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:pb-0"
+        style={{ touchAction: 'pan-y' }}
+      >
+      <div ref={contentRef} className="flex-1 flex min-w-0">
         {topTab === 'todo' ? (
           <TodoView viewMode={todoView} />
         ) : topTab === 'stats' ? (
@@ -495,8 +603,24 @@ export default function App() {
           </>
         )}
       </div>
+      </div>
 
-      {/* 手机：图层抽屉（顶栏「图层」按钮唤出） */}
+      {/* 手机：右侧详情抽屉（右缘左滑呼出，等同桌面的右侧边栏） */}
+      {rightDrawerOpen && mode !== 'year' && topTab === 'calendar' && (
+        <RightDetailDrawer
+          day={selectedDay ?? monthData2?.days.find((d) => d.is_today) ?? null}
+          layers={layers}
+          onClose={() => setRightDrawerOpen(false)}
+          onEditEvent={openEvent}
+          onEditSchedule={(d) => setDialog({ kind: 'schedule', date: d })}
+          onSetColoring={(d) => setDialog({ kind: 'coloring', date: d })}
+          onAddDot={(d) => setDialog({ kind: 'dot', date: d })}
+          onAddColor={(d) => setDialog({ kind: 'color', date: d })}
+          onAddEvent={openEvent}
+        />
+      )}
+
+      {/* 手机：图层抽屉（顶栏「图层」按钮或左缘右滑唤出） */}
       <MobileLayersDrawer
         open={mobileLayersOpen}
         onClose={() => setMobileLayersOpen(false)}
@@ -505,8 +629,8 @@ export default function App() {
         countdown={countdownData?.text ?? '…'}
       />
 
-      {/* 手机：底部标签栏（日历/待办/分析/小组件） */}
-      <BottomTabBar active={topTab} onChange={setTopTab} />
+      {/* 手机：悬浮 dock——滑动切 tab 时的「当前页签指示窗」，点按仍可跳转 */}
+      <BottomTabBar active={topTab} onChange={setTopTab} suspend={dockSuspended} />
 
       {/* 手机：日历页悬浮新建按钮（在底部标签栏上方） */}
       {topTab === 'calendar' && mode !== 'countdown' && (
@@ -515,7 +639,7 @@ export default function App() {
             if (mode === 'year') setMode('month')
             openEvent(selectedDate ?? dayCursor ?? todayStr())
           }}
-          className="md:hidden fixed right-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-30 w-12 h-12 rounded-full bg-pink-500 text-white shadow-lg shadow-pink-500/30 flex items-center justify-center active:scale-90 transition-transform"
+          className="pressable md:hidden fixed right-4 bottom-[calc(6rem+env(safe-area-inset-bottom,0px))] z-30 w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 text-white shadow-xl shadow-pink-500/40 flex items-center justify-center"
           title="新建事件"
         >
           <Plus size={22} />
@@ -596,6 +720,7 @@ export default function App() {
           onClose={() => setDialog(null)}
         />
       )}
+      </div>
     </div>
   )
 }

@@ -48,7 +48,7 @@ export function CountdownView() {
       onClick={() => { setSelectedCategory(c); setSelectedId(null) }}
       className={clsx(
         'flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-md text-sm mb-0.5',
-        selectedCategory === c ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
+        selectedCategory === c ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
       )}
     >
       <span className="flex items-center gap-1.5 truncate">
@@ -67,7 +67,7 @@ export function CountdownView() {
           onClick={() => { setSelectedCategory(null); setSelectedId(null) }}
           className={clsx(
             'flex items-center justify-between px-2 py-1.5 rounded-md text-sm mb-1',
-            selectedCategory === null ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
+            selectedCategory === null ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
           )}
         >
           <span className="flex items-center gap-1.5"><AlarmClock size={14} /> 全部</span>
@@ -90,7 +90,7 @@ export function CountdownView() {
             onClick={() => { setSelectedCategory(null); setSelectedId(null) }}
             className={clsx(
               'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border whitespace-nowrap flex-shrink-0',
-              selectedCategory === null ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200',
+              selectedCategory === null ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-gray-600 border-gray-200',
             )}
           >
             全部 <span className="text-[10px] opacity-70">{items.length}</span>
@@ -101,7 +101,7 @@ export function CountdownView() {
               onClick={() => { setSelectedCategory(c); setSelectedId(null) }}
               className={clsx(
                 'flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border whitespace-nowrap flex-shrink-0',
-                selectedCategory === c ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200',
+                selectedCategory === c ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-gray-600 border-gray-200',
               )}
             >
               <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: CATEGORY_COLORS[c] ?? '#9ca3af' }} />
@@ -118,7 +118,7 @@ export function CountdownView() {
           </h2>
           <button
             onClick={() => { setSelectedCategory(null); setSelectedId('NEW') }}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex-shrink-0"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 flex-shrink-0"
           >
             <Plus size={14} /> 新建
           </button>
@@ -207,7 +207,7 @@ function CountdownCard({ item, selected, onSelect }: { item: CountdownItem; sele
       onClick={onSelect}
       className={clsx(
         'rounded-xl border p-3 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 flex flex-col gap-1.5',
-        selected ? 'border-blue-400 ring-2 ring-blue-200 bg-blue-50/30' : 'border-gray-200 bg-white',
+        selected ? 'border-pink-400 ring-2 ring-pink-200 bg-pink-50/30' : 'border-gray-200 bg-white',
         item.passed && !item.never_expire && 'opacity-55',
       )}
     >
@@ -379,7 +379,7 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
 
         <label className="flex items-center justify-between text-xs text-gray-600 cursor-pointer">
           <span className="flex items-center gap-1.5"><Repeat size={13} /> 每年重置（生日/节日）</span>
-          <input type="checkbox" className="accent-blue-500" checked={repeatYearly} onChange={(e) => setRepeatYearly(e.target.checked)} />
+          <input type="checkbox" className="accent-pink-500" checked={repeatYearly} onChange={(e) => setRepeatYearly(e.target.checked)} />
         </label>
 
         {repeatYearly && (
@@ -387,11 +387,11 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
             <span className="block mb-1">重复规则</span>
             <div className="flex gap-3">
               <label className="flex items-center gap-1 cursor-pointer">
-                <input type="radio" name="repeat-type" className="accent-blue-500" checked={repeatType === 'solar'} onChange={() => setRepeatType('solar')} />
+                <input type="radio" name="repeat-type" className="accent-pink-500" checked={repeatType === 'solar'} onChange={() => setRepeatType('solar')} />
                 按公历（每年同月日）
               </label>
               <label className="flex items-center gap-1 cursor-pointer">
-                <input type="radio" name="repeat-type" className="accent-blue-500" checked={repeatType === 'lunar'} onChange={() => setRepeatType('lunar')} />
+                <input type="radio" name="repeat-type" className="accent-pink-500" checked={repeatType === 'lunar'} onChange={() => setRepeatType('lunar')} />
                 按农历（春节/七夕等）
               </label>
             </div>
@@ -411,7 +411,7 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
 
         <label className="flex items-center justify-between text-xs text-gray-600 cursor-pointer">
           <span className="flex items-center gap-1.5"><InfinityIcon size={13} /> 过期后不显示「已过」</span>
-          <input type="checkbox" className="accent-blue-500" checked={neverExpire} onChange={(e) => setNeverExpire(e.target.checked)} />
+          <input type="checkbox" className="accent-pink-500" checked={neverExpire} onChange={(e) => setNeverExpire(e.target.checked)} />
         </label>
 
         <label className="text-xs text-gray-500 block">
@@ -448,7 +448,7 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
           }, item?.id)}
           className={clsx(
             'px-3 py-1.5 text-sm rounded-lg',
-            (!name.trim() || !baseDate) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600',
+            (!name.trim() || !baseDate) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-pink-500 text-white hover:bg-pink-600',
           )}
         >
           {item ? '保存' : '创建'}

@@ -15,15 +15,16 @@ interface Props {
   onAddColor: (date: string) => void
   /** 新建事件入口（手机没有双击新建，桌面也顺带受益） */
   onAddEvent?: (date: string) => void
-  /** panel=桌面右侧栏（lg+）；sheet=手机底部弹层 */
-  variant?: 'panel' | 'sheet'
-  /** sheet 模式的关闭回调 */
+  /** panel=桌面右侧栏（lg+）；sheet=手机底部弹层；drawer=手机右侧抽屉内容体 */
+  variant?: 'panel' | 'sheet' | 'drawer'
+  /** sheet/drawer 模式的关闭回调 */
   onClose?: () => void
 }
 
 export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetColoring, onAddDot, onAddColor, onAddEvent, variant = 'panel', onClose }: Props) {
   const qc = useQueryClient()
   const sheet = variant === 'sheet'
+  const drawer = variant === 'drawer'
   const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
   const delMut = useMutation({
     mutationFn: (id: number) => deleteEvent(id),
@@ -54,9 +55,15 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
   })
 
   if (!day) {
-    if (sheet) return null
+    if (sheet || drawer) {
+      return (
+        <p className="text-sm text-gray-400 p-4">
+          {drawer ? '左缘的日期选中后，这里会显示当天详情；也可以直接点月历上的日期。' : null}
+        </p>
+      )
+    }
     return (
-      <aside className="hidden lg:block w-72 bg-white border-l border-gray-200 p-4 overflow-y-auto">
+      <aside className="hidden lg:block w-72 bg-white/55 border-l border-white/60 p-4 overflow-y-auto">
         <p className="text-sm text-gray-400">点击日期查看详情</p>
       </aside>
     )
@@ -76,15 +83,17 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
   return (
     <aside
       className={clsx(
-        'bg-white overflow-y-auto',
+        'overflow-y-auto',
         sheet
-          ? 'w-full max-h-[72dvh] rounded-t-2xl shadow-[0_-8px_30px_rgba(0,0,0,0.15)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
-          : 'hidden lg:block w-72 border-l border-gray-200 p-4',
+          ? 'glass-sheet w-full max-h-[72dvh] rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
+          : drawer
+            ? 'w-full'
+            : 'hidden lg:block w-72 bg-white/55 border-l border-white/60 p-4',
       )}
     >
       {sheet && (
         <div className="flex justify-center -mt-2 mb-1">
-          <div className="w-10 h-1 rounded-full bg-gray-200" />
+          <div className="w-10 h-1 rounded-full bg-gray-400/40" />
         </div>
       )}
       <div className="flex items-center justify-between mb-3">
@@ -96,10 +105,10 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
           <p className="text-sm text-gray-500">
             {y} 年 · 周{weekday}
             {day.lunar && <span className="ml-2 text-gray-400">{day.lunar}</span>}
-            {day.is_today && <span className="ml-2 text-blue-500 text-xs">今天</span>}
+            {day.is_today && <span className="ml-2 text-rose-500 text-xs">今天</span>}
           </p>
         </div>
-        {sheet && onClose && (
+        {(sheet || drawer) && onClose && (
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md text-lg flex-shrink-0"
@@ -114,7 +123,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
         {onAddEvent && (
           <button
             onClick={() => onAddEvent(day.date)}
-            className="flex-1 flex items-center justify-center gap-1 text-xs text-white py-1.5 rounded-md bg-blue-500 hover:bg-blue-600"
+            className="flex-1 flex items-center justify-center gap-1 text-xs text-white py-1.5 rounded-md bg-pink-500 hover:bg-pink-600"
           >
             <CalendarPlus size={12} /> 事件
           </button>
@@ -243,7 +252,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
             </div>
             <button
               onClick={() => onEditSchedule(day.date)}
-              className="text-[11px] text-gray-400 hover:text-blue-500"
+              className="text-[11px] text-gray-400 hover:text-pink-500"
               title="编辑全部日程"
             >
               编辑
@@ -264,7 +273,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                   <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
                     <button
                       onClick={() => onEditSchedule(day.date)}
-                      className="p-1 text-gray-400 hover:text-blue-500"
+                      className="p-1 text-gray-400 hover:text-pink-500"
                       title="编辑日程"
                     >
                       <Pencil size={12} />
@@ -311,7 +320,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
                       <button
                         onClick={() => onEditEvent(day.date, ev)}
-                        className="p-1 text-gray-400 hover:text-blue-500"
+                        className="p-1 text-gray-400 hover:text-pink-500"
                         title="编辑"
                       >
                         <Pencil size={12} />

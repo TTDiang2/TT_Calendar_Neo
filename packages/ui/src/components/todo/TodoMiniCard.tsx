@@ -47,7 +47,7 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
       className={clsx(
         'group flex items-start gap-2 px-2.5 py-2 rounded-lg border bg-white transition select-none',
         selected
-          ? 'border-blue-400 ring-1 ring-blue-300 shadow-sm'
+          ? 'border-pink-400 ring-1 ring-pink-300 shadow-sm'
           : 'border-gray-200 hover:border-gray-300 hover:shadow-sm',
       )}
     >
