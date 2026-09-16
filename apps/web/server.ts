@@ -218,7 +218,7 @@ async function handle(
   }
 
   // ----- 统计 -----
-  if (a === 'stats' && b === 'summary') return ok(res, be.getStatsSummary())
+  if (a === 'stats' && b === 'summary') return ok(res, be.getStatsSummary(qs.get('list_id') ?? undefined))
 
   // ----- 设置：忙度算法 / 每日提醒 -----
   if (a === 'settings' && b === 'todo-busy') {

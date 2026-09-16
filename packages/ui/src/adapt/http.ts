@@ -163,8 +163,9 @@ export function createHttpBackend(apiBase = '/api'): BackendAdapter {
     },
 
     // ----- 统计 -----
-    async getStatsSummary() {
-      return get<StatsSummary>('/stats/summary')
+    async getStatsSummary(list_id?: string) {
+      const q = list_id ? `?list_id=${encodeURIComponent(list_id)}` : ''
+      return get<StatsSummary>(`/stats/summary${q}`)
     },
 
     // ----- 集思录导入 -----

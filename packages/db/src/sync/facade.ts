@@ -285,6 +285,14 @@ export class SyncFacade {
         )
         this.saveBase({ snapshot: r.merged, tombstones: r.tombstones, commitSha: w.commitSha })
         this.saveLastStatus(w.commitSha)
+        // 拉入的 todo 行绕过了 createTodo/updateTodo 的增量重算，快照合并后统一
+        // 重算忙度，否则另一台设备完成的待办不会在本机月视图染色（20260916 bug）。
+        // 尽力而为：重算失败不能把已成功的同步整体报成失败
+        try {
+          this.backend.recomputeTodoBusy()
+        } catch {
+          /* 下次任意 todo 变更或同步会再补算 */
+        }
         return {
           result: 'ok',
           pulled: r.report.pulled,
@@ -337,6 +345,11 @@ export class SyncFacade {
     })
     this.saveBase({ snapshot: r.merged, tombstones: r.tombstones, commitSha: w.commitSha })
     this.saveLastStatus(w.commitSha)
+    try {
+      this.backend.recomputeTodoBusy()
+    } catch {
+      /* 同上：尽力而为 */
+    }
     return {
       result: 'ok',
       pulled: r.report.pulled,

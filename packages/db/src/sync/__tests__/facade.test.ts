@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Snapshot, Tombstones } from '@tt-calendar/contracts'
+import type { MonthData, Snapshot, Tombstones } from '@tt-calendar/contracts'
 
 import { openLocalDb, type LocalDbHandle } from '../../local/backend'
 import { GitHubDataRepo } from '../github'
@@ -496,6 +496,39 @@ describe('SyncFacade 端到端（假远端）', () => {
     expect(phone.backend.getTodos()).toHaveLength(0)
     pc.sqlite.close()
     phone.sqlite.close()
+  })
+
+  it('同步拉入的 todo 自动重算忙度：滚动窗口外的完成日也染色（20260916 回归）', async () => {
+    const h = await openDevice()
+    // 完成日在 -60 天滚动窗口之外：只有「触及日期并集」口径能覆盖
+    const oldDate = '2026-03-01'
+    const fr = fakeRemote({
+      snapshot: {
+        todo_list: [{ id: 'L1', display_name: '电脑清单' }],
+        todo: [
+          {
+            id: 'T1',
+            list_id: 'L1',
+            title: '很久前完成的待办',
+            status: 'completed',
+            completed_at: `${oldDate} 10:00:00`,
+            importance: 'high',
+            complexity: 'hard',
+          },
+        ],
+      },
+      tombstones: {},
+      head: 'r-old',
+    })
+    const f = makeFacade(h, fr.remote)
+    f.saveConfig({ repo: 'u/d', branch: 'main', token: 't', auto_on_start: false, sync_on_close: false })
+
+    expect(await f.sync()).toMatchObject({ result: 'needs_decision' })
+    await f.resolveFirstBind('pull_overwrite')
+
+    const view = h.backend.getView('month', '2026-3') as MonthData
+    expect(view.days.find((d) => d.date === oldDate)?.done_level ?? null).not.toBeNull()
+    h.sqlite.close()
   })
 
   it('rowCountOf 汇总各表行数', () => {

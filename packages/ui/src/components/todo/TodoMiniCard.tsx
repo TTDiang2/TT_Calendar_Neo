@@ -45,7 +45,8 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
   return (
     <div
       className={clsx(
-        'group flex items-start gap-2 px-2.5 py-2 rounded-lg border bg-white transition select-none',
+        // 20260916 任务书：矩阵行目太扁——移动端加大内边距与字号，让卡片能呼吸
+        'group flex items-start gap-2.5 px-3 py-2.5 sm:px-2.5 sm:py-2 rounded-xl sm:rounded-lg border bg-white transition select-none',
         selected
           ? 'border-pink-400 ring-1 ring-pink-300 shadow-sm'
           : 'border-gray-200 hover:border-gray-300 hover:shadow-sm',
@@ -69,7 +70,7 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
       )}
       <button onClick={onClick} className="flex-1 text-left min-w-0 cursor-pointer">
         <div className="flex items-start justify-between gap-1">
-          <span className={clsx('text-sm leading-snug break-all', done && 'line-through text-gray-400')}>
+          <span className={clsx('text-[15px] sm:text-sm leading-snug break-all', done && 'line-through text-gray-400')}>
             {todo.title}
           </span>
           <span className="flex flex-col items-end gap-0.5 flex-shrink-0">
@@ -135,9 +136,9 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
           </div>
         )}
 
-        {/* 备注预览：单行截断，完整内容在详情面板看（手机看板省略，正文留详情面板） */}
+        {/* 备注预览：手机两行截断（20260916：小卡片也要能透出信息），桌面单行 */}
         {todo.body && (
-          <div className="mt-1 hidden sm:block text-[10px] text-gray-400 leading-snug truncate">{todo.body}</div>
+          <div className="mt-1 text-[11px] sm:text-[10px] text-gray-400 leading-snug line-clamp-2 sm:line-clamp-none sm:truncate">{todo.body}</div>
         )}
 
         {sub && <div className="mt-1 text-[11px] text-gray-400 sm:truncate">{sub}</div>}

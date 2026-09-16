@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Settings } from 'lucide-react'
 import type { Layer } from '../adapt/types'
 import { createLayer, getSubscriptions } from '../adapt/api'
 import { COLOR_PRESETS, GRADED_PALETTES } from '../adapt/data'
@@ -23,8 +23,16 @@ export function Sidebar({ layers, onToggle, countdown }: Props) {
   )
 }
 
-/* 手机：左侧滑出抽屉（点顶栏「图层」按钮或左缘右滑手势唤出），液态玻璃材质 + 弹簧滑入 */
-export function MobileLayersDrawer({ open, onClose, layers, onToggle, countdown }: Props & { open: boolean; onClose: () => void }) {
+/* 手机：左侧滑出抽屉（dock 左按钮唤出），液态玻璃材质 + 弹簧滑入。
+   20260916 任务书：设置不再占 Top Bar，收进本抽屉底部的「设置」入口 */
+export function MobileLayersDrawer({
+  open,
+  onClose,
+  layers,
+  onToggle,
+  countdown,
+  onOpenSettings,
+}: Props & { open: boolean; onClose: () => void; onOpenSettings?: () => void }) {
   const panelRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
     if (open) animDrawerIn(panelRef.current, -1)
@@ -44,6 +52,14 @@ export function MobileLayersDrawer({ open, onClose, layers, onToggle, countdown 
           </button>
         </div>
         <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} showSubscriptions={false} />
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="mt-auto flex items-center gap-2 px-2 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl mb-2 transition-colors"
+          >
+            <Settings size={16} className="text-gray-400" /> 设置
+          </button>
+        )}
       </aside>
     </div>
   )

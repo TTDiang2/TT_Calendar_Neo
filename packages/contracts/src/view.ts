@@ -103,6 +103,12 @@ export const StatsSummary = z.object({
     }),
   ),
   daily_done: z.array(z.object({ date: DateStr, count: z.number().int() })),
+  /** 逐日充实度档位（近 ~180 天；统计页贡献图/信息条数据源，20260916 任务书） */
+  coloring_daily: z.array(z.object({ date: DateStr, level: z.number().int() })).default([]),
+  /** 未来 14 天忙度预测（day_busy.predict_level 直出，琥珀档位） */
+  busy_predict: z.array(z.object({ date: DateStr, level: z.number().int().nullable() })).default([]),
+  /** 全量「有完成记录的日期」集（连续打卡 streak 不受热力图窗口封顶，20260916 审核项 D） */
+  completion_dates: z.array(DateStr).default([]),
   stats: z.object({
     total: z.number().int(),
     incomplete: z.number().int(),

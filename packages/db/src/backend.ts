@@ -20,6 +20,7 @@ import type {
   StatsSummary,
   Subscription,
   Todo,
+  TodoBusyConfig,
   TodoList,
   TodoSort,
   TodoStatusFilter,
@@ -211,7 +212,26 @@ export class SqliteBackend {
   constructor(
     private readonly db: Db,
     private readonly opts: { trackTombstones?: boolean } = {},
-  ) {}
+  ) {
+    this.bootstrapBusySnapshot()
+  }
+
+  /**
+   * day_busy 是派生缓存（不进同步快照导出），旧版本只在设置页手动重算——
+   * 存量库升级到自动重算后需要一次性补全（否则历史月份的 done 染色缺失）。
+   * 用 sync.* 本机私有 meta 键做一次性标记（本地专用：不进快照、不产生墓碑），
+   * 只看 day_busy 行数会漏掉「有部分旧行」的库，标记法保证恰好补一次。
+   */
+  private bootstrapBusySnapshot(): void {
+    try {
+      if (this.getMeta('sync.busy_bootstrapped') === '1') return
+      const nTodo = this.db.select({ n: sql<number>`COUNT(*)` }).from(s.todo).get()?.n ?? 0
+      if (nTodo > 0) this.recomputeTodoBusy()
+      this.setMeta('sync.busy_bootstrapped', '1')
+    } catch {
+      // 表还没建好（极端初始化顺序）等下次启动；不阻塞构造
+    }
+  }
 
   /**
    * 删除行时写墓碑（对齐 Python sync/schema.py 的触发器语义）：
@@ -823,10 +843,11 @@ export class SqliteBackend {
   // ----- 统计 -----
 
   /** 统计面板聚合（对齐 Python routes.py stats_summary）：
-   *  四象限散点（未完成，due_importance 序）+ 近 90 天逐日完成 + 总数 + 清单名 */
-  getStatsSummary(): StatsSummary {
+   *  四象限散点（未完成，due_importance 序）+ 逐日完成 + 总数 + 清单名 + 充实度/忙度序列。
+   *  20260916 扩充：list_id 过滤（统计范围抽屉）、coloring_daily（贡献图）、busy_predict（忙度预测） */
+  getStatsSummary(list_id?: string): StatsSummary {
     const today = todayStr()
-    const todos = this.getTodos({ status: 'all', sort: 'due_importance' })
+    const todos = this.getTodos({ status: 'all', sort: 'due_importance', list_id })
     const quadrant = todos
       .filter((t) => t.status !== 'completed')
       .map((t) => ({
@@ -837,26 +858,69 @@ export class SqliteBackend {
         due_date: t.due_date,
         days_to_due: t.due_date ? diffDays(today, t.due_date) : null,
       }))
-    // 近 90 天逐日完成数（Python db.daily_completed(conn, 90)）
-    const from90 = addDays(today, -90)
+    // 逐日完成数（Python db.daily_completed）；窗口扩到 190 天供贡献图——
+    // 前端热力图起点还会按周一回退 0-6 天，190 = 182 + 6 保证最左列不缺数据
+    const from190 = addDays(today, -189)
+    const doneConds = [sql`${s.todo.completedAt} >= ${from190 + ' 00:00:00'}`]
+    if (list_id) doneConds.push(sql`${s.todo.listId} = ${list_id}`)
     const dailyDoneRows = this.db
       .select({
         d: sql<string>`substr(${s.todo.completedAt}, 1, 10)`,
         c: sql<number>`COUNT(*)`,
       })
       .from(s.todo)
-      .where(sql`${s.todo.completedAt} >= ${from90 + ' 00:00:00'}`)
+      .where(sql.join(doneConds, sql` AND `))
       .groupBy(sql`substr(${s.todo.completedAt}, 1, 10)`)
       .all()
     const daily_done = dailyDoneRows
       .filter((r) => r.d)
       .map((r) => ({ date: r.d as DateStr, count: Number(r.c) }))
       .sort((a, b) => (a.date < b.date ? -1 : 1))
+
+    // 充实度序列：近 190 天（贡献图直接用 COLORING_COLORS 呈现）
+    const coloringRows = this.db
+      .select({ d: s.coloring.date, level: s.coloring.level })
+      .from(s.coloring)
+      .where(sql`${s.coloring.date} >= ${from190}`)
+      .all()
+    const coloring_daily = coloringRows
+      .map((r) => ({ date: r.d as DateStr, level: r.level }))
+      .sort((a, b) => (a.date < b.date ? -1 : 1))
+
+    // 忙度预测：今天起 14 天（day_busy.predict_level）
+    const to14 = addDays(today, 13)
+    const busyRows = this.db
+      .select({ d: s.dayBusy.date, predictLevel: s.dayBusy.predictLevel })
+      .from(s.dayBusy)
+      .where(sql`${s.dayBusy.date} BETWEEN ${today} AND ${to14}`)
+      .all()
+    const busyByDate = new Map(busyRows.map((r) => [r.d as DateStr, r.predictLevel] as const))
+    const busy_predict: StatsSummary['busy_predict'] = []
+    for (let i = 0; i < 14; i += 1) {
+      const d = addDays(today, i) as DateStr
+      busy_predict.push({ date: d, level: busyByDate.get(d) ?? null })
+    }
+
+    // 全量完成日期集（streak 计算用；DISTINCT 直接在 SQL 出，不过窗口）
+    const dateConds = [sql`${s.todo.completedAt} IS NOT NULL`]
+    if (list_id) dateConds.push(sql`${s.todo.listId} = ${list_id}`)
+    const completionRows = this.db
+      .select({ d: sql<string>`DISTINCT substr(${s.todo.completedAt}, 1, 10)` })
+      .from(s.todo)
+      .where(sql.join(dateConds, sql` AND `))
+      .all()
+    const completion_dates = completionRows
+      .map((r) => r.d as DateStr)
+      .sort((a, b) => (a < b ? -1 : 1))
+
     const list_names: Record<string, string> = {}
     for (const l of this.getTodoLists()) list_names[l.id] = l.display_name
     return {
       quadrant,
       daily_done,
+      coloring_daily,
+      busy_predict,
+      completion_dates,
       stats: {
         total: todos.length,
         incomplete: todos.filter((t) => t.status !== 'completed').length,
@@ -868,42 +932,86 @@ export class SqliteBackend {
 
   // ----- 忙度 -----
 
+  /**
+   * 单日忙度折算（对齐旧版 Python _recompute_day_busy_for_todo 的口径）：
+   *  - predict：due/planned 命中当日的「未完成」todo（今天及以后才写，过去只看实际完成）
+   *  - done：completed_at 落在当日的「所有」todo（与截止日无关——补交的也要算在完成那天，
+   *    20260916 任务书点名「已完成染色不正常」的根因之一就是旧移植版把 done 限死在
+   *    due/planned 当日，逾期完成的待办哪天都不染色）
+   */
+  private busyLevelsForDate(
+    d: DateStr,
+    todos: readonly Todo[],
+    cfg: TodoBusyConfig,
+  ): { predictLevel: number | null; doneLevel: number | null } {
+    const today = todayStr()
+    let predictLevel: number | null = null
+    let doneLevel: number | null = null
+    if (d >= today) {
+      const open = todos.filter(
+        (t) => t.status !== 'completed' && (t.due_date === d || t.planned_date === d),
+      )
+      predictLevel = computeTodoBusyLevel(d, open, cfg)
+    }
+    if (d <= today) {
+      const done = todos.filter((t) => t.status === 'completed' && (t.completed_at ?? '').slice(0, 10) === d)
+      doneLevel = computeTodoBusyLevel(d, done, cfg)
+    }
+    return { predictLevel, doneLevel }
+  }
+
+  private upsertBusyDay(d: DateStr, levels: { predictLevel: number | null; doneLevel: number | null }): void {
+    this.db
+      .insert(s.dayBusy)
+      .values({ date: d, predictLevel: levels.predictLevel, doneLevel: levels.doneLevel })
+      .onConflictDoUpdate({
+        target: s.dayBusy.date,
+        set: { predictLevel: levels.predictLevel, doneLevel: levels.doneLevel },
+      })
+      .run()
+  }
+
   recomputeTodoBusy(): { days_written: number } {
     const cfg = this.getTodoBusyConfig()
     const todos = this.db.select().from(s.todo).all().map(rowToTodo)
     const today = todayStr()
-    // 覆盖窗口：过去 60 天到未来 120 天
-    const from = addDays(today, -60)
-    const to = addDays(today, 120)
-    let written = 0
-    const byDate = new Map<DateStr, Todo[]>()
+    // 日期集 = todo 表触及日期（due/planned/completed 去重并集，对齐旧版 Python
+    // _recompute_day_busy：不设时间窗，历史/远期月份同步进来也能补全染色）
+    //   ∪ 滚动窗口 -60..+120（兜底刷新近期已有行，清除无 todo 日期的残留档位）
+    const dates = new Set<DateStr>()
     for (const t of todos) {
-      for (const key of [t.due_date, t.planned_date]) {
-        if (key) (byDate.get(key) ?? byDate.set(key, []).get(key)!).push(t)
+      for (const d of SqliteBackend.busyDatesOf(t)) {
+        if (d) dates.add(d)
       }
     }
-    for (let d = from; d <= to; d = addDays(d, 1)) {
-      const todosOfDay = byDate.get(d as DateStr) ?? []
-      const isFuture = d >= today
-      const relevant = isFuture
-        ? todosOfDay.filter((t) => t.status !== 'completed')
-        : todosOfDay.filter((t) => t.status === 'completed' && (t.completed_at ?? '').slice(0, 10) === d)
-      const level = computeTodoBusyLevel(d as DateStr, relevant, cfg)
-      this.db
-        .insert(s.dayBusy)
-        .values({
-          date: d,
-          predictLevel: isFuture ? level : null,
-          doneLevel: isFuture ? null : level,
-        })
-        .onConflictDoUpdate({
-          target: s.dayBusy.date,
-          set: { predictLevel: isFuture ? level : null, doneLevel: isFuture ? null : level },
-        })
-        .run()
+    const from = addDays(today, -60)
+    for (let d = from, i = 0; i <= 180; d = addDays(d, 1), i += 1) dates.add(d as DateStr)
+    let written = 0
+    for (const d of dates) {
+      this.upsertBusyDay(d, this.busyLevelsForDate(d, todos, cfg))
       written += 1
     }
     return { days_written: written }
+  }
+
+  /** todo 增删改的热路径增量重算：只折算受影响日期（全量 181 天重算对手机 WASM 太重） */
+  private recomputeBusyForDates(dates: (string | null | undefined)[]): void {
+    const valid = [
+      ...new Set(
+        dates.filter((d): d is DateStr => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)),
+      ),
+    ]
+    if (valid.length === 0) return
+    const cfg = this.getTodoBusyConfig()
+    const todos = this.db.select().from(s.todo).all().map(rowToTodo)
+    for (const d of valid) this.upsertBusyDay(d, this.busyLevelsForDate(d, todos, cfg))
+  }
+
+  /** 一条 todo 影响的忙度日期：截止日 + 计划日 + 完成日（old/new 两组取并集） */
+  private static busyDatesOf(t: Todo | null | undefined): (string | null)[] {
+    if (!t) return []
+    const completedDate = t.completed_at ? t.completed_at.slice(0, 10) : null
+    return [t.due_date, t.planned_date, completedDate]
   }
 
   // ----- 待办 -----
@@ -941,12 +1049,15 @@ export class SqliteBackend {
   }
 
   deleteTodoList(id: string): { ok: boolean } {
-    for (const t of this.db.select().from(s.todo).where(eq(s.todo.listId, id)).all()) {
+    // 删除前收集该清单所有待办的忙度日期，删完增量重算（否则对应日期残留旧染色）
+    const affected = this.db.select().from(s.todo).where(eq(s.todo.listId, id)).all().map(rowToTodo)
+    for (const t of affected) {
       this.db.delete(s.todo).where(eq(s.todo.id, t.id)).run()
       this.tombstone('todo', t.id)
     }
     this.db.delete(s.todoList).where(eq(s.todoList.id, id)).run()
     this.tombstone('todo_list', id)
+    this.recomputeBusyForDates(affected.flatMap((t) => SqliteBackend.busyDatesOf(t)))
     return { ok: true }
   }
 
@@ -1059,15 +1170,21 @@ export class SqliteBackend {
         startDate: data.start_date ?? null,
         complexity: data.complexity ?? 'medium',
         tags: data.tags ? JSON.stringify(data.tags) : null,
+        // 直传 completed 状态时补完成时间（否则既不进 done 也不进 predict 染色）
+        completedAt: data.status === 'completed' ? now() : null,
         updatedAt: now(),
       })
       .run()
+    this.recomputeBusyForDates([
+      ...SqliteBackend.busyDatesOf(rowToTodo(this.db.select().from(s.todo).where(eq(s.todo.id, id)).get()!)),
+    ])
     return rowToTodo(this.db.select().from(s.todo).where(eq(s.todo.id, id)).get()!)
   }
 
   updateTodo(id: string, data: Record<string, unknown>): Todo | null {
     const cur = this.db.select().from(s.todo).where(eq(s.todo.id, id)).get()
     if (!cur) return null
+    const oldTodo = rowToTodo(cur)
     const set: Partial<TodoT> = { updatedAt: now() }
     if ('title' in data) set.title = data.title as string
     if ('body' in data) set.body = (data.body as string | null) ?? null
@@ -1085,12 +1202,20 @@ export class SqliteBackend {
     if ('sort_order' in data) set.sortOrder = (data.sort_order as number) ?? cur.sortOrder
     if ('list_id' in data) set.listId = (data.list_id as string) ?? cur.listId
     this.db.update(s.todo).set(set).where(eq(s.todo.id, id)).run()
-    return rowToTodo(this.db.select().from(s.todo).where(eq(s.todo.id, id)).get()!)
+    const updated = rowToTodo(this.db.select().from(s.todo).where(eq(s.todo.id, id)).get()!)
+    // old/new 受影响日期并集增量重算（旧版 Python _recompute_day_busy_for_todo 语义）
+    this.recomputeBusyForDates([
+      ...SqliteBackend.busyDatesOf(oldTodo),
+      ...SqliteBackend.busyDatesOf(updated),
+    ])
+    return updated
   }
 
   deleteTodo(id: string): { ok: boolean } {
+    const gone = this.db.select().from(s.todo).where(eq(s.todo.id, id)).get()
     this.db.delete(s.todo).where(eq(s.todo.id, id)).run()
     this.tombstone('todo', id)
+    if (gone) this.recomputeBusyForDates(SqliteBackend.busyDatesOf(rowToTodo(gone)))
     return { ok: true }
   }
 

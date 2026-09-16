@@ -167,7 +167,7 @@ export interface BackendAdapter {
   deleteCountdown(id: number): Promise<{ ok: boolean }>
 
   // 统计
-  getStatsSummary(): Promise<StatsSummary>
+  getStatsSummary(list_id?: string): Promise<StatsSummary>
 
   // 集思录导入
   importJisilu(start: string, end: string, qtypes?: string[]): Promise<{ inserted: number; error: string | null }>
@@ -312,7 +312,7 @@ export const createCountdown = (data: CountdownInput) => getBackend().createCoun
 export const updateCountdown = (id: number, data: CountdownInput) => getBackend().updateCountdown(id, data)
 export const deleteCountdown = (id: number) => getBackend().deleteCountdown(id)
 
-export const getStatsSummary = () => getBackend().getStatsSummary()
+export const getStatsSummary = (list_id?: string) => getBackend().getStatsSummary(list_id)
 
 export const importJisilu = (start: string, end: string, qtypes?: string[]) =>
   getBackend().importJisilu(start, end, qtypes)

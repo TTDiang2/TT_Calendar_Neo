@@ -23,3 +23,8 @@ function useMediaQuery(query: string): boolean {
 export function useIsMobile(): boolean {
   return useMediaQuery('(max-width: 767px)')
 }
+
+/** 桌面宽屏（≥1024px，与 DetailPanel/TodoDetailPanel 的 lg: 断点一致） */
+export function useIsWideScreen(): boolean {
+  return useMediaQuery('(min-width: 1024px)')
+}

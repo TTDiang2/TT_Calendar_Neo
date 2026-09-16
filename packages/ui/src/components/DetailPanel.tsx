@@ -15,15 +15,14 @@ interface Props {
   onAddColor: (date: string) => void
   /** 新建事件入口（手机没有双击新建，桌面也顺带受益） */
   onAddEvent?: (date: string) => void
-  /** panel=桌面右侧栏（lg+）；sheet=手机底部弹层；drawer=手机右侧抽屉内容体 */
-  variant?: 'panel' | 'sheet' | 'drawer'
-  /** sheet/drawer 模式的关闭回调 */
+  /** panel=桌面右侧栏（lg+）；drawer=手机右侧抽屉内容体（20260916：底部弹层已废） */
+  variant?: 'panel' | 'drawer'
+  /** drawer 模式的关闭回调 */
   onClose?: () => void
 }
 
 export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetColoring, onAddDot, onAddColor, onAddEvent, variant = 'panel', onClose }: Props) {
   const qc = useQueryClient()
-  const sheet = variant === 'sheet'
   const drawer = variant === 'drawer'
   const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
   const delMut = useMutation({
@@ -55,11 +54,9 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
   })
 
   if (!day) {
-    if (sheet || drawer) {
+    if (drawer) {
       return (
-        <p className="text-sm text-gray-400 p-4">
-          {drawer ? '左缘的日期选中后，这里会显示当天详情；也可以直接点月历上的日期。' : null}
-        </p>
+        <p className="text-sm text-gray-400 p-4">点月历上的日期，这里会显示当天详情。</p>
       )
     }
     return (
@@ -84,18 +81,9 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
     <aside
       className={clsx(
         'overflow-y-auto',
-        sheet
-          ? 'glass-sheet w-full max-h-[72dvh] rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
-          : drawer
-            ? 'w-full'
-            : 'hidden lg:block w-72 bg-white/55 border-l border-white/60 p-4',
+        drawer ? 'w-full' : 'hidden lg:block w-72 bg-white/55 border-l border-white/60 p-4',
       )}
     >
-      {sheet && (
-        <div className="flex justify-center -mt-2 mb-1">
-          <div className="w-10 h-1 rounded-full bg-gray-400/40" />
-        </div>
-      )}
       <div className="flex items-center justify-between mb-3">
         <div>
           <p className="text-[11px] text-gray-400">已选日期</p>
@@ -108,7 +96,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
             {day.is_today && <span className="ml-2 text-rose-500 text-xs">今天</span>}
           </p>
         </div>
-        {(sheet || drawer) && onClose && (
+        {drawer && onClose && (
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md text-lg flex-shrink-0"

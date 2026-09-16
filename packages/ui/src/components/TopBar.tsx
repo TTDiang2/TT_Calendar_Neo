@@ -1,4 +1,4 @@
-import { BarChart3, Calendar, CheckSquare, ChevronLeft, ChevronRight, Layers, ListTodo, Rss, Search, Settings, Sparkles } from 'lucide-react'
+import { BarChart3, Calendar, CheckSquare, ChevronLeft, ChevronRight, ListTodo, Rss, Search, Settings, Sparkles } from 'lucide-react'
 import clsx from 'clsx'
 import type { TopTab, TodoViewMode, ViewMode } from '../adapt/types'
 
@@ -18,21 +18,22 @@ interface Props {
   onOpenSearch: () => void
   onOpenSubscription: () => void
   onOpenSettings: () => void
-  onOpenLayers?: () => void
 }
 
-const MODES: { key: ViewMode; label: string }[] = [
+const MODES: { key: ViewMode; label: string; mobileHidden?: boolean }[] = [
   { key: 'month', label: '月' },
-  { key: 'week', label: '周' },
+  // 周视图手机端不呈现（20260916 任务书：手机布局放周视图意义不大；代码保留，桌面照常）
+  { key: 'week', label: '周', mobileHidden: true },
   { key: 'day', label: '日' },
   { key: 'year', label: '年' },
   { key: 'countdown', label: '倒数日' },
 ]
 
-const TODO_MODES: { key: TodoViewMode; label: string }[] = [
+const TODO_MODES: { key: TodoViewMode; label: string; mobileHidden?: boolean }[] = [
   { key: 'list', label: '列表' },
   { key: 'matrix', label: '矩阵' },
-  { key: 'kanban', label: '看板' },
+  // 看板手机端不呈现（20260916 任务书：手机不适合看板；代码保留，桌面照常）
+  { key: 'kanban', label: '看板', mobileHidden: true },
   { key: 'gantt', label: '甘特' },
   { key: 'stickies', label: '便签' },
 ]
@@ -45,7 +46,7 @@ const TOP_TABS: { key: TopTab; label: string; icon: React.ReactNode }[] = [
   { key: 'widgets', label: '小组件', icon: <Sparkles size={14} /> },
 ]
 
-export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeChange, onTodoViewChange, onPrev, onNext, onToday, canPrev, canNext, onOpenSearch, onOpenSubscription, onOpenSettings, onOpenLayers }: Props) {
+export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeChange, onTodoViewChange, onPrev, onNext, onToday, canPrev, canNext, onOpenSearch, onOpenSubscription, onOpenSettings }: Props) {
   return (
     /* 布局：手机竖屏（<md）flex-wrap 拆行——一级 tab 交给底部标签栏（md:hidden），
          本栏只剩：第 1 行 标题+操作、第 2 行 视图模式横滚。
@@ -77,11 +78,11 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
             </h1>
           </div>
           <div className="order-1 md:order-4 ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
-            {/* 手机不允许订阅（20260915 任务书）：订阅入口只在桌面显示 */}
+            {/* 手机不允许订阅（20260915 任务书）；设置手机端收进左侧边栏（20260916） */}
             <button onClick={onOpenSubscription} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
               <Rss size={18} />
             </button>
-            <button onClick={onOpenSettings} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
+            <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
               <Settings size={18} />
             </button>
           </div>
@@ -122,7 +123,8 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
             </div>
           )}
 
-          {/* 模式切换：手机最后一行整行横滚，桌面保持原位置（移动端胶囊化加大触点） */}
+          {/* 模式切换：手机最后一行整行横滚，桌面保持原位置（移动端胶囊化加大触点）。
+              mobileHidden 的视图（周）只在桌面出现 */}
           <div className="order-4 md:order-3 w-full md:w-auto md:ml-4 -mx-2 px-2 md:mx-0 md:px-0 overflow-x-auto flex-shrink-0">
             <div className="inline-flex rounded-full border border-white/70 p-0.5 bg-white/50">
               {MODES.map((m) => (
@@ -131,6 +133,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
                   onClick={() => onModeChange(m.key)}
                   className={clsx(
                     'flex-1 md:flex-none px-3 md:px-3 py-1.5 md:py-1 text-sm rounded-full transition whitespace-nowrap',
+                    m.mobileHidden && 'hidden md:flex',
                     mode === m.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
                   )}
                 >
@@ -141,20 +144,9 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
           </div>
 
           {/* 右侧操作：手机并入第 1 行（order-1）靠最右，桌面回单行最右。
-              手机隐藏订阅入口（收进设置），减少小屏拥挤 */}
+              20260916 任务书：手机端搜索条目与图层/设置按钮全部撤出 Top Bar——
+              图层/详情走 dock 左右按钮，设置收进左侧边栏抽屉；桌面保持原样 */}
           <div className="order-1 md:order-4 ml-auto md:ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
-            {onOpenLayers && (
-              <button onClick={onOpenLayers} className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="图层">
-                <Layers size={18} />
-              </button>
-            )}
-            <button
-              onClick={onOpenSearch}
-              className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition"
-              title="搜索事件"
-            >
-              <Search size={18} />
-            </button>
             <button
               onClick={onOpenSearch}
               className="relative hidden md:flex items-center w-48 pl-2.5 pr-3 py-1.5 text-sm text-gray-400 bg-white/60 border border-white/80 rounded-lg hover:bg-white hover:text-gray-600 transition"
@@ -165,7 +157,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
             <button onClick={onOpenSubscription} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
               <Rss size={18} />
             </button>
-            <button onClick={onOpenSettings} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
+            <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
               <Settings size={18} />
             </button>
           </div>
@@ -185,6 +177,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
                   onClick={() => onTodoViewChange(m.key)}
                   className={clsx(
                     'flex-1 md:flex-none px-3 md:px-3 py-1.5 md:py-1 text-sm rounded-full transition whitespace-nowrap',
+                    m.mobileHidden && 'hidden md:flex',
                     todoView === m.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
                   )}
                 >
@@ -198,7 +191,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
             <button onClick={onOpenSubscription} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
               <Rss size={18} />
             </button>
-            <button onClick={onOpenSettings} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
+            <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
               <Settings size={18} />
             </button>
           </div>

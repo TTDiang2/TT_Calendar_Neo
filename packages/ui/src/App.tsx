@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { CalendarDays, FolderOpen, Layers, SlidersHorizontal, SquarePen, Trophy } from 'lucide-react'
 import { useViewData, useCountdown } from './hooks/useApi'
 import { toggleLayer, moveDay, getTodoStats, getTodos, getSyncStatus, getSyncConfig, syncNow, refreshDueSubscriptions } from './adapt/api'
 import { shiftMonthKey, shiftYearKey, todayStr } from './adapt/data'
@@ -12,13 +12,13 @@ import { WeekView } from './components/WeekView'
 import { DayView } from './components/DayView'
 import { YearView } from './components/YearView'
 import { DetailPanel } from './components/DetailPanel'
-import { TodoView } from './components/TodoView'
+import { TodoView, type TodoViewHandle } from './components/TodoView'
 import { CountdownView } from './components/CountdownView'
 import { StatsView } from './components/StatsView'
 import { WidgetsView } from './components/WidgetsView'
-import { BottomTabBar } from './components/BottomTabBar'
-import { animDrawerIn, animEnter, animSheetUp, animSlideDirection, animSpringBack } from './anim'
-import { useEdgeSwipe, useSwipeTabs } from './hooks/useSwipeNav'
+import { BottomTabBar, type DockGestureState } from './components/BottomTabBar'
+import { animDrawerIn, animEnter, animSlideDirection, animSpringBack } from './anim'
+import { useSwipeTabs } from './hooks/useSwipeNav'
 import {
   EventEditor,
   ScheduleEditor,
@@ -31,6 +31,7 @@ import {
 } from './components/dialogs'
 import { SettingsDialog } from './components/SettingsDialog'
 import { ReminderBanner } from './components/ReminderBanner'
+import { useIsMobile } from './hooks/useMedia'
 
 type DialogState =
   | { kind: 'event'; date: string; event?: CalEvent | null }
@@ -66,7 +67,7 @@ function RightDetailDrawer(props: {
     animDrawerIn(panelRef.current, 1)
   }, [])
   return (
-    <div className="md:hidden fixed inset-0 z-50">
+    <div className="lg:hidden fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={props.onClose} />
       <aside
         ref={panelRef}
@@ -119,6 +120,13 @@ export default function App() {
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
   const [mobileLayersOpen, setMobileLayersOpen] = useState(false)
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false)
+  // 待办页抽屉的开合上报（详情抽屉状态在 TodoView 内部，这里只镜像用于禁手势）
+  const [todoListsOpen, setTodoListsOpen] = useState(false)
+  const [todoDetailOpen, setTodoDetailOpen] = useState(false)
+  // 分析页抽屉（左=统计范围，右=里程碑），同为手势禁用镜像
+  const [statsScopeOpen, setStatsScopeOpen] = useState(false)
+  const [statsMilestonesOpen, setStatsMilestonesOpen] = useState(false)
+  const todoViewRef = useRef<TodoViewHandle>(null)
   const [dockSuspended, setDockSuspended] = useState(false)
   const dragSource = useRef<string | null>(null)
   const qc = useQueryClient()
@@ -126,62 +134,82 @@ export default function App() {
   // 一级 tab / 视图切换的内容入场动效（ anime.js；reduced-motion 时自动跳过）。
   // 方向记忆：目标位次 > 来源位次 → 内容从右滑入（前进），反之从左（退回）。
   const contentRef = useRef<HTMLDivElement | null>(null)
-  const sheetRef = useRef<HTMLDivElement | null>(null)
   const lastNavIndex = useRef(0)
   useEffect(() => {
     const idx = topTab === 'todo' ? 1 : topTab === 'stats' ? 2 : topTab === 'widgets' ? 3 : 0
     animSlideDirection(contentRef.current, idx - lastNavIndex.current, { distance: 26 })
     lastNavIndex.current = idx
+    // 抽屉镜像状态只服务「禁切页手势」；切走后必须复位，否则视图卸载后
+    // 手势会带着 true 残留在其它 tab 上整体失效（20260916 审核缺陷 2）
+    if (topTab !== 'todo') {
+      setTodoListsOpen(false)
+      setTodoDetailOpen(false)
+    }
+    if (topTab !== 'stats') {
+      setStatsScopeOpen(false)
+      setStatsMilestonesOpen(false)
+    }
   }, [topTab])
   // 日历内 月/周/日/年/倒数日 切换保持轻量上浮入场
   useEffect(() => {
     animEnter(contentRef.current, { distance: 8, duration: 260 })
   }, [mode])
 
-  // ── 手机手势（<md）：左右滑切一级 tab + 左右缘滑呼出两侧抽屉 ──────
+  // ── 手机手势（<md）：左右滑切一级 tab；两侧边栏改由 dock 左右按钮呼出
+  //    （20260916 任务书：边滑呼侧边栏与切页手势互相打架，一律废除边滑）──────
   const gestureRef = useRef<HTMLDivElement | null>(null)
   const gestureDx = useRef(0)
+  // dock 指示片的跟手进度：每帧直写 ref（不 setState），BottomTabBar 的 rAF 消费
+  const dockGesture = useRef<DockGestureState>({ active: false, progress: 0 })
   const gestureDisabled = useCallback(
     () =>
       !!dialog ||
       !!ctxMenu ||
       mobileLayersOpen ||
       rightDrawerOpen ||
+      todoListsOpen ||
+      todoDetailOpen ||
+      statsScopeOpen ||
+      statsMilestonesOpen ||
       (typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches),
-    [dialog, ctxMenu, mobileLayersOpen, rightDrawerOpen],
+    [dialog, ctxMenu, mobileLayersOpen, rightDrawerOpen, todoListsOpen, todoDetailOpen, statsScopeOpen, statsMilestonesOpen],
   )
   const TAB_ORDER: TopTab[] = ['calendar', 'todo', 'stats']
   useSwipeTabs(gestureRef, {
     disabled: gestureDisabled,
+    onLock: () => setDockSuspended(true),
     onMove: (dx) => {
       const idx = TAB_ORDER.indexOf(topTab)
       const atEdge = (idx === 0 && dx > 0) || (idx === TAB_ORDER.length - 1 && dx < 0)
       const applied = atEdge ? dx * 0.25 : dx // 边缘阻尼：告诉用户没有更多页了
       gestureDx.current = applied
       if (contentRef.current) contentRef.current.style.transform = `translateX(${applied}px)`
-      setDockSuspended(true)
+      dockGesture.current = {
+        active: true,
+        progress: applied / Math.max(window.innerWidth * 0.4, 1),
+      }
     },
     onCommit: (dir) => {
       const idx = TAB_ORDER.indexOf(topTab)
       const next = TAB_ORDER[Math.min(TAB_ORDER.length - 1, Math.max(0, idx + (dir === -1 ? 1 : -1)))]
-      if (contentRef.current) contentRef.current.style.transform = ''
+      const dx = gestureDx.current
       gestureDx.current = 0
-      // 滑入动画统一交给 [topTab] effect（animSlideDirection），这里不手动触发避免双重动画
-      if (next !== topTab) setTopTab(next)
+      dockGesture.current = { active: false, progress: 0 }
+      if (next !== topTab) {
+        // 滑入动画统一交给 [topTab] effect（animSlideDirection），这里不手动触发避免双重动画
+        if (contentRef.current) contentRef.current.style.transform = ''
+        setTopTab(next)
+      } else {
+        // 已处边缘 tab 仍越过阈值：没有页可切，走弹簧回弹而不是瞬移归零
+        animSpringBack(contentRef.current, dx)
+      }
       setDockSuspended(false)
     },
     onCancel: () => {
       animSpringBack(contentRef.current, gestureDx.current)
       gestureDx.current = 0
+      dockGesture.current = { active: false, progress: 0 }
       setDockSuspended(false)
-    },
-  })
-  useEdgeSwipe(gestureRef, {
-    disabled: gestureDisabled,
-    onFromLeft: () => setMobileLayersOpen(true),
-    onFromRight: () => {
-      // 与渲染条件对齐：年视图没有详情抽屉，设置了 open 状态就必须有 UI 可关
-      if (topTab === 'calendar' && mode !== 'year') setRightDrawerOpen(true)
     },
   })
 
@@ -280,6 +308,11 @@ export default function App() {
     return () => { cancelled = true; unlisten?.() }
   }, [])
 
+  // 看板手机端不呈现（20260916）：持久化的 kanban 视图在手机上回落到列表，
+  // 避免「视图停在看板但切回按钮已被隐藏」的死胡同；桌面不受影响
+  const isMobile = useIsMobile()
+  const effectiveTodoView = isMobile && todoView === 'kanban' ? 'list' : todoView
+
   const layers = monthData?.layers ?? []
 
   const toggleMutation = useMutation({
@@ -350,6 +383,17 @@ export default function App() {
     setDialog({ kind: 'event', date, event })
   }, [])
 
+  // 非宽屏（<lg）：月/日视图点选日期 = 打开右侧详情抽屉（20260916 任务书：
+  // 底部弹层与右侧边栏本是同一个东西，统一保留右侧边栏——弹层长了会挡内容）。
+  // 断点取 lg=1024：原底部 sheet 就是 lg:hidden，768-1023 的中屏不能失去详情呈现
+  const handleSelectDate = useCallback(
+    (date: string) => {
+      setSelectedDate(date)
+      if (window.matchMedia('(max-width: 1023px)').matches) setRightDrawerOpen(true)
+    },
+    [],
+  )
+
   const handleDoubleClick = useCallback((date: string) => openEvent(date), [openEvent])
 
   const handleContextMenu = useCallback(
@@ -404,11 +448,6 @@ export default function App() {
     if (!('days' in monthData)) return null
     return monthData.days.find((d) => d.date === selectedDate) ?? null
   }, [selectedDate, monthData, mode])
-
-  // 手机端日期详情弹层：每次出现从底部滑入
-  useEffect(() => {
-    if (selectedDay) animSheetUp(sheetRef.current)
-  }, [selectedDay])
 
   function jumpToEvent(ev: CalEvent) {
     const [y, m] = ev.date.split('-').map(Number)
@@ -477,7 +516,7 @@ export default function App() {
         title={isLoading ? '加载中…' : title}
         topTab={topTab}
         mode={mode}
-        todoView={todoView}
+        todoView={effectiveTodoView}
         onTopTabChange={setTopTab}
         onModeChange={setMode}
         onTodoViewChange={setTodoView}
@@ -489,7 +528,6 @@ export default function App() {
         onOpenSearch={() => setDialog({ kind: 'search' })}
         onOpenSubscription={() => setDialog({ kind: 'subscription' })}
         onOpenSettings={() => setDialog({ kind: 'settings' })}
-        onOpenLayers={() => setMobileLayersOpen(true)}
       />
       <ReminderBanner onJumpToTodo={() => setTopTab('todo')} />
       {/* 手机手势面：左右滑切 tab、左右缘滑呼出抽屉；内层承接入场/跟手位移动画。
@@ -501,9 +539,29 @@ export default function App() {
       >
       <div ref={contentRef} className="flex-1 flex min-w-0">
         {topTab === 'todo' ? (
-          <TodoView viewMode={todoView} />
+          <TodoView
+            ref={todoViewRef}
+            viewMode={effectiveTodoView}
+            listsDrawerOpen={todoListsOpen}
+            onListsDrawerOpenChange={setTodoListsOpen}
+            onDetailOpenChange={setTodoDetailOpen}
+            onOpenSettings={() => {
+              setTodoListsOpen(false)
+              setDialog({ kind: 'settings' })
+            }}
+          />
         ) : topTab === 'stats' ? (
-          <StatsView onGoTodo={() => setTopTab('todo')} />
+          <StatsView
+            onGoTodo={() => setTopTab('todo')}
+            scopeOpen={statsScopeOpen}
+            onScopeOpenChange={setStatsScopeOpen}
+            milestonesOpen={statsMilestonesOpen}
+            onMilestonesOpenChange={setStatsMilestonesOpen}
+            onOpenSettings={() => {
+              setStatsScopeOpen(false)
+              setDialog({ kind: 'settings' })
+            }}
+          />
         ) : topTab === 'widgets' ? (
           <WidgetsView />
         ) : mode === 'countdown' ? (
@@ -546,7 +604,7 @@ export default function App() {
                   monthData={monthData2!}
                   layers={layers}
                   selectedDate={selectedDate}
-                  onSelect={setSelectedDate}
+                  onSelect={handleSelectDate}
                   onDoubleClick={handleDoubleClick}
                 />
               ) : (
@@ -554,7 +612,7 @@ export default function App() {
                   monthData={monthData2!}
                   layers={layers}
                   selectedDate={selectedDate}
-                  onSelect={setSelectedDate}
+                  onSelect={handleSelectDate}
                   onDoubleClick={handleDoubleClick}
                   onContextMenu={handleContextMenu}
                   onDragStart={handleDragStart}
@@ -563,42 +621,17 @@ export default function App() {
               )}
             </main>
             {mode !== 'year' && (
-              <>
-                {/* 桌面（lg+）：右侧详情栏 */}
-                <DetailPanel
-                  day={selectedDay}
-                  layers={layers}
-                  onEditEvent={openEvent}
-                  onEditSchedule={(d) => setDialog({ kind: 'schedule', date: d })}
-                  onSetColoring={(d) => setDialog({ kind: 'coloring', date: d })}
-                  onAddDot={(d) => setDialog({ kind: 'dot', date: d })}
-                  onAddColor={(d) => setDialog({ kind: 'color', date: d })}
-                  onAddEvent={openEvent}
-                />
-                {/* 手机（<lg）：点选日期后从底部弹出详情 */}
-                {selectedDay && (
-                  <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end">
-                    <div
-                      className="absolute inset-0 bg-black/30"
-                      onClick={() => setSelectedDate(null)}
-                    />
-                    <div ref={sheetRef} className="relative">
-                      <DetailPanel
-                        variant="sheet"
-                        day={selectedDay}
-                        layers={layers}
-                        onEditEvent={openEvent}
-                        onEditSchedule={(d) => setDialog({ kind: 'schedule', date: d })}
-                        onSetColoring={(d) => setDialog({ kind: 'coloring', date: d })}
-                        onAddDot={(d) => setDialog({ kind: 'dot', date: d })}
-                        onAddColor={(d) => setDialog({ kind: 'color', date: d })}
-                        onAddEvent={openEvent}
-                        onClose={() => setSelectedDate(null)}
-                      />
-                    </div>
-                  </div>
-                )}
-              </>
+              /* 桌面（lg+）：右侧详情栏。手机端的日期详情统一走上方 RightDetailDrawer */
+              <DetailPanel
+                day={selectedDay}
+                layers={layers}
+                onEditEvent={openEvent}
+                onEditSchedule={(d) => setDialog({ kind: 'schedule', date: d })}
+                onSetColoring={(d) => setDialog({ kind: 'coloring', date: d })}
+                onAddDot={(d) => setDialog({ kind: 'dot', date: d })}
+                onAddColor={(d) => setDialog({ kind: 'color', date: d })}
+                onAddEvent={openEvent}
+              />
             )}
           </>
         )}
@@ -620,31 +653,53 @@ export default function App() {
         />
       )}
 
-      {/* 手机：图层抽屉（顶栏「图层」按钮或左缘右滑唤出） */}
+      {/* 手机：图层抽屉（dock 左按钮唤出）——设置入口也收在这里（20260916） */}
       <MobileLayersDrawer
         open={mobileLayersOpen}
         onClose={() => setMobileLayersOpen(false)}
         layers={layers}
         onToggle={toggleLayerFn}
         countdown={countdownData?.text ?? '…'}
+        onOpenSettings={() => {
+          setMobileLayersOpen(false)
+          setDialog({ kind: 'settings' })
+        }}
       />
 
-      {/* 手机：悬浮 dock——滑动切 tab 时的「当前页签指示窗」，点按仍可跳转 */}
-      <BottomTabBar active={topTab} onChange={setTopTab} suspend={dockSuspended} />
+      {/* 手机：悬浮 dock——左右按钮呼出两侧边栏（按 tab 分派），中间切 tab；
+          切页手势中指示圆片跟手连续滑动（不再隐藏重现） */}
+      <BottomTabBar
+        active={topTab}
+        onChange={setTopTab}
+        suspend={dockSuspended}
+        gestureRef={dockGesture}
+        leftAction={
+          topTab === 'calendar' ? (
+            { icon: <Layers size={20} />, label: '图层（左侧边栏）', onPress: () => setMobileLayersOpen(true) }
+          ) : topTab === 'todo' ? (
+            { icon: <FolderOpen size={20} />, label: '待办清单（左侧边栏）', onPress: () => setTodoListsOpen(true) }
+          ) : topTab === 'stats' ? (
+            { icon: <SlidersHorizontal size={20} />, label: '统计范围（左侧边栏）', onPress: () => setStatsScopeOpen(true) }
+          ) : undefined
+        }
+        rightAction={
+          topTab === 'calendar' ? (
+            {
+              icon: <CalendarDays size={20} />,
+              label: '当日详情（右侧边栏）',
+              onPress: () => {
+                if (mode !== 'year') setRightDrawerOpen(true)
+              },
+            }
+          ) : topTab === 'todo' ? (
+            { icon: <SquarePen size={20} />, label: '编辑待办（右侧边栏）', onPress: () => todoViewRef.current?.openTodoEditor() }
+          ) : topTab === 'stats' ? (
+            { icon: <Trophy size={20} />, label: '里程碑（右侧边栏）', onPress: () => setStatsMilestonesOpen(true) }
+          ) : undefined
+        }
+      />
 
-      {/* 手机：日历页悬浮新建按钮（在底部标签栏上方） */}
-      {topTab === 'calendar' && mode !== 'countdown' && (
-        <button
-          onClick={() => {
-            if (mode === 'year') setMode('month')
-            openEvent(selectedDate ?? dayCursor ?? todayStr())
-          }}
-          className="pressable md:hidden fixed right-4 bottom-[calc(6rem+env(safe-area-inset-bottom,0px))] z-30 w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 text-white shadow-xl shadow-pink-500/40 flex items-center justify-center"
-          title="新建事件"
-        >
-          <Plus size={22} />
-        </button>
-      )}
+      {/* 20260916 任务书：日历页悬浮加号按钮已删——呼出右侧边栏即是添加事件的入口 */}
 
       {ctxMenu && (
         <ContextMenu

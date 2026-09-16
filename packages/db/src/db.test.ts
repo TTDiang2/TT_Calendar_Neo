@@ -1,14 +1,23 @@
 import { describe, expect, it } from 'vitest'
+import { eq } from 'drizzle-orm'
 
 import type { MonthData } from '@tt-calendar/contracts'
 import { merge, tombKey } from '@tt-calendar/domain'
 import { openDb, SqliteBackend, SyncService } from './index'
+import * as s from './schema'
 
 function freshBackend() {
   const { db } = openDb({ path: ':memory:' })
   const backend = new SqliteBackend(db)
   const sync = new SyncService(db)
   return { backend, sync }
+}
+
+/** 相对今天的 YYYY-MM-DD（本地时区），delta 为负表过去 */
+function addDaysStr(delta: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + delta)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 describe('SqliteBackend 基本读写（内存库）', () => {
@@ -85,7 +94,59 @@ describe('SqliteBackend 基本读写（内存库）', () => {
     const list = backend.createTodoList('默认')
     backend.createTodo({ list_id: list.id, title: '重活', importance: 'high', due_date: '2026-09-04', complexity: 'hard' })
     const r = backend.recomputeTodoBusy()
-    expect(r.days_written).toBe(181) // -60 .. +120
+    // 触及日期并集 ∪ 滚动窗口：due 滑出窗口后 union 会多出该日，不能硬编码 181
+    expect(r.days_written).toBeGreaterThanOrEqual(181)
+  })
+
+  it('todo 增删改自动增量重算忙度（20260916 染色 bug 回归）', () => {
+    const { backend } = freshBackend()
+    const list = backend.createTodoList('默认')
+    const future = addDaysStr(10)
+    // 新建 → day_busy 立即有未来日期的 predict 档，无需手动重算
+    backend.createTodo({ list_id: list.id, title: '未来活', importance: 'high', due_date: future, complexity: 'hard' })
+    const view = backend.getView('month', future.slice(0, 7)) as MonthData
+    expect(view.days.find((d) => d.date === future)?.predict_level ?? null).not.toBeNull()
+
+    // 逾期完成：due 是 9 天前，completed_at 落在今天——done 要染在「完成那天」（对齐旧版口径）
+    const late = backend.createTodo({ list_id: list.id, title: '迟到的活', importance: 'high', due_date: addDaysStr(-9), complexity: 'hard' })
+    backend.updateTodo(late.id, { status: 'completed' })
+    const today = addDaysStr(0)
+    const doneView = backend.getView('month', today.slice(0, 7)) as MonthData
+    expect(doneView.days.find((d) => d.date === today)?.done_level ?? null).not.toBeNull()
+
+    // 删除后该日预测清零（回到 null → 月视图不染色）
+    const openAgain = backend.getTodos({ status: 'notStarted' }).find((t) => t.due_date === future)
+    if (openAgain) backend.deleteTodo(openAgain.id)
+    const viewAfter = backend.getView('month', future.slice(0, 7)) as MonthData
+    expect(viewAfter.days.find((d) => d.date === future)?.predict_level ?? null).toBeNull()
+  })
+
+  it('存量库启动自举：清掉派生表与一次性标记后，构造即全量补算', () => {
+    const future = addDaysStr(3)
+    const opened = openDb({ path: ':memory:' })
+    const seeded = new SqliteBackend(opened.db)
+    const list = seeded.createTodoList('默认')
+    seeded.createTodo({ list_id: list.id, title: '有截止的活', due_date: future })
+    // 模拟旧库存量：清空派生缓存表与自举标记，重建 backend（构造函数应补算）
+    opened.db.delete(s.dayBusy).run()
+    opened.db.delete(s.meta).where(eq(s.meta.key, 'sync.busy_bootstrapped')).run()
+    const revived = new SqliteBackend(opened.db)
+    const view = revived.getView('month', future.slice(0, 7)) as MonthData
+    expect(view.days.find((d) => d.date === future)?.predict_level ?? null).not.toBeNull()
+  })
+
+  it('全量重算覆盖滚动窗口外的触及日期（历史 done 不缺档）', () => {
+    const opened = openDb({ path: ':memory:' })
+    const be = new SqliteBackend(opened.db)
+    const list = be.createTodoList('默认')
+    const t = be.createTodo({ list_id: list.id, title: '历史活', importance: 'high', due_date: '2026-03-01' })
+    be.updateTodo(t.id, { status: 'completed' })
+    // 完成时间改到远 past（updateTodo 只会写 now，这里直改列模拟历史数据）
+    opened.db.update(s.todo).set({ completedAt: '2026-03-01 10:00:00' }).where(eq(s.todo.id, t.id)).run()
+    const r = be.recomputeTodoBusy()
+    expect(r.days_written).toBeGreaterThanOrEqual(181)
+    const view = be.getView('month', '2026-3') as MonthData
+    expect(view.days.find((d) => d.date === '2026-03-01')?.done_level ?? null).not.toBeNull()
   })
 
   it('统计面板：四象限 + 逐日完成', () => {
@@ -100,6 +161,60 @@ describe('SqliteBackend 基本读写（内存库）', () => {
     expect(s.stats).toEqual({ total: 2, incomplete: 1, completed: 1 })
     expect(s.daily_done.length).toBeGreaterThanOrEqual(0)
     expect(s.list_names && Object.values(s.list_names)).toContain('默认')
+  })
+
+  it('统计扩充：充实度序列 + 忙度预测 + list_id 过滤（20260916 分析页）', () => {
+    const { backend } = freshBackend()
+    const list = backend.createTodoList('A')
+    const other = backend.createTodoList('B')
+    const future = addDaysStr(5)
+    backend.createTodo({ list_id: list.id, title: 'A 的未完成', importance: 'high', due_date: future })
+    backend.createTodo({ list_id: other.id, title: 'B 的未完成', importance: 'high', due_date: future })
+    // 涂色两天（level 3 高充实）
+    backend.upsertColoring(addDaysStr(-1), 3)
+    backend.upsertColoring(addDaysStr(-2), 1)
+
+    const all = backend.getStatsSummary()
+    expect(all.quadrant).toHaveLength(2)
+    // 忙度预测：未来 14 天、含 due 命中日且 predict_level 非空
+    expect(all.busy_predict).toHaveLength(14)
+    const hit = all.busy_predict.find((b) => b.date === future)
+    expect(hit?.level ?? null).not.toBeNull()
+    // 充实度序列含涂色日
+    expect(all.coloring_daily.some((c) => c.date === addDaysStr(-1) && c.level === 3)).toBe(true)
+
+    // list_id 过滤：只统计 A 清单
+    const scoped = backend.getStatsSummary(list.id)
+    expect(scoped.quadrant).toHaveLength(1)
+    expect(scoped.quadrant[0]!.title).toBe('A 的未完成')
+    expect(scoped.stats.total).toBe(1)
+  })
+
+  it('completion_dates 全量无窗口封顶 + 过滤 + NULL 安全（20260916 审核项 D）', () => {
+    const opened = openDb({ path: ':memory:' })
+    const be = new SqliteBackend(opened.db)
+    const list = be.createTodoList('A')
+    const other = be.createTodoList('B')
+    // a) 完成日远在 190 天窗口之前 → completion_dates 含之，daily_done 不含
+    const t1 = be.createTodo({ list_id: list.id, title: '去年的活', importance: 'high', due_date: '2026-01-05' })
+    be.updateTodo(t1.id, { status: 'completed' })
+    opened.db.update(s.todo).set({ completedAt: '2026-01-05 10:00:00' }).where(eq(s.todo.id, t1.id)).run()
+    // b) 其它清单的完成日不进入 list_id 过滤结果
+    const t2 = be.createTodo({ list_id: other.id, title: 'B 的活' })
+    be.updateTodo(t2.id, { status: 'completed' })
+    // c) 未完成（completed_at 为 NULL）不产生日期
+    be.createTodo({ list_id: list.id, title: 'A 的未完成' })
+
+    const all = be.getStatsSummary()
+    expect(all.completion_dates).toContain('2026-01-05')
+    expect(all.daily_done.some((d) => d.date === '2026-01-05')).toBe(false)
+    // 精确断言：2026-01-05 在窗口外，只允许出现在 completion_dates
+    expect(all.completion_dates.filter((d) => d === '2026-01-05')).toHaveLength(1)
+    expect(all.daily_done.filter((d) => d.date === '2026-01-05')).toHaveLength(0)
+
+    const scoped = be.getStatsSummary(list.id)
+    expect(scoped.completion_dates).toEqual(['2026-01-05'])
+    expect(scoped.completion_dates.some((d) => d === '2026-01-05')).toBe(true)
   })
 
   it('倒数日 CRUD + 文本', () => {

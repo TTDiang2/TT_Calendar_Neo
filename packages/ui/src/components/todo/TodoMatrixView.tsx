@@ -1,13 +1,17 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { AlertTriangle, CalendarClock, Coffee, Hourglass } from 'lucide-react'
+import { AlertTriangle, CalendarClock, ChevronDown, Coffee, Hourglass } from 'lucide-react'
 import type { Todo, TodoList } from '../../adapt/types'
 import { dueInDays, isImportant, urgencyOf } from '../../adapt/todoLogic'
 import { useIsMobile } from '../../hooks/useMedia'
 import { TodoMiniCard } from './TodoMiniCard'
 
-/** 手机堆叠模式下每个象限直接展示的最大条数（其余折叠为「还有 N 条」） */
-const MOBILE_MAX_ITEMS = 5
+/**
+ * 手机堆叠模式下每个象限的展示节奏（20260916 任务书：四象限不要挤在同一屏，
+ * 每个矩阵拉高到能放进两三个以上条目，靠整页上下滑看全）：
+ * 首屏展示 MOBILE_BATCH 条，点「还有 N 条」按批展开——页面滚动归外层，象限内部不再滚动。
+ */
+const MOBILE_BATCH = 8
 
 interface Props {
   todos: Todo[]
@@ -70,6 +74,79 @@ function subText(t: Todo, lists: TodoList[]): string {
   return parts.join(' · ')
 }
 
+/** 单个象限卡：手机按批展开（点「还有 N 条」续看），桌面全量展示 */
+function QuadrantCard({
+  q,
+  items,
+  isMobile,
+  lists,
+  selectedTodoId,
+  onSelect,
+  onToggle,
+}: {
+  q: (typeof QUADRANTS)[number]
+  items: Todo[]
+  isMobile: boolean
+  lists: TodoList[]
+  selectedTodoId: string | null
+  onSelect: (id: string) => void
+  onToggle: (todo: Todo, done: boolean) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const Icon = q.icon
+  const soonCount = items.filter((t) => urgencyOf(t) === 'soon').length
+  const shown = isMobile && !expanded ? items.slice(0, MOBILE_BATCH) : items
+  const rest = items.length - shown.length
+
+  return (
+    <div className={clsx('rounded-xl border flex flex-col overflow-hidden min-h-0', q.tone, 'md:min-h-0')}>
+      <div className="px-3 py-2 flex items-center justify-between border-b border-black/5 flex-shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Icon size={14} className={clsx(q.head, 'flex-shrink-0')} />
+          <span className={clsx('text-sm font-semibold truncate', q.head)}>{q.title}</span>
+          <span className="text-xs text-gray-400 hidden sm:inline">{q.action}</span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {soonCount > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700" title="3-7 天内到期">
+              {soonCount} 临近
+            </span>
+          )}
+          <span className="text-xs font-medium text-gray-500">{items.length}</span>
+        </div>
+      </div>
+      {/* 桌面：象限内独立滚动（基线行为）；手机：内容生长、整页滚动承接 */}
+      <div className="flex-1 overflow-visible md:overflow-y-auto p-2 flex flex-col gap-1.5 min-h-0">
+        {items.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-xs text-gray-300 py-3">{q.desc}</div>
+        ) : (
+          <>
+            {shown.map((t) => (
+              <TodoMiniCard
+                key={t.id}
+                todo={t}
+                selected={selectedTodoId === t.id}
+                sub={subText(t, lists)}
+                onClick={() => onSelect(t.id)}
+                onToggle={(done) => onToggle(t, done)}
+              />
+            ))}
+            {rest > 0 && (
+              <button
+                onClick={() => setExpanded(true)}
+                className="text-[11px] text-gray-400 hover:text-pink-500 active:text-pink-500 text-center py-1.5 rounded-lg transition-colors"
+              >
+                <ChevronDown size={12} className="inline mr-0.5 -mt-0.5" />
+                还有 {rest} 条
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function TodoMatrixView({ todos, lists, selectedTodoId, onSelect, onToggle }: Props) {
   const isMobile = useIsMobile()
   const active = useMemo(() => todos.filter((t) => t.status !== 'completed'), [todos])
@@ -87,57 +164,22 @@ export function TodoMatrixView({ todos, lists, selectedTodoId, onSelect, onToggl
     return b
   }, [active])
 
-  // 手机：四象限纵向堆叠、整页滚动（每格固定展示前几条 + 剩余计数），
-  // 避免 2×2 在窄屏里挤成四团看不清（任务书点名的问题）
+  // 手机：四象限纵向堆叠、整页滚动（外层唯一滚动面），象限不再内部滚动/折叠成矮块；
+  // 桌面：2×2 填满视口
   return (
     <div className="h-full overflow-y-auto md:overflow-visible grid grid-cols-1 md:grid-cols-2 md:grid-rows-2 gap-2.5 md:gap-3 pb-4 content-start md:content-stretch">
-      {QUADRANTS.map((q) => {
-        const items = buckets[q.key]
-        const Icon = q.icon
-        const soonCount = items.filter((t) => urgencyOf(t) === 'soon').length
-        const shown = items.slice(0, MOBILE_MAX_ITEMS)
-        const rest = items.length - shown.length
-        return (
-          <div key={q.key} className={clsx('rounded-xl border flex flex-col overflow-hidden min-h-0', q.tone, 'md:min-h-0 min-h-[72px]')}>
-            <div className="px-3 py-2 flex items-center justify-between border-b border-black/5 flex-shrink-0">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Icon size={14} className={clsx(q.head, 'flex-shrink-0')} />
-                <span className={clsx('text-sm font-semibold truncate', q.head)}>{q.title}</span>
-                <span className="text-xs text-gray-400 hidden sm:inline">{q.action}</span>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {soonCount > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700" title="3-7 天内到期">
-                    {soonCount} 临近
-                  </span>
-                )}
-                <span className="text-xs font-medium text-gray-500">{items.length}</span>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto md:overflow-y-auto p-2 flex flex-col gap-1.5 min-h-0">
-              {items.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-xs text-gray-300 py-3">{q.desc}</div>
-              ) : (
-                <>
-                  {(isMobile ? shown : items).map((t) => (
-                    <TodoMiniCard
-                      key={t.id}
-                      todo={t}
-                      selected={selectedTodoId === t.id}
-                      sub={subText(t, lists)}
-                      onClick={() => onSelect(t.id)}
-                      onToggle={(done) => onToggle(t, done)}
-                    />
-                  ))}
-                  {isMobile && rest > 0 && (
-                    <p className="text-[10px] text-gray-400 text-center py-1">还有 {rest} 条</p>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )
-      })}
+      {QUADRANTS.map((q) => (
+        <QuadrantCard
+          key={q.key}
+          q={q}
+          items={buckets[q.key]}
+          isMobile={isMobile}
+          lists={lists}
+          selectedTodoId={selectedTodoId}
+          onSelect={onSelect}
+          onToggle={onToggle}
+        />
+      ))}
     </div>
   )
 }

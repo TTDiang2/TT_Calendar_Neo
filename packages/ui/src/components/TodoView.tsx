@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, ChevronUp, Inbox, ListPlus, Pencil, Plus, Star, Trash2, Upload } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, FolderOpen, Inbox, ListPlus, Pencil, Plus, Settings, Star, Trash2, Upload } from 'lucide-react'
 import clsx from 'clsx'
 import { getTodoLists, getTodos, getTodoStats, createTodo, updateTodo, deleteTodo, createTodoList, updateTodoList, deleteTodoList, importTodosCsv, reorderTodoLists, reorderTodos } from '../adapt/api'
 import { todayStr } from '../adapt/todoLogic'
@@ -11,6 +12,7 @@ import { TodoKanbanView } from './todo/TodoKanbanView'
 import { TodoGanttView } from './todo/TodoGanttView'
 import { TodoJarView } from './todo/TodoJarView'
 import { TodoStickiesView } from './todo/TodoStickiesView'
+import { animDrawerIn } from '../anim'
 
 const SORT_OPTIONS: { key: TodoSort; label: string }[] = [
   { key: 'manual', label: '手动排序' },
@@ -61,14 +63,30 @@ const COMPLEXITY_TAG_CLS: Record<string, string> = {
 
 const DEFAULT_LIST_KEY = 'tt_default_todo_list'
 
-export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
+/** App 的 dock 右按钮经此句柄触发新建/编辑待办（自动建默认清单的逻辑留在内部） */
+export interface TodoViewHandle {
+  /** 打开待办编辑抽屉：无选中则新建 */
+  openTodoEditor: () => void
+}
+
+export const TodoView = forwardRef<TodoViewHandle, {
+  viewMode: TodoViewMode
+  /** 清单抽屉（受控：App 需要知道它开着以禁切页手势） */
+  listsDrawerOpen: boolean
+  onListsDrawerOpenChange: (open: boolean) => void
+  /** 详情抽屉开合上报（App 用于禁手势）；开合本体由内部 selectedTodoId 驱动 */
+  onDetailOpenChange?: (open: boolean) => void
+  /** 设置入口（20260916：设置已撤出 Top Bar，手机端收在各页左侧抽屉底部） */
+  onOpenSettings?: () => void
+}>(function TodoView(
+  { viewMode, listsDrawerOpen, onListsDrawerOpenChange, onDetailOpenChange, onOpenSettings },
+  ref,
+) {
   const qc = useQueryClient()
   const [selectedList, setSelectedList] = useState<string | null>(() => localStorage.getItem(DEFAULT_LIST_KEY))
   const [sort, setSort] = useState<TodoSort>('due_planned_importance')
   const [tagFilter, setTagFilter] = useState<string>('')
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null)
-  const [creatingList, setCreatingList] = useState(false)
-  const [newListName, setNewListName] = useState('')
   const [autoList, setAutoList] = useState(false)
   const [csvResult, setCsvResult] = useState<string | null>(null)
   const [showCompleted, setShowCompleted] = useState(false)
@@ -77,11 +95,18 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const leavingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const dragListId = useRef<string | null>(null)
-  const [renamingListId, setRenamingListId] = useState<string | null>(null)
-  const [renameDraft, setRenameDraft] = useState('')
   const dragTodoId = useRef<string | null>(null)
   const detailRef = useRef<TodoDetailPanelRef>(null)
+  const listsDrawerRef = useRef<HTMLElement | null>(null)
+
+  useImperativeHandle(ref, () => ({
+    openTodoEditor: () => void openNewTodo(),
+  }))
+
+  // 详情抽屉开合上报（App 据此禁切页手势）
+  useEffect(() => {
+    onDetailOpenChange?.(selectedTodoId !== null)
+  }, [selectedTodoId, onDetailOpenChange])
 
   const { data: lists = [] } = useQuery({
     queryKey: ['todoLists'],
@@ -143,28 +168,6 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
     onSuccess: invalidate,
   })
   const deleteMut = useMutation({ mutationFn: deleteTodo, onSuccess: invalidate })
-  const createListMut = useMutation({ mutationFn: (name: string) => createTodoList(name), onSuccess: invalidate })
-  const renameListMut = useMutation({
-    mutationFn: ({ id, display_name }: { id: string; display_name: string }) => updateTodoList(id, display_name),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['todoLists'] })
-      setRenamingListId(null)
-    },
-  })
-  const cancelRename = () => { setRenamingListId(null); setRenameDraft('') }
-  const commitRename = (id: string) => {
-    const trimmed = renameDraft.trim()
-    if (!trimmed) { cancelRename(); return }
-    renameListMut.mutate({ id, display_name: trimmed })
-  }
-  const deleteListMut = useMutation({
-    mutationFn: deleteTodoList,
-    onSuccess: () => { invalidate(); setSelectedTodoId(null) },
-  })
-  const reorderListMut = useMutation({
-    mutationFn: (ordered_ids: string[]) => reorderTodoLists(ordered_ids),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['todoLists'] }),
-  })
   const reorderTodoMut = useMutation({
     mutationFn: (ordered_ids: string[]) => reorderTodos(ordered_ids),
     onSuccess: () => {
@@ -173,20 +176,22 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
     },
   })
 
-  const setDefaultList = (id: string | null) => {
-    if (id) localStorage.setItem(DEFAULT_LIST_KEY, id)
-    else localStorage.removeItem(DEFAULT_LIST_KEY)
-    setSelectedList(id)
+  // 新建待办：无清单时先自动建一个默认清单（dock 右按钮与工具栏按钮共用）
+  const openNewTodo = async () => {
+    if (!lists.length) {
+      setAutoList(true)
+      try {
+        const tl = await createTodoList('任务')
+        setSelectedList(tl.id)
+        invalidate()
+      } catch {
+        setAutoList(false)
+        return
+      }
+      setAutoList(false)
+    }
+    setSelectedTodoId('__NEW__')
   }
-
-  const csvMut = useMutation({
-    mutationFn: importTodosCsv,
-    onSuccess: (r: { inserted: number; lists_created: number; errors: string[] }) => {
-      invalidate()
-      setCsvResult(`导入 ${r.inserted} 条，新建 ${r.lists_created} 个列表${r.errors.length ? `，${r.errors.length} 行错误` : ''}`)
-    },
-    onError: (e: unknown) => setCsvResult(`导入失败: ${e instanceof Error ? e.message : 'unknown'}`),
-  })
 
   const handleToggle = (t: Todo, done: boolean) => {
     setLeavingIds((prev) => new Set(prev).add(t.id))
@@ -233,146 +238,61 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
     e.target.value = ''
   }
 
+  const csvMut = useMutation({
+    mutationFn: importTodosCsv,
+    onSuccess: (r: { inserted: number; lists_created: number; errors: string[] }) => {
+      invalidate()
+      setCsvResult(`导入 ${r.inserted} 条，新建 ${r.lists_created} 个列表${r.errors.length ? `，${r.errors.length} 行错误` : ''}`)
+    },
+    onError: (e: unknown) => setCsvResult(`导入失败: ${e instanceof Error ? e.message : 'unknown'}`),
+  })
+
   const completedCount = stats?.completed ?? (showCompleted ? completed.length : undefined)
+  const currentListName = selectedList ? lists.find((l) => l.id === selectedList)?.display_name ?? '全部' : '全部'
+
+  // 清单抽屉打开时弹簧滑入（20260916：左侧边栏 = 当前待办清单的管理面板）
+  useEffect(() => {
+    if (listsDrawerOpen) animDrawerIn(listsDrawerRef.current, -1)
+  }, [listsDrawerOpen])
+
+  const selectList = (id: string | null) => {
+    setSelectedList(id)
+    setSelectedTodoId(null)
+    setManualOrder(null)
+  }
+
+  const listManager = (
+    <TodoListManager
+      lists={lists}
+      statsIncomplete={stats?.incomplete}
+      counts={counts}
+      selectedList={selectedList}
+      onSelect={selectList}
+      onDefaultList={setDefaultList}
+    />
+  )
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* 左列表栏 — 桌面（md+）固定列，手机隐藏 */}
+      {/* 左列表栏 — 桌面（md+）固定列；手机由 dock 左按钮唤出同内容的抽屉 */}
       <div className="hidden md:flex w-60 bg-white/55 border-r border-white/60 p-3 overflow-y-auto flex flex-col flex-shrink-0">
-        <button
-          onClick={() => { setSelectedList(null); setSelectedTodoId(null); setManualOrder(null) }}
-          className={clsx(
-            'flex items-center justify-between px-2 py-1.5 rounded-md text-sm mb-1',
-            selectedList === null ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
-          )}
-        >
-          <span className="flex items-center gap-1.5"><Inbox size={14} /> 全部</span>
-          {stats && <span className="text-xs text-gray-400">{stats.incomplete}</span>}
-        </button>
-        {lists.map((l) => {
-          const isDefault = localStorage.getItem(DEFAULT_LIST_KEY) === l.id
-          return (
-            <div
-              key={l.id}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData('text/plain', l.id)
-                e.dataTransfer.effectAllowed = 'move'
-                dragListId.current = l.id
-              }}
-              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
-              onDrop={() => {
-                const src = dragListId.current
-                dragListId.current = null
-                if (!src || src === l.id) return
-                const ids = lists.map((x) => x.id)
-                const from = ids.indexOf(src)
-                const to = ids.indexOf(l.id)
-                if (from < 0 || to < 0) return
-                ids.splice(to, 0, ids.splice(from, 1)[0])
-                reorderListMut.mutate(ids)
-              }}
-              className={clsx(
-                'group flex items-center justify-between px-2 py-1.5 rounded-md text-sm cursor-pointer mb-0.5 transition-colors select-none',
-                selectedList === l.id ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-100',
-              )}
-              onClick={() => { setSelectedList(l.id); setSelectedTodoId(null); setManualOrder(null) }}
-            >
-              <span className="truncate flex-1 flex items-center gap-1">
-                <span className="opacity-30 group-hover:opacity-60 text-[10px] select-none">⋮⋮</span>
-                {renamingListId === l.id ? (
-                  <input
-                    autoFocus
-                    value={renameDraft}
-                    onChange={(e) => setRenameDraft(e.target.value)}
-                    onBlur={() => commitRename(l.id)}
-                    onKeyDown={(e) => {
-                      e.stopPropagation()
-                      if (e.key === 'Enter') { e.preventDefault(); commitRename(l.id) }
-                      else if (e.key === 'Escape') { e.preventDefault(); cancelRename() }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex-1 min-w-0 bg-white border border-pink-300 rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-pink-400"
-                  />
-                ) : (
-                  l.display_name
-                )}
-              </span>
-              <span className="flex items-center gap-1">
-                {counts.get(l.id) ? <span className="text-xs text-gray-400">{counts.get(l.id)}</span> : null}
-                <button
-                  onClick={(e) => { e.stopPropagation(); setDefaultList(isDefault ? null : l.id) }}
-                  className={isDefault ? 'text-amber-400' : 'opacity-0 group-hover:opacity-100 text-gray-300 hover:text-amber-400'}
-                  title={isDefault ? '取消默认' : '设为默认列表'}
-                >
-                  <Star size={12} fill={isDefault ? 'currentColor' : 'none'} />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setRenamingListId(l.id); setRenameDraft(l.display_name) }}
-                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-pink-500"
-                  title="重命名"
-                >
-                  <Pencil size={12} />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); if (confirm(`删除列表「${l.display_name}」及其所有待办？`)) deleteListMut.mutate(l.id) }}
-                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </span>
-            </div>
-          )
-        })}
-
-        {creatingList ? (
-          <div className="mt-2 flex gap-1">
-            <input
-              autoFocus
-              className="tt-input flex-1 text-sm"
-              value={newListName}
-              onChange={(e) => setNewListName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && newListName.trim()) { createListMut.mutate(newListName.trim()); setNewListName(''); setCreatingList(false) }
-                if (e.key === 'Escape') { setCreatingList(false); setNewListName('') }
-              }}
-              placeholder="列表名"
-            />
-          </div>
-        ) : (
-          <button onClick={() => setCreatingList(true)} className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-400 hover:text-gray-600 mt-1">
-            <ListPlus size={14} /> 新建列表
-          </button>
-        )}
+        {listManager}
       </div>
 
       {/* 中任务区 */}
       <div className="flex-1 flex flex-col p-2 md:p-4 overflow-hidden min-w-0">
-        {/* 手机：列表横滑 chips（替代左侧栏），桌面隐藏。触控目标加大 + 粉调高亮 */}
-        <div className="md:hidden flex gap-2 overflow-x-auto pb-2.5 mb-1 flex-shrink-0 -mx-1 px-1">
+        {/* 当前清单提示（20260916 任务书：左侧抽屉决定清单后，只保留轻量提示） */}
+        <div className="flex items-center gap-2 mb-1 flex-shrink-0 md:hidden">
           <button
-            onClick={() => { setSelectedList(null); setSelectedTodoId(null); setManualOrder(null) }}
-            className={clsx(
-              'flex items-center gap-1.5 px-3.5 py-2 text-sm rounded-full border whitespace-nowrap flex-shrink-0 transition-colors',
-              selectedList === null ? 'bg-pink-500 text-white border-pink-500 shadow-sm' : 'bg-white text-gray-600 border-gray-200 active:bg-gray-50',
-            )}
+            onClick={() => onListsDrawerOpenChange(true)}
+            className="pressable flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full bg-white/70 border border-white/80 text-gray-700 shadow-sm active:bg-pink-50 transition-colors"
+            aria-label="切换待办清单"
           >
-            <Inbox size={14} /> 全部
-            {stats ? <span className="text-[11px] opacity-80">{stats.incomplete}</span> : null}
+            <FolderOpen size={14} className="text-pink-500" />
+            <span className="font-medium max-w-[40vw] truncate">{currentListName}</span>
+            <span className="text-[11px] text-gray-400">{stats?.incomplete ?? ''}</span>
+            <ChevronDown size={13} className="text-gray-400 -rotate-90" />
           </button>
-          {lists.map((l) => (
-            <button
-              key={l.id}
-              onClick={() => { setSelectedList(l.id); setSelectedTodoId(null); setManualOrder(null) }}
-              className={clsx(
-                'px-3.5 py-2 text-sm rounded-full border whitespace-nowrap flex-shrink-0 transition-colors',
-                selectedList === l.id ? 'bg-pink-500 text-white border-pink-500 shadow-sm' : 'bg-white text-gray-600 border-gray-200 active:bg-gray-50',
-              )}
-            >
-              {l.display_name}
-              {counts.get(l.id) ? <span className="ml-1.5 text-[11px] opacity-80">{counts.get(l.id)}</span> : null}
-            </button>
-          ))}
         </div>
 
         <div className="flex items-center justify-between gap-2 mb-3 flex-shrink-0 flex-wrap">
@@ -398,21 +318,7 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
               <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
             </label>
             <button
-              onClick={async () => {
-                if (!lists.length) {
-                  setAutoList(true)
-                  try {
-                    const tl = await createTodoList('任务')
-                    setSelectedList(tl.id)
-                    invalidate()
-                  } catch {
-                    setAutoList(false)
-                    return
-                  }
-                  setAutoList(false)
-                }
-                setSelectedTodoId('__NEW__')
-              }}
+              onClick={() => void openNewTodo()}
               disabled={autoList}
               className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
@@ -551,7 +457,7 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
         </div>
       </div>
 
-      {/* 右详情栏 — w-72 对齐日历 DetailPanel */}
+      {/* 右详情抽屉 — 手机（<lg）为右侧边栏（20260916：与日历页右侧边栏统一），桌面为右列 */}
       <TodoDetailPanel
         ref={detailRef}
         todo={selectedTodoId === '__NEW__'
@@ -579,6 +485,213 @@ export function TodoView({ viewMode }: { viewMode: TodoViewMode }) {
         }}
         onDelete={(id) => { deleteMut.mutate(id); setSelectedTodoId(null) }}
       />
+
+      {/* 手机：清单抽屉（dock 左按钮 / 清单提示 chip 唤出）——与桌面左列同一份管理组件。
+          portal 到 body：待办页在手势容器内，容器残留 transform 会把 fixed 抽屉圈进
+          内容区矩形（遮罩盖不住 dock），portal 彻底绕开包含块问题 */}
+      {listsDrawerOpen && createPortal(
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={() => onListsDrawerOpenChange(false)} />
+          <aside ref={listsDrawerRef} className="glass-sheet absolute inset-y-0 left-0 w-[290px] max-w-[85vw] rounded-r-3xl p-3 pt-3 overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between mb-2 pl-1">
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">待办清单</h2>
+              <button
+                onClick={() => onListsDrawerOpenChange(false)}
+                className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md text-lg"
+                aria-label="关闭"
+              >
+                ×
+              </button>
+            </div>
+            {listManager}
+            <div className="mt-auto pt-2">
+              {onOpenSettings && (
+                <button
+                  onClick={onOpenSettings}
+                  className="w-full flex items-center gap-2 px-2 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl transition-colors"
+                >
+                  <Settings size={16} className="text-gray-400" /> 设置
+                </button>
+              )}
+              <button
+                onClick={() => onListsDrawerOpenChange(false)}
+                className="w-full flex items-center gap-2 px-2 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl mb-1 transition-colors"
+              >
+                <Check size={16} className="text-gray-400" /> 完成
+              </button>
+            </div>
+          </aside>
+        </div>,
+        document.body,
+      )}
+    </div>
+  )
+
+  function setDefaultList(id: string | null) {
+    if (id) localStorage.setItem(DEFAULT_LIST_KEY, id)
+    else localStorage.removeItem(DEFAULT_LIST_KEY)
+    setSelectedList(id)
+  }
+})
+
+/** 清单管理（桌面左列 / 手机抽屉共用）：全部 + 各清单（拖拽排序、重命名、删默认星标）+ 新建 */
+function TodoListManager({
+  lists,
+  statsIncomplete,
+  counts,
+  selectedList,
+  onSelect,
+  onDefaultList,
+}: {
+  lists: TodoList[]
+  statsIncomplete?: number
+  counts: Map<string, number>
+  selectedList: string | null
+  onSelect: (id: string | null) => void
+  onDefaultList: (id: string | null) => void
+}) {
+  const qc = useQueryClient()
+  const [creatingList, setCreatingList] = useState(false)
+  const [newListName, setNewListName] = useState('')
+  const [renamingListId, setRenamingListId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const dragListId = useRef<string | null>(null)
+
+  const createListMut = useMutation({ mutationFn: (name: string) => createTodoList(name), onSuccess: () => qc.invalidateQueries({ queryKey: ['todoLists'] }) })
+  const renameListMut = useMutation({
+    mutationFn: ({ id, display_name }: { id: string; display_name: string }) => updateTodoList(id, display_name),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['todoLists'] })
+      setRenamingListId(null)
+    },
+  })
+  const cancelRename = () => { setRenamingListId(null); setRenameDraft('') }
+  const commitRename = (id: string) => {
+    const trimmed = renameDraft.trim()
+    if (!trimmed) { cancelRename(); return }
+    renameListMut.mutate({ id, display_name: trimmed })
+  }
+  const deleteListMut = useMutation({
+    mutationFn: deleteTodoList,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['todoLists'] })
+      qc.invalidateQueries({ queryKey: ['todos'] })
+      qc.invalidateQueries({ queryKey: ['todoStats'] })
+      qc.invalidateQueries({ queryKey: ['view'] })
+    },
+  })
+  const reorderListMut = useMutation({
+    mutationFn: (ordered_ids: string[]) => reorderTodoLists(ordered_ids),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['todoLists'] }),
+  })
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <button
+        onClick={() => onSelect(null)}
+        className={clsx(
+          'flex items-center justify-between px-2 py-1.5 rounded-md text-sm mb-1',
+          selectedList === null ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
+        )}
+      >
+        <span className="flex items-center gap-1.5"><Inbox size={14} /> 全部</span>
+        {statsIncomplete !== undefined && <span className="text-xs text-gray-400">{statsIncomplete}</span>}
+      </button>
+      {lists.map((l) => {
+        const isDefault = localStorage.getItem(DEFAULT_LIST_KEY) === l.id
+        return (
+          <div
+            key={l.id}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData('text/plain', l.id)
+              e.dataTransfer.effectAllowed = 'move'
+              dragListId.current = l.id
+            }}
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+            onDrop={() => {
+              const src = dragListId.current
+              dragListId.current = null
+              if (!src || src === l.id) return
+              const ids = lists.map((x) => x.id)
+              const from = ids.indexOf(src)
+              const to = ids.indexOf(l.id)
+              if (from < 0 || to < 0) return
+              ids.splice(to, 0, ids.splice(from, 1)[0])
+              reorderListMut.mutate(ids)
+            }}
+            className={clsx(
+              'group flex items-center justify-between px-2 py-1.5 rounded-md text-sm cursor-pointer mb-0.5 transition-colors select-none',
+              selectedList === l.id ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-100',
+            )}
+            onClick={() => onSelect(l.id)}
+          >
+            <span className="truncate flex-1 flex items-center gap-1">
+              <span className="opacity-30 group-hover:opacity-60 text-[10px] select-none">⋮⋮</span>
+              {renamingListId === l.id ? (
+                <input
+                  autoFocus
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onBlur={() => commitRename(l.id)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation()
+                    if (e.key === 'Enter') { e.preventDefault(); commitRename(l.id) }
+                    else if (e.key === 'Escape') { e.preventDefault(); cancelRename() }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex-1 min-w-0 bg-white border border-pink-300 rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-pink-400"
+                />
+              ) : (
+                l.display_name
+              )}
+            </span>
+            <span className="flex items-center gap-1">
+              {counts.get(l.id) ? <span className="text-xs text-gray-400">{counts.get(l.id)}</span> : null}
+              <button
+                onClick={(e) => { e.stopPropagation(); onDefaultList(isDefault ? null : l.id) }}
+                className={isDefault ? 'text-amber-400' : 'opacity-0 group-hover:opacity-100 text-gray-300 hover:text-amber-400'}
+                title={isDefault ? '取消默认' : '设为默认列表'}
+              >
+                <Star size={12} fill={isDefault ? 'currentColor' : 'none'} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setRenamingListId(l.id); setRenameDraft(l.display_name) }}
+                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-pink-500"
+                title="重命名"
+              >
+                <Pencil size={12} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); if (confirm(`删除列表「${l.display_name}」及其所有待办？`)) deleteListMut.mutate(l.id) }}
+                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500"
+              >
+                <Trash2 size={12} />
+              </button>
+            </span>
+          </div>
+        )
+      })}
+
+      {creatingList ? (
+        <div className="mt-2 flex gap-1">
+          <input
+            autoFocus
+            className="tt-input flex-1 text-sm"
+            value={newListName}
+            onChange={(e) => setNewListName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newListName.trim()) { createListMut.mutate(newListName.trim()); setNewListName(''); setCreatingList(false) }
+              if (e.key === 'Escape') { setCreatingList(false); setNewListName('') }
+            }}
+            placeholder="列表名"
+          />
+        </div>
+      ) : (
+        <button onClick={() => setCreatingList(true)} className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-400 hover:text-gray-600 mt-1">
+          <ListPlus size={14} /> 新建列表
+        </button>
+      )}
     </div>
   )
 }

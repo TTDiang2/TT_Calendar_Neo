@@ -1,8 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Trash2, X } from 'lucide-react'
 import clsx from 'clsx'
 import type { Todo, TodoList } from '../adapt/types'
 import { NotesEditorModal } from './NotesEditorModal'
+import { animDrawerIn } from '../anim'
+import { useIsWideScreen } from '../hooks/useMedia'
 
 interface Props {
   todo: Todo | null
@@ -52,11 +55,23 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
   const [listId, setListId] = useState('')
   const [status, setStatus] = useState<Todo['status']>('notStarted')
   const [dueExpanded, setDueExpanded] = useState(false)
+  const panelRef = useRef<HTMLElement | null>(null)
 
   useImperativeHandle(ref, () => ({
     openNotes: () => setNotesModalOpen(true),
   }))
   const [plannedExpanded, setPlannedExpanded] = useState(false)
+
+  // 手机端（<lg）待办详情是右侧边栏抽屉（20260916 任务书：与日历页右侧边栏统一）。
+  // 仅「无选中 → 选中」滑入一次；A→B 切换与桌面端（静态右栏）都不播动画——
+  // 桌面播放滑入是 20260916 审核缺陷 1（任务书红线：桌面零变化）
+  const isDesktop = useIsWideScreen()
+  const prevOpenRef = useRef(false)
+  useEffect(() => {
+    const open = !!todo
+    if (open && !prevOpenRef.current && !isDesktop) animDrawerIn(panelRef.current, 1)
+    prevOpenRef.current = open
+  }, [todo?.id, isDesktop])
 
   const formRef = useRef({ title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status })
   formRef.current = { title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status }
@@ -173,8 +188,9 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
   }, [todo?.id])
 
   if (!todo) {
+    if (!isDesktop) return null
     return (
-      <aside className="hidden lg:block w-72 bg-white border-l border-gray-200 p-4 flex-shrink-0">
+      <aside className="w-72 bg-white border-l border-gray-200 p-4 flex-shrink-0">
         <p className="text-sm text-gray-400">点击待办查看详情</p>
       </aside>
     )
@@ -208,169 +224,190 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
     onClose()
   }
 
-  return (
-    <>
-      {/* 手机：底部弹层后的遮罩（点空白关闭，桌面隐藏） */}
-      <div
-        className="lg:hidden fixed inset-0 z-[39] bg-black/30"
-        onClick={onClose}
+  // 表单体（桌面右栏 / 手机抽屉共用同一份 JSX）
+  const header = (
+    <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+      <p className="text-xs text-gray-400 uppercase tracking-wide">{todo.id === '' || todo.id === '__NEW__' ? '新建待办' : '待办详情'}</p>
+      <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 flex-shrink-0 ml-2" title="关闭">
+        <X size={16} />
+      </button>
+    </div>
+  )
+
+  const form = (
+    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <textarea
+        autoFocus
+        rows={2}
+        className="w-full text-base font-medium border-0 border-b border-transparent hover:border-gray-200 focus:border-pink-400 focus:outline-none py-1 resize-none break-words whitespace-pre-wrap"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="标题"
       />
-      <aside
-        className={clsx(
-          // 单一挂载、响应式：<lg 为固定底部弹层；lg+ 为静态右侧栏
-          'bg-white flex flex-col overflow-hidden',
-          'fixed inset-x-0 bottom-0 z-40 max-h-[75dvh] rounded-t-2xl shadow-[0_-8px_30px_rgba(0,0,0,0.15)]',
-          'pb-[env(safe-area-inset-bottom)]',
-          'lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:rounded-none lg:shadow-none lg:w-72 lg:border-l lg:pb-0',
-        )}
-        onKeyDown={(e) => {
-          // Ctrl/Cmd + Enter 直接保存（新建待办时同样生效）
-          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-            e.preventDefault()
-            if (title.trim() && listId && !savingRef.current) save()
-          }
-        }}
-      >
-        <div className="lg:hidden flex justify-center pt-1.5 pb-0.5">
-          <div className="w-10 h-1 rounded-full bg-gray-300" />
-        </div>
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">{todo.id === '' || todo.id === '__NEW__' ? '新建待办' : '待办详情'}</p>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 flex-shrink-0 ml-2" title="关闭">
-            <X size={16} />
-          </button>
-        </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        <textarea
-          autoFocus
-          rows={2}
-          className="w-full text-base font-medium border-0 border-b border-transparent hover:border-gray-200 focus:border-pink-400 focus:outline-none py-1 resize-none break-words whitespace-pre-wrap"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="标题"
-        />
+      <textarea
+        className="w-full text-sm border border-gray-200 rounded-md p-2 min-h-[80px] focus:border-pink-400 focus:outline-none resize-y cursor-text"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        onDoubleClick={() => setNotesModalOpen(true)}
+        title="双击放大编辑"
+        placeholder="备注（可选）"
+      />
 
-        <textarea
-          className="w-full text-sm border border-gray-200 rounded-md p-2 min-h-[80px] focus:border-pink-400 focus:outline-none resize-y cursor-text"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onDoubleClick={() => setNotesModalOpen(true)}
-          title="双击放大编辑"
-          placeholder="备注（可选）"
-        />
-
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-xs text-gray-500">
-            <span className="block mb-1">列表</span>
-            <select className="tt-input" value={listId} onChange={(e) => setListId(e.target.value)}>
-              {lists.map((l) => (
-                <option key={l.id} value={l.id}>{l.display_name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs text-gray-500">
-            <span className="block mb-1">重要性</span>
-            <select className="tt-input" value={importance} onChange={(e) => setImportance(e.target.value as Todo['importance'])}>
-              {IMPORTANCE_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>{o.label}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <label className={clsx('text-xs text-gray-500', dueExpanded && 'col-span-2', plannedExpanded && 'hidden')}>
-            <span className="block mb-1">截止日期</span>
-            <DueDateQuickPicker value={dueDate} onChange={setDueDate} expanded={dueExpanded} setExpanded={setDueExpanded} />
-          </label>
-          <label className={clsx('text-xs text-gray-500', plannedExpanded && 'col-span-2', dueExpanded && 'hidden')}>
-            <span className="block mb-1">计划日期</span>
-            <DueDateQuickPicker value={plannedDate} onChange={setPlannedDate} expanded={plannedExpanded} setExpanded={setPlannedExpanded} />
-          </label>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-xs text-gray-500">
-            <span className="block mb-1">开始日</span>
-            <input type="date" className="tt-input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </label>
-          <label className="text-xs text-gray-500">
-            <span className="block mb-1">复杂度</span>
-            <select className="tt-input" value={complexity} onChange={(e) => setComplexity(e.target.value as Todo['complexity'])}>
-              {COMPLEXITY_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>{o.label}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-xs text-gray-500">
-            <span className="block mb-1">状态</span>
-            <select className="tt-input" value={status} onChange={(e) => setStatus(e.target.value as Todo['status'])}>
-              {STATUS_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>{o.label}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <label className="text-xs text-gray-500 block">
-          <span className="block mb-1">标签（逗号分隔，自定义）</span>
-          <input
-            className="tt-input"
-            value={tagsText}
-            onChange={(e) => setTagsText(e.target.value)}
-            placeholder="工作, 学习, 家庭…"
-          />
-          {tags.length > 0 && (
-            <span className="flex flex-wrap gap-1 mt-1.5">
-              {tags.map((t) => (
-                <span key={t} className="text-[10px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">{t}</span>
-              ))}
-            </span>
-          )}
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs text-gray-500">
+          <span className="block mb-1">列表</span>
+          <select className="tt-input" value={listId} onChange={(e) => setListId(e.target.value)}>
+            {lists.map((l) => (
+              <option key={l.id} value={l.id}>{l.display_name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-gray-500">
+          <span className="block mb-1">重要性</span>
+          <select className="tt-input" value={importance} onChange={(e) => setImportance(e.target.value as Todo['importance'])}>
+            {IMPORTANCE_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
         </label>
       </div>
 
-      <div className="px-4 py-3 border-t border-gray-100 space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <button
-            onClick={() => {
-              // 删除后面板会关闭，必须阻止 cleanup 把这条刚删掉的记录又 flush 回去
-              if (confirm(`删除待办「${todo.title}」？`)) {
-                skipFlushRef.current = true
-                onDelete(todo.id)
-              }
-            }}
-            className="flex items-center gap-1 text-sm text-red-500 hover:text-red-600 whitespace-nowrap"
-          >
-            <Trash2 size={14} /> 删除
-          </button>
-          <button
-            onClick={save}
-            disabled={!title.trim() || !listId || saving}
-            className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40 whitespace-nowrap"
-          >
-            {saving ? '保存中…' : '保存'}
-          </button>
-        </div>
-        <p className="text-[11px] text-gray-400 text-right leading-none whitespace-nowrap">
-          切换页面自动保存 · <span className="font-medium text-gray-500">Ctrl+Enter</span> 直接保存
-        </p>
+      <div className="grid grid-cols-2 gap-2">
+        <label className={clsx('text-xs text-gray-500', dueExpanded && 'col-span-2', plannedExpanded && 'hidden')}>
+          <span className="block mb-1">截止日期</span>
+          <DueDateQuickPicker value={dueDate} onChange={setDueDate} expanded={dueExpanded} setExpanded={setDueExpanded} />
+        </label>
+        <label className={clsx('text-xs text-gray-500', plannedExpanded && 'col-span-2', dueExpanded && 'hidden')}>
+          <span className="block mb-1">计划日期</span>
+          <DueDateQuickPicker value={plannedDate} onChange={setPlannedDate} expanded={plannedExpanded} setExpanded={setPlannedExpanded} />
+        </label>
       </div>
-      <NotesEditorModal
-        open={notesModalOpen}
-        initialValue={body}
-        title={title || '备注'}
-        onClose={(next) => {
-          setBody(next)
-          setNotesModalOpen(false)
-        }}
-      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs text-gray-500">
+          <span className="block mb-1">开始日</span>
+          <input type="date" className="tt-input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        </label>
+        <label className="text-xs text-gray-500">
+          <span className="block mb-1">复杂度</span>
+          <select className="tt-input" value={complexity} onChange={(e) => setComplexity(e.target.value as Todo['complexity'])}>
+            {COMPLEXITY_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs text-gray-500">
+          <span className="block mb-1">状态</span>
+          <select className="tt-input" value={status} onChange={(e) => setStatus(e.target.value as Todo['status'])}>
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <label className="text-xs text-gray-500 block">
+        <span className="block mb-1">标签（逗号分隔，自定义）</span>
+        <input
+          className="tt-input"
+          value={tagsText}
+          onChange={(e) => setTagsText(e.target.value)}
+          placeholder="工作, 学习, 家庭…"
+        />
+        {tags.length > 0 && (
+          <span className="flex flex-wrap gap-1 mt-1.5">
+            {tags.map((t) => (
+              <span key={t} className="text-[10px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">{t}</span>
+            ))}
+          </span>
+        )}
+      </label>
+    </div>
+  )
+
+  const footer = (
+    <div className="px-4 py-3 border-t border-gray-100 space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          onClick={() => {
+            // 删除后面板会关闭，必须阻止 cleanup 把这条刚删掉的记录又 flush 回去
+            if (confirm(`删除待办「${todo.title}」？`)) {
+              skipFlushRef.current = true
+              onDelete(todo.id)
+            }
+          }}
+          className="flex items-center gap-1 text-sm text-red-500 hover:text-red-600 whitespace-nowrap"
+        >
+          <Trash2 size={14} /> 删除
+        </button>
+        <button
+          onClick={save}
+          disabled={!title.trim() || !listId || saving}
+          className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40 whitespace-nowrap"
+        >
+          {saving ? '保存中…' : '保存'}
+        </button>
+      </div>
+      <p className="text-[11px] text-gray-400 text-right leading-none whitespace-nowrap">
+        切换页面自动保存 · <span className="font-medium text-gray-500">Ctrl+Enter</span> 直接保存
+      </p>
+    </div>
+  )
+
+  const notesModal = (
+    <NotesEditorModal
+      open={notesModalOpen}
+      initialValue={body}
+      title={title || '备注'}
+      onClose={(next) => {
+        setBody(next)
+        setNotesModalOpen(false)
+      }}
+    />
+  )
+
+  const onKeyDownSave = (e: React.KeyboardEvent) => {
+    // Ctrl/Cmd + Enter 直接保存（新建待办时同样生效）
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault()
+      if (title.trim() && listId && !savingRef.current) save()
+    }
+  }
+
+  // 桌面（lg+）：静态右栏（原样，任务书红线：桌面零变化）
+  if (isDesktop) {
+    return (
+      <aside className="w-72 bg-white border-l border-gray-200 flex flex-col overflow-hidden flex-shrink-0" onKeyDown={onKeyDownSave}>
+        {header}
+        {form}
+        {footer}
+        {notesModal}
       </aside>
-    </>
+    )
+  }
+
+  // 手机（<lg）：右侧边栏抽屉。portal 到 body —— 待办页在手势容器（contentRef）内，
+  // 容器残留的 inline transform 会把 fixed 抽屉圈进内容区矩形（遮罩盖不住 dock），
+  // portal 彻底绕开包含块问题（20260916 审核缺陷 2）
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[39] bg-black/30" onClick={onClose} />
+      <aside
+        ref={panelRef}
+        className="glass-sheet fixed inset-y-0 right-0 z-40 w-[300px] max-w-[85vw] rounded-l-3xl flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]"
+        onKeyDown={onKeyDownSave}
+      >
+        {header}
+        {form}
+        {footer}
+        {notesModal}
+      </aside>
+    </>,
+    document.body,
   )
 })
 
