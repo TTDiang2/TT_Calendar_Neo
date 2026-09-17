@@ -27,6 +27,10 @@ export default tseslint.config(
       },
     },
     rules: {
+      // 20260917 智者终审建议：tsc/冒烟测试是 hooks 顺序违规的盲区
+      // （StatsView 曾因此漏过必崩 bug），规则能查每一次
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
       // 本项目大量使用 Record<string, any> 描述 SQLite 的 extra_json / config_json
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': [

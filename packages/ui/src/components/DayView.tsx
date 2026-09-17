@@ -28,13 +28,20 @@ export function DayView(props: Props) {
 /** 手机端：iOS 内嵌分组列表风（20260917 任务书 1.1-6 苹果化——
     与桌面版拆分为两个分支，桌面保持逐字原样，零变化红线） */
 function MobileDayView({ monthData, layers, onSelect, onDoubleClick }: Props) {
+  // hooks 全部前置（react-hooks/rules-of-hooks：早退必须在 hooks 之后）
   const day = monthData.days[0]
+  const schedules = useMemo(
+    () => (day ? [...(day.schedule_items ?? [])].sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')) : []),
+    [day],
+  )
+  const openTodos = useMemo(() => (day?.todos ?? []).filter((t) => t.status !== 'completed'), [day])
+  const doneTodos = useMemo(() => (day?.todos ?? []).filter((t) => t.status === 'completed'), [day])
+
   if (!day) return <div className="flex-1 flex items-center justify-center text-gray-400">无数据</div>
 
   const { y, m, d } = parseDate(day.date)
   const weekday = WEEK_NAMES[new Date(y, m - 1, d).getDay()]
   const layerById = new Map(layers.map((l) => [l.layer_id, l]))
-  const today = todayStr()
 
   const visibleEvents = Object.entries(day.events_by_layer)
     .filter(([lid]) => {
@@ -43,13 +50,6 @@ function MobileDayView({ monthData, layers, onSelect, onDoubleClick }: Props) {
     })
     .flatMap(([, evs]) => evs)
     .sort((a, b) => a.sort_key - b.sort_key)
-
-  const schedules = useMemo(
-    () => [...(day.schedule_items ?? [])].sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')),
-    [day],
-  )
-  const openTodos = useMemo(() => (day.todos ?? []).filter((t) => t.status !== 'completed'), [day])
-  const doneTodos = useMemo(() => (day.todos ?? []).filter((t) => t.status === 'completed'), [day])
 
   const colorLayers: string[] = []
   if (layerById.get('important')?.enabled && day.gradient_bg && day.gradient_bg.toLowerCase() !== '#ffffff') {
@@ -221,7 +221,16 @@ function MTodoLine({ todo, done, divider }: { todo: Todo; done?: boolean; divide
 
 function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSelect, onDoubleClick }: Props) {
   const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
+  // hooks 全部前置（react-hooks/rules-of-hooks）：原版早退在 useMemo 之前。
+  // 行为不变——day 为空时走「无数据」渲染，这三个 memo 结果不会被消费。
   const day = monthData.days[0]
+  const schedules = useMemo(
+    () => (day ? [...(day.schedule_items ?? [])].sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')) : []),
+    [day],
+  )
+  const openTodos = useMemo(() => (day?.todos ?? []).filter((t) => t.status !== 'completed'), [day])
+  const doneTodos = useMemo(() => (day?.todos ?? []).filter((t) => t.status === 'completed'), [day])
+
   if (!day) return <div className="flex-1 flex items-center justify-center text-gray-400">无数据</div>
 
   const { y, m, d } = parseDate(day.date)
@@ -236,13 +245,6 @@ function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSele
     })
     .flatMap(([, evs]) => evs)
     .sort((a, b) => a.sort_key - b.sort_key)
-
-  const schedules = useMemo(
-    () => [...(day.schedule_items ?? [])].sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')),
-    [day],
-  )
-  const openTodos = useMemo(() => (day.todos ?? []).filter((t) => t.status !== 'completed'), [day])
-  const doneTodos = useMemo(() => (day.todos ?? []).filter((t) => t.status === 'completed'), [day])
 
   const colorLayers: string[] = []
   if (layerById.get('important')?.enabled && day.gradient_bg && day.gradient_bg.toLowerCase() !== '#ffffff') {
