@@ -453,7 +453,6 @@ export default function App() {
     [layers, isMobile, isSubLayer],
   )
 
-  const qcMigrate = useQueryClient()
   // 20260917 任务书 1.2-4：充实度染色不再作为默认染色（用户想用随时可在图层里打开）。
   // 一次性迁移：手机端首次运行把内置 coloring 图层关掉并落 flag，之后不再主动动它。
   useEffect(() => {
@@ -465,10 +464,10 @@ export default function App() {
     const coloring = layers.find((l) => l.layer_id === 'coloring')
     if (coloring?.enabled) {
       toggleLayer('coloring', false)
-        .then(() => qcMigrate.invalidateQueries({ queryKey: ['view'] }))
+        .then(() => qc.invalidateQueries({ queryKey: ['view'] }))
         .catch(() => { /* 关不掉就保持现状（用户可手动关） */ })
     }
-  }, [isMobile, layers, qcMigrate])
+  }, [isMobile, layers, qc])
 
   // 20260917 任务书 1.2-5：已完成热力色阶迁到 GitHub 绿。默认值已改绿，但
   // meta 表里可能存着旧钢蓝配置——一次性覆写 done_colors（只动颜色，不动权重）。
@@ -482,12 +481,12 @@ export default function App() {
       .then((cfg) => {
         if (JSON.stringify(cfg.done_colors) === JSON.stringify(GREEN)) return
         return setTodoBusyConfig({ done_colors: GREEN }).then(() => {
-          qcMigrate.invalidateQueries({ queryKey: ['todoBusyConfig'] })
-          qcMigrate.invalidateQueries({ queryKey: ['view'] })
+          qc.invalidateQueries({ queryKey: ['todoBusyConfig'] })
+          qc.invalidateQueries({ queryKey: ['view'] })
         })
       })
       .catch(() => { /* 迁移失败不影响主流程 */ })
-  }, [qcMigrate])
+  }, [qc])
 
   const toggleMutation = useMutation({
     mutationFn: ({ layerId, enabled }: { layerId: string; enabled: boolean }) =>
