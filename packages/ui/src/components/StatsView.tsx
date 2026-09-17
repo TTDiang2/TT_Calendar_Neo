@@ -259,54 +259,77 @@ export function StatsView({
 
   const scopeName = scopeList ? data.list_names[scopeList] ?? '未命名清单' : '全部清单'
 
-  // 面板内容（桌面常驻栏 / 手机抽屉共用同一份 JSX，对齐 TodoView 的 TodoListManager 模式）
+  // 面板内容（桌面常驻栏 / 手机抽屉共用同一份 JSX）。
+  // 20260917 智者 P2-17 按任务书 1.1-11 原意重构：清单范围降级为顶部一行 chips
+  // （它本来就不该是左抽屉的主体），「洞察」升为主体内容。
+  const bestDay = useMemo(() => {
+    let best = { date: '', count: 0 }
+    for (const d of daily) if (d.count > best.count) best = { date: d.date, count: d.count }
+    return best
+  }, [daily])
+  const weekDone = useMemo(() => daily.slice(0, 7).reduce((s, d) => s + d.count, 0), [daily])
+
   const scopePanel = (
     <div className="flex flex-col flex-1 min-h-0">
-      <button
-        onClick={() => setScope(null)}
-        className={clsx(
-          'flex items-center justify-between px-3 py-2.5 rounded-xl text-sm mb-1',
-          scopeList === null ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-black/[0.04]',
-        )}
-      >
-        <span className="flex items-center gap-1.5"><Inbox size={14} /> 全部清单</span>
-      </button>
-      {lists.map((l) => (
+      {/* 范围：一行可换行的 chips（降级为次要控件） */}
+      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-1.5">统计范围</p>
+      <div className="flex flex-wrap gap-1.5 mb-5">
         <button
-          key={l.id}
-          onClick={() => setScope(l.id)}
+          onClick={() => setScope(null)}
           className={clsx(
-            'flex items-center px-3 py-2.5 rounded-xl text-sm mb-1 truncate',
-            scopeList === l.id ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-black/[0.04]',
+            'px-3 py-1.5 rounded-full text-xs font-medium border transition',
+            scopeList === null ? 'bg-pink-500 border-pink-500 text-white shadow-sm' : 'bg-white/70 border-black/10 text-gray-600',
           )}
         >
-          <span className="truncate">{l.display_name}</span>
+          全部
         </button>
-      ))}
+        {lists.map((l) => (
+          <button
+            key={l.id}
+            onClick={() => setScope(l.id)}
+            className={clsx(
+              'max-w-[130px] truncate px-3 py-1.5 rounded-full text-xs font-medium border transition',
+              scopeList === l.id ? 'bg-pink-500 border-pink-500 text-white shadow-sm' : 'bg-white/70 border-black/10 text-gray-600',
+            )}
+          >
+            {l.display_name}
+          </button>
+        ))}
+      </div>
 
-      {/* 洞察速览（20260917 任务书 1.1-11：左抽屉不再只是「选个范围」，把有价值的
-          概览数字直接摆进来） */}
-      <div className="mt-4">
-        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-2">洞察</p>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-2xl bg-white/80 border border-black/5 px-3 py-2.5">
-            <p className="text-[11px] text-gray-400 flex items-center gap-1"><CheckCircle2 size={12} /> 累计完成</p>
-            <p className="text-lg font-bold text-gray-800 tabular-nums mt-0.5">{data.stats.completed}</p>
-          </div>
-          <div className="rounded-2xl bg-white/80 border border-black/5 px-3 py-2.5">
-            <p className="text-[11px] text-gray-400 flex items-center gap-1"><Flame size={12} /> 连续打卡</p>
-            <p className="text-lg font-bold text-gray-800 tabular-nums mt-0.5">{streaks.current} 天</p>
-          </div>
-          <div className="rounded-2xl bg-white/80 border border-black/5 px-3 py-2.5">
-            <p className="text-[11px] text-gray-400 flex items-center gap-1"><BarChart3 size={12} /> 日均（30天）</p>
-            <p className="text-lg font-bold text-gray-800 tabular-nums mt-0.5">
-              {(daily.slice(0, 30).reduce((s, d) => s + d.count, 0) / 30).toFixed(1)}
-            </p>
-          </div>
-          <div className="rounded-2xl bg-white/80 border border-black/5 px-3 py-2.5">
-            <p className="text-[11px] text-gray-400 flex items-center gap-1"><Trophy size={12} /> 完成率</p>
-            <p className="text-lg font-bold text-gray-800 tabular-nums mt-0.5">{Math.round(doneRate * 100)}%</p>
-          </div>
+      {/* 洞察（主体）：六张大数字卡 */}
+      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-2">洞察</p>
+      <div className="grid grid-cols-2 gap-2.5">
+        <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><CheckCircle2 size={12} /> 累计完成</p>
+          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">{data.stats.completed}</p>
+        </div>
+        <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Flame size={12} /> 连续 / 最长</p>
+          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">
+            {streaks.current}<span className="text-sm text-gray-400"> / {streaks.longest} 天</span>
+          </p>
+        </div>
+        <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><BarChart3 size={12} /> 日均（30天）</p>
+          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">
+            {(daily.slice(0, 30).reduce((s, d) => s + d.count, 0) / 30).toFixed(1)}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Trophy size={12} /> 完成率</p>
+          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">{Math.round(doneRate * 100)}%</p>
+        </div>
+        <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Flame size={12} /> 本周完成</p>
+          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">{weekDone}</p>
+        </div>
+        <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Inbox size={12} /> 最佳单日</p>
+          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">
+            {bestDay.count}
+            {bestDay.date && <span className="text-sm text-gray-400"> · {bestDay.date.slice(5)}</span>}
+          </p>
         </div>
       </div>
 

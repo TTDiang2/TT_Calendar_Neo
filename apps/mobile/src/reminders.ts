@@ -24,6 +24,8 @@ const REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 let timer: ReturnType<typeof setInterval> | null = null
 let refreshing = false
+/** 首次用户点按后置真：权限请求只在真实交互之后发生（智者 P1-8） */
+let userInteracted = false
 
 function inTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -93,9 +95,13 @@ async function computeDesired(): Promise<DesiredReminder[]> {
   ])
 
   const out: DesiredReminder[] = []
-  // 到期待办：截止当天 09:00（含已过期补一条立即提醒）
+  // 到期待办：截止当天 09:00（含已过期补一条立即提醒；当天只补报一次——
+  // cancelAll 全量重排每 6 小时跑一轮，不去重的话过期提醒会反复弹，智者 P2-16）
   const overdue = open.filter((t: Todo) => t.due_date != null && t.due_date < today)
-  if (overdue.length > 0) {
+  let overdueFired = false
+  try { overdueFired = localStorage.getItem('reminders.overdue.fired') === today } catch { /* 隐私模式 */ }
+  if (overdue.length > 0 && !overdueFired) {
+    try { localStorage.setItem('reminders.overdue.fired', today) } catch { /* 同上 */ }
     out.push({
       key: `overdue-${today}`,
       at: new Date(Date.now() + 5_000),
@@ -109,7 +115,7 @@ async function computeDesired(): Promise<DesiredReminder[]> {
     out.push({
       key: `todo-${t.id}`,
       at: alarmAt(t.due_date),
-      title: '待办今天截止',
+      title: t.due_date === today ? '待办今天截止' : `待办截止 · ${t.due_date.slice(5)}`,
       body: t.title,
     })
   }
@@ -139,6 +145,9 @@ export async function refreshReminders(): Promise<{ scheduled: number } | null> 
     const plugin = await import('@tauri-apps/plugin-notification')
     let granted = await plugin.isPermissionGranted()
     if (!granted) {
+      // 权限请求加交互门控（智者 P1-8）：冷启动 8 秒无预告弹系统权限框观感差，
+      // iOS 一次拒绝永久拒绝——首次用户点按之后才请求；已拒绝则静默放弃
+      if (!userInteracted) return null
       try {
         granted = (await plugin.requestPermission()) === 'granted'
       } catch {
@@ -147,8 +156,9 @@ export async function refreshReminders(): Promise<{ scheduled: number } | null> 
     }
     if (!granted) return null
 
-    await plugin.cancelAll()
+    // 先算后清（智者 P1-8）：computeDesired 失败时不能把旧提醒清掉
     const desired = await computeDesired()
+    await plugin.cancelAll()
     let scheduled = 0
     for (const r of desired) {
       try {
@@ -174,6 +184,13 @@ export async function refreshReminders(): Promise<{ scheduled: number } | null> 
 /** 启动周期刷新：启动后 8 秒首排（等数据就绪），此后每 6 小时一次 */
 export function startReminders(): void {
   if (!inTauri() || timer) return
+  const markInteracted = () => {
+    userInteracted = true
+    window.removeEventListener('pointerdown', markInteracted)
+    window.removeEventListener('keydown', markInteracted)
+  }
+  window.addEventListener('pointerdown', markInteracted, { once: true })
+  window.addEventListener('keydown', markInteracted, { once: true })
   setTimeout(() => void refreshReminders(), 8_000)
   timer = setInterval(() => void refreshReminders(), REFRESH_INTERVAL_MS)
 }

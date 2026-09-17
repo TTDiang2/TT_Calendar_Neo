@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Modal, Field } from './ui/Modal'
@@ -369,15 +369,16 @@ export function SearchDialog({
   onJump,
   onJumpTodo,
   layers,
-  hideSubscriptions = false,
+  excludeSub,
 }: {
   onClose: () => void
   onJump: (ev: CalEvent) => void
   /** 点中待办结果：App 切到待办页并打开该待办详情 */
   onJumpTodo?: (todo: Todo) => void
-  /** 图层表：hideSubscriptions 时用于剔除订阅来源结果（手机端不呈现订阅内容） */
+  /** 图层表：与 excludeSub 配合剔除订阅来源结果 */
   layers?: Layer[]
-  hideSubscriptions?: boolean
+  /** 订阅图层判别式（统一口径，见 adapt/subscription.ts）；手机端由 App 传入 */
+  excludeSub?: (l: Layer) => boolean
 }) {
   const [q, setQ] = useState('')
   const trimmed = q.trim()
@@ -386,8 +387,16 @@ export function SearchDialog({
     queryFn: () => searchEvents(trimmed),
     enabled: trimmed.length > 0,
   })
+
+  // 防抖（智者 P2-12）：待办候选是 500+500 条全量，每敲一字重拉太重
+  const [debouncedQ, setDebouncedQ] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(trimmed), 250)
+    return () => clearTimeout(t)
+  }, [trimmed])
+
   const { data: todos, isFetching: fetchingTodos } = useQuery({
-    queryKey: ['search', 'todos', trimmed],
+    queryKey: ['search', 'todos', debouncedQ],
     queryFn: async () => {
       const [open, done] = await Promise.all([
         getTodos({ status: 'notStarted', limit: 500 }),
@@ -395,21 +404,22 @@ export function SearchDialog({
       ])
       return [...open, ...done]
     },
-    enabled: trimmed.length > 0,
+    enabled: debouncedQ.length > 0,
+    staleTime: 60_000,
   })
 
   const subLayerIds = useMemo(() => {
-    if (!hideSubscriptions || !layers) return new Set<string>()
-    return new Set(layers.filter((l) => l.layer_id.startsWith('jisilu_')).map((l) => l.layer_id))
-  }, [hideSubscriptions, layers])
+    if (!excludeSub || !layers) return new Set<string>()
+    return new Set(layers.filter(excludeSub).map((l) => l.layer_id))
+  }, [excludeSub, layers])
 
   const hitEvents = useMemo(() => {
     if (!events) return []
     return events.filter((ev) => !subLayerIds.has(ev.layer_id)).slice(0, 30)
   }, [events, subLayerIds])
   const hitTodos = useMemo(() => {
-    if (!todos || !trimmed) return []
-    const kw = trimmed.toLowerCase()
+    if (!todos || !debouncedQ) return []
+    const kw = debouncedQ.toLowerCase()
     return todos
       .filter((t) =>
         t.title.toLowerCase().includes(kw)
@@ -419,6 +429,7 @@ export function SearchDialog({
       .slice(0, 30)
   }, [todos, trimmed])
 
+
   const searching = fetchingEvents || fetchingTodos
   const nothing = trimmed.length > 0 && !searching && hitEvents.length === 0 && hitTodos.length === 0
 
@@ -426,7 +437,7 @@ export function SearchDialog({
     <Modal title="搜索" onClose={onClose} width={520}>
       <input
         className="tt-input mb-3"
-        placeholder="搜事件、日程、待办…"
+        placeholder="搜事件、待办…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         autoFocus
@@ -436,7 +447,7 @@ export function SearchDialog({
 
         {hitEvents.length > 0 && (
           <>
-            <p className="text-[11px] font-semibold text-gray-400 px-1 pt-1 pb-0.5 uppercase tracking-wide">事件 · 日程</p>
+            <p className="text-[11px] font-semibold text-gray-400 px-1 pt-1 pb-0.5 uppercase tracking-wide">事件</p>
             {hitEvents.map((ev, i) => (
               <button
                 key={`ev-${ev.id ?? i}`}
@@ -736,10 +747,13 @@ export function ContextMenu({
 export function DotEntryDialog({
   date,
   layers,
+  excludeSub,
   onClose,
 }: {
   date: string
   layers: Layer[]
+  /** 订阅图层判别式（统一口径）：手机端传入，新增下拉不得出现订阅内容 */
+  excludeSub?: (l: Layer) => boolean
   onClose: () => void
 }) {
   const qc = useQueryClient()
@@ -751,7 +765,7 @@ export function DotEntryDialog({
   const SCHEDULE_CATEGORIES = ['work', 'course', 'sport', 'play', 'other']
   const dotLayers = layers.filter((l) =>
     l.kind === 'dot'
-    && !l.layer_id.startsWith('jisilu_')
+    && !(excludeSub?.(l) ?? l.layer_id.startsWith('jisilu_'))
     && l.layer_id !== 'schedule',
   )
   const importantLayer = layers.find((l) => l.layer_id === 'important')
@@ -871,10 +885,13 @@ export function DotEntryDialog({
 export function ColorEntryDialog({
   date,
   layers,
+  excludeSub,
   onClose,
 }: {
   date: string
   layers: Layer[]
+  /** 订阅图层判别式（统一口径）：手机端传入，新增下拉不得出现订阅内容 */
+  excludeSub?: (l: Layer) => boolean
   onClose: () => void
 }) {
   const qc = useQueryClient()
@@ -882,7 +899,7 @@ export function ColorEntryDialog({
   const AUTO_LAYERS = ['holiday', 'important', 'todo', 'todo_done']
   const colorLayers = layers.filter((l) =>
     l.kind === 'color'
-    && !l.layer_id.startsWith('jisilu_')
+    && !(excludeSub?.(l) ?? l.layer_id.startsWith('jisilu_'))
     && !AUTO_LAYERS.includes(l.layer_id),
   )
   const firstOpt =

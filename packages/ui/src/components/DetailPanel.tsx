@@ -53,6 +53,10 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
     },
   })
 
+  // 手机抽屉里操作按钮常显：触屏没有 hover，opacity-0 group-hover 等于永远不可见
+  // （智者 P1：右抽屉是这些操作的唯一入口）
+  const hoverCls = drawer ? '' : 'opacity-0 group-hover:opacity-100'
+
   if (!day) {
     if (drawer) {
       return (
@@ -206,7 +210,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                 )}
                 <button
                   onClick={() => delMarkMut.mutate({ layerId: mk.layer_id, date: day.date })}
-                  className="p-0.5 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition flex-shrink-0"
+                  className={`p-0.5 text-gray-300 hover:text-red-500 transition flex-shrink-0 ${hoverCls}`}
                   title="删除标记"
                 >
                   <Trash2 size={11} />
@@ -252,7 +256,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                 </div>
                 <button
                   onClick={() => delMarkMut.mutate({ layerId: mk.layer_id, date: day.date })}
-                  className="p-0.5 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition flex-shrink-0"
+                  className={`p-0.5 text-gray-300 hover:text-red-500 transition flex-shrink-0 ${hoverCls}`}
                   title="删除标记"
                 >
                   <Trash2 size={11} />
@@ -288,7 +292,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                     {it.start_time ? (it.end_time ? `${it.start_time}-${it.end_time}` : it.start_time) : '全天'}
                   </span>
                   <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">{it.title}</span>
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
+                  <div className={`flex gap-0.5 transition flex-shrink-0 ${hoverCls}`}>
                     <button
                       onClick={() => onEditSchedule(day.date)}
                       className="p-1 text-gray-400 hover:text-pink-500"
@@ -335,7 +339,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                     {ev.description && <p className="text-xs text-gray-400 mt-1">{ev.description}</p>}
                   </div>
                   {ev.source === 'manual' && ev.id && (
-                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                    <div className={`flex gap-0.5 transition ${hoverCls}`}>
                       <button
                         onClick={() => onEditEvent(day.date, ev)}
                         className="p-1 text-gray-400 hover:text-pink-500"
@@ -376,7 +380,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                     })}
                     className={clsx(
                       'w-3.5 h-3.5 rounded border flex-shrink-0 mt-0.5 flex items-center justify-center',
-                      isDone ? 'bg-amber-500 border-amber-500' : 'border-gray-300 hover:border-amber-400',
+                      isDone ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300 hover:border-emerald-400',
                     )}
                   >
                     {isDone && <span className="text-white text-[8px]">✓</span>}

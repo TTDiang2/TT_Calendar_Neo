@@ -5,6 +5,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Layers, Palette, P
 import { useViewData, useCountdown } from './hooks/useApi'
 import { toggleLayer, moveDay, getTodoStats, getTodos, getSyncStatus, getSyncConfig, syncNow, refreshDueSubscriptions, getSubscriptions, getTodoBusyConfig, setTodoBusyConfig } from './adapt/api'
 import { shiftMonthKey, shiftYearKey, todayStr } from './adapt/data'
+import { subscriptionLayerFilter } from './adapt/subscription'
 import type { CalEvent, Day, Layer, MonthData, TopTab, TodoViewMode, ViewMode, YearData } from './adapt/types'
 import { TopBar } from './components/TopBar'
 import { Sidebar, MobileLayersDrawer } from './components/Sidebar'
@@ -180,7 +181,12 @@ function CalendarAddSheet(props: { date: string; onDot: () => void; onColor: () 
         <div className="flex justify-center mb-3">
           <div className="w-10 h-1 rounded-full bg-gray-300" />
         </div>
-        <p className="text-center text-xs text-gray-400 mb-3">添加到 {props.date.slice(5).replace('-', ' 月 ')} 日</p>
+        <p className="text-center text-xs text-gray-400 mb-3">
+          {(() => {
+            const [mm, dd] = props.date.slice(5).split('-')
+            return `添加到 ${Number(mm)} 月 ${Number(dd)} 日`
+          })()}
+        </p>
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={props.onDot}
@@ -444,10 +450,8 @@ export default function App() {
   // 判别式：jisilu_* 固定前缀 + 「订阅 display_name = 图层组名」约定（与 Sidebar 一致）
   const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
   const subNames = useMemo(() => new Set(subs.map((s) => s.display_name)), [subs])
-  const isSubLayer = useCallback(
-    (l: Layer) => l.layer_id.startsWith('jisilu_') || (!!l.group && subNames.has(l.group)),
-    [subNames],
-  )
+  // 统一订阅判别式（智者 P0-1）：jisilu_ 前缀 ∥ 组名=订阅名 ∥ sort_order≥10
+  const isSubLayer = useMemo(() => subscriptionLayerFilter(subNames), [subNames])
   const calLayers = useMemo(
     () => (isMobile ? layers.filter((l) => !isSubLayer(l)) : layers),
     [layers, isMobile, isSubLayer],
@@ -471,22 +475,28 @@ export default function App() {
 
   // 20260917 任务书 1.2-5：已完成热力色阶迁到 GitHub 绿。默认值已改绿，但
   // meta 表里可能存着旧钢蓝配置——一次性覆写 done_colors（只动颜色，不动权重）。
+  // 门控（智者 P1）：仅手机端执行；且仅当现有 done_colors 仍是旧钢蓝默认值时才
+  // 覆写——用户自定义过的色阶绝不动。
   useEffect(() => {
+    if (!isMobile) return
     let flag = false
     try { flag = localStorage.getItem('busy-done-green-v1') === '1' } catch { /* 同上 */ }
     if (flag) return
     try { localStorage.setItem('busy-done-green-v1', '1') } catch { /* 同上 */ }
     const GREEN = ['#EBEDF0', '#9BE9A8', '#40C463', '#30A14E', '#216E39']
+    const OLD_INDIGO = ['#E0E7FF', '#C7D2FE', '#818CF8', '#4F46E5', '#3730A3']
     getTodoBusyConfig()
       .then((cfg) => {
-        if (JSON.stringify(cfg.done_colors) === JSON.stringify(GREEN)) return
+        const cur = JSON.stringify(cfg.done_colors)
+        if (cur === JSON.stringify(GREEN)) return
+        if (cur !== JSON.stringify(OLD_INDIGO) && cur !== JSON.stringify(['#e0e7ff', '#c7d2fe', '#818cf8', '#4f46e5', '#3730a3'])) return
         return setTodoBusyConfig({ done_colors: GREEN }).then(() => {
           qc.invalidateQueries({ queryKey: ['todoBusyConfig'] })
           qc.invalidateQueries({ queryKey: ['view'] })
         })
       })
       .catch(() => { /* 迁移失败不影响主流程 */ })
-  }, [qc])
+  }, [qc, isMobile])
 
   const toggleMutation = useMutation({
     mutationFn: ({ layerId, enabled }: { layerId: string; enabled: boolean }) =>
@@ -558,12 +568,24 @@ export default function App() {
 
   // 非宽屏（<lg）：月/日视图点选日期 = 只选中，信息由月视图下方信息栏原地展示
   // （20260917 任务书 1.1-2：不再自动弹右抽屉；右抽屉只由 dock 右按钮呼出）。
+  // 手机（<md）严格按 20260917 任务书 1.1-2：点选只选中，信息由月视图下方信息栏展示，
+  // 右抽屉只由 dock 右按钮呼出。例外：768-1023 平板区间没有 dock、也没有 lg 桌面右栏，
+  // 点选日期仍是呼出详情抽屉的唯一入口（智者 P1-3），否则该区间详情彻底不可达。
   const handleSelectDate = useCallback(
     (date: string) => {
       setSelectedDate(date)
+      if (window.matchMedia('(min-width: 768px) and (max-width: 1023px)').matches) {
+        setRightDrawerOpen(true)
+      }
     },
     [],
   )
+
+  /** 议程卡里点日程/事件行 = 直接呼出当日详情抽屉（智者 P1-2：抽屉语义改版后的重接线） */
+  const openDayDetail = useCallback((date: string) => {
+    setSelectedDate(date)
+    setRightDrawerOpen(true)
+  }, [])
 
   const handleDoubleClick = useCallback((date: string) => openEvent(date), [openEvent])
 
@@ -839,6 +861,7 @@ export default function App() {
                   layers={calLayers}
                   selectedDate={selectedDate}
                   onSelect={handleSelectDate}
+                  onOpenDetail={openDayDetail}
                   onDoubleClick={handleDoubleClick}
                   onContextMenu={handleContextMenu}
                   onDragStart={handleDragStart}
@@ -932,7 +955,7 @@ export default function App() {
 
       {/* 统一新建 FAB（20260917 任务书 1.2-3）：日历/待办页右下角粉色加号，
           点开从底部弹抽屉——日历选「点点/涂色」，待办直接进入快速新增 */}
-      {isMobile && (topTab === 'calendar' || topTab === 'todo') && (
+      {isMobile && (topTab === 'todo' || (topTab === 'calendar' && mode !== 'countdown')) && (
         <button
           onClick={() => {
             if (topTab === 'calendar') setAddSheetDate(selectedDate ?? todayStr())
@@ -1015,6 +1038,7 @@ export default function App() {
         <DotEntryDialog
           date={dialog.date}
           layers={layers}
+          excludeSub={isMobile ? isSubLayer : undefined}
           onClose={() => setDialog(null)}
         />
       )}
@@ -1022,6 +1046,7 @@ export default function App() {
         <ColorEntryDialog
           date={dialog.date}
           layers={layers}
+          excludeSub={isMobile ? isSubLayer : undefined}
           onClose={() => setDialog(null)}
         />
       )}
@@ -1031,7 +1056,7 @@ export default function App() {
           onJump={jumpToEvent}
           onJumpTodo={jumpToTodo}
           layers={layers}
-          hideSubscriptions={isMobile}
+          excludeSub={isMobile ? isSubLayer : undefined}
         />
       )}
       {dialog?.kind === 'subscription' && (

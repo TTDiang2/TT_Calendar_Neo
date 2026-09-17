@@ -126,18 +126,15 @@ export const TodoView = forwardRef<TodoViewHandle, {
     onDetailOpenChange?.(selectedTodoId !== null || statsOpen || quickAddOpen)
   }, [selectedTodoId, statsOpen, quickAddOpen, onDetailOpenChange])
 
-  // 综合搜索点中的待办：切到本页后自动打开详情（清空清单筛选确保能命中）
+  // 综合搜索点中的待办：切到本页后自动打开详情（清空清单筛选确保能命中；
+  // 已完成待办需要展开已完成查询，否则 selectedTodo 在列表里永远 miss——智者 P1）
   useEffect(() => {
     if (!focusTodoId) return
     setSelectedList(null)
+    setShowCompleted(true)
     setSelectedTodoId(focusTodoId)
     onTodoFocusHandled?.()
   }, [focusTodoId, onTodoFocusHandled])
-
-  // 详情抽屉开合上报（App 据此禁切页手势）
-  useEffect(() => {
-    onDetailOpenChange?.(selectedTodoId !== null)
-  }, [selectedTodoId, onDetailOpenChange])
 
   const { data: lists = [] } = useQuery({
     queryKey: ['todoLists'],
@@ -328,7 +325,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
         {/* 20260917 任务书 1.1-9：原三行（清单提示 / 排序筛选 / 新建待办）并为一行；
             新建待办撤出工具行（手机统一走右下角 FAB，桌面按钮保留）。视图切换在
             手机端也收进本行（Top Bar 移除后的新家），用下拉保持紧凑。 */}
-        <div className="flex items-center gap-2 mb-2 flex-shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 mb-2 md:mb-3 flex-shrink-0 flex-wrap">
           <button
             onClick={() => onListsDrawerOpenChange(true)}
             className="md:hidden pressable flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-full bg-white/70 border border-white/80 text-gray-700 shadow-sm active:bg-pink-50 transition-colors flex-shrink-0"
@@ -414,8 +411,15 @@ export const TodoView = forwardRef<TodoViewHandle, {
               onOpenNotes={(id) => { setSelectedTodoId(id); detailRef.current?.openNotes() }}
             />
           ) : filteredIncomplete.length === 0 && completedCount === undefined ? (
-            <div className="h-full flex items-center justify-center text-gray-300 text-sm">
-              {tagFilter ? `没有「${tagFilter}」标签的待办` : '暂无待办，点右下角 + 新建'}
+            <div className="h-full flex items-center justify-center text-gray-300 text-sm text-center px-4">
+              {tagFilter ? (
+                `没有「${tagFilter}」标签的待办`
+              ) : (
+                <>
+                  <span className="md:hidden">暂无待办，点右下角 + 新建</span>
+                  <span className="hidden md:inline">暂无待办，点「新建待办」开始</span>
+                </>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-2 md:gap-1">
@@ -673,7 +677,7 @@ function QuickAddSheet({
           </label>
           <label className="text-xs text-gray-500">
             <span className="block mb-1">截止日期</span>
-            <DueDateQuickPicker value={dueDate} onChange={setDueDate} expanded={false} setExpanded={() => {}} />
+            <DueDateQuickPicker value={dueDate} onChange={setDueDate} />
           </label>
         </div>
 

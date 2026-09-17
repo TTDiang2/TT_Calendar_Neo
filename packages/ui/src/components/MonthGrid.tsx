@@ -14,6 +14,8 @@ interface Props {
   layers: Layer[]
   selectedDate: string | null
   onSelect: (date: string) => void
+  /** 呼出当日详情抽屉（议程卡行点击用；与 onSelect 的「只选中」语义区分，智者 P1-2） */
+  onOpenDetail?: (date: string) => void
   onDoubleClick: (date: string) => void
   onContextMenu: (e: { clientX: number; clientY: number }, date: string) => void
   onDragStart: (date: string) => void
@@ -36,6 +38,7 @@ function MobileMonthGrid({
   layers,
   selectedDate,
   onSelect,
+  onOpenDetail,
 }: Props) {
   const today = todayStr()
   const qc = useQueryClient()
@@ -94,6 +97,7 @@ function MobileMonthGrid({
           isToday={agendaDay.date === today}
           className="flex-1 min-h-0"
           onSelect={onSelect}
+          onOpenDetail={onOpenDetail}
           onToggleTodo={(t, done) => toggleTodoMut.mutate({ id: t.id, data: { ...t, id: t.id, status: done ? 'completed' : 'notStarted' } })}
         />
       )}
@@ -255,7 +259,8 @@ const WEEK_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', 
 /**
  * 手机月视图下方常驻的信息栏卡：默认显示今天，点选其它日期后原地切换为那天
  * （20260917 任务书 1.1-2）。日程 / 事件 / 待办一屏扫完；
- * 行可点：点日程/事件行 = 打开当日详情抽屉；待办行可直接勾选完成。
+ * 行为分工（智者 P1-2 重接线）：点日程/事件行 = onOpenDetail 呼出当日详情抽屉，
+ * 点日期格 = onSelect 只选中（不开抽屉）；待办行可直接勾选完成。
  */
 function TodayAgenda({
   day,
@@ -263,6 +268,7 @@ function TodayAgenda({
   isToday = true,
   className,
   onSelect,
+  onOpenDetail,
   onToggleTodo,
 }: {
   day: Day
@@ -271,6 +277,7 @@ function TodayAgenda({
   isToday?: boolean
   className?: string
   onSelect?: (date: string) => void
+  onOpenDetail?: (date: string) => void
   onToggleTodo?: (todo: Todo, done: boolean) => void
 }) {
   const { y, m, d } = parseDate(day.date)
@@ -322,7 +329,7 @@ function TodayAgenda({
 
       <div className="flex-1 min-h-0 overflow-y-auto p-2">
         {schedules.length === 0 && events.length === 0 && openTodos.length === 0 && doneCount === 0 ? (
-          <p className="text-xs text-gray-300 text-center py-6">今天还没有安排，点上方日期格子可快速添加</p>
+          <p className="text-xs text-gray-300 text-center py-6">{isToday ? '今天还没有安排，点上方日期格子可快速添加' : '这天还没有安排'}</p>
         ) : (
           <div className="flex flex-col gap-1.5">
             {schedules.length > 0 && (
@@ -333,8 +340,8 @@ function TodayAgenda({
                 {schedules.map((it) => (
                   <div
                     key={it.id ?? `${it.title}-${it.start_time}`}
-                    onClick={onSelect ? () => onSelect(day.date) : undefined}
-                    className={clsx('flex items-center gap-2 rounded-md bg-blue-50/50 border border-blue-100 px-2 py-1.5', onSelect && 'active:bg-blue-100/70 cursor-pointer transition-colors')}
+                    onClick={onOpenDetail ? () => onOpenDetail(day.date) : undefined}
+                    className={clsx('flex items-center gap-2 rounded-md bg-blue-50/50 border border-blue-100 px-2 py-1.5', onOpenDetail && 'active:bg-blue-100/70 cursor-pointer transition-colors')}
                   >
                     <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: it.color ?? '#3D6BFB' }} />
                     {it.start_time && (
@@ -357,8 +364,8 @@ function TodayAgenda({
                 {events.map((ev) => (
                   <div
                     key={ev.id ?? ev.title}
-                    onClick={onSelect ? () => onSelect(day.date) : undefined}
-                    className={clsx('flex items-center gap-2 rounded-md bg-gray-50 border border-gray-100 px-2 py-1.5', onSelect && 'active:bg-gray-100 cursor-pointer transition-colors')}
+                    onClick={onOpenDetail ? () => onOpenDetail(day.date) : undefined}
+                    className={clsx('flex items-center gap-2 rounded-md bg-gray-50 border border-gray-100 px-2 py-1.5', onOpenDetail && 'active:bg-gray-100 cursor-pointer transition-colors')}
                   >
                     <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: ev.color ?? colorFor(ev.layer_id) ?? '#9ca3af' }} />
                     <span className="text-xs text-gray-800 truncate flex-1">{ev.title}</span>

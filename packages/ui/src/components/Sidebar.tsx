@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Plus, Search, Settings } from 'lucide-react'
 import type { Layer } from '../adapt/types'
 import { createLayer, getSubscriptions } from '../adapt/api'
 import { COLOR_PRESETS, GRADED_PALETTES } from '../adapt/data'
+import { subscriptionLayerFilter } from '../adapt/subscription'
 import { animDrawerIn } from '../anim'
 import { Modal, Field } from './ui/Modal'
 
@@ -101,12 +102,17 @@ function LayerTree({ layers, onToggle, countdown, showSubscriptions = true, room
     })
   }
 
+  // 订阅超级组：组名与订阅 display_name 相同的图层组（集思录等）挂在「订阅」下
+  const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
+  const subNames = useMemo(() => new Set(subs.map((s) => s.display_name)), [subs])
+
   // 第一级：涂色 / 点点（基于 layer.kind）；第二级：group（layer.group）；第三级：图层本身。
-  // 手机端（showSubscriptions=false）：订阅来源的图层组整体排除——订阅内容不在手机展示
+  // 手机端（showSubscriptions=false）：订阅来源图层整组排除——统一判别式见 adapt/subscription.ts
+  // （智者 P0-1：不能再单用 sort_order≥10，会漏掉组名约定的订阅、误判场景交由并集兜底）
   const tree = useMemo(() => {
     const byKind: Record<string, Record<string, Layer[]>> = { color: {}, dot: {} }
     for (const l of layers) {
-      if (!showSubscriptions && l.sort_order >= 10) continue // 集思录等订阅图层（sort_order ≥ 10）
+      if (!showSubscriptions && subscriptionLayerFilter(subNames)(l)) continue
       const kind = l.kind === 'dot' ? 'dot' : 'color'
       const grp = l.group ?? ''
       ;(byKind[kind][grp] ??= []).push(l)
@@ -117,11 +123,7 @@ function LayerTree({ layers, onToggle, countdown, showSubscriptions = true, room
       }
     }
     return byKind
-  }, [layers, showSubscriptions])
-
-  // 订阅超级组：组名与订阅 display_name 相同的图层组（集思录等）挂在「订阅」下
-  const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
-  const subNames = useMemo(() => new Set(subs.map((s) => s.display_name)), [subs])
+  }, [layers, showSubscriptions, subNames])
 
   const kindMeta: Record<string, { title: string }> = {
     color: { title: '涂色' },

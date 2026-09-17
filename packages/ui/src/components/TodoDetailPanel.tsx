@@ -488,10 +488,10 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
           </select>
         ))}
         {metaRow('due', '截止', dueDate || '无', (
-          <DueDateQuickPicker value={dueDate} onChange={setDueDate} expanded={false} setExpanded={() => {}} />
+          <DueDateQuickPicker value={dueDate} onChange={setDueDate} />
         ))}
         {metaRow('planned', '计划', plannedDate || '无', (
-          <DueDateQuickPicker value={plannedDate} onChange={setPlannedDate} expanded={false} setExpanded={() => {}} />
+          <DueDateQuickPicker value={plannedDate} onChange={setPlannedDate} />
         ))}
         {metaRow('start', '开始日', startDate || '无', (
           <input type="date" className="tt-input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
@@ -596,18 +596,23 @@ function nextMonday(): Date {
   return d
 }
 
-/** 截止/计划日期快捷选择（详情抽屉与快速新增抽屉共用，20260917 导出复用） */
+/** 截止/计划日期快捷选择（详情抽屉与快速新增抽屉共用，20260917 导出复用）。
+ *  expanded 受控可选：不传时内部自持（智者 P1-4——此前手机端传死值导致
+ *  「选择日期…」选项永远无效）。 */
 export function DueDateQuickPicker({
   value,
   onChange,
-  expanded,
-  setExpanded,
+  expanded: expandedProp,
+  setExpanded: setExpandedProp,
 }: {
   value: string
   onChange: (v: string) => void
-  expanded: boolean
-  setExpanded: (v: boolean) => void
+  expanded?: boolean
+  setExpanded?: (v: boolean) => void
 }) {
+  const [internalExpanded, setInternalExpanded] = useState(false)
+  const expanded = expandedProp ?? internalExpanded
+  const setExpanded = setExpandedProp ?? setInternalExpanded
   const today = fmtDate(new Date())
   const tomorrow = fmtDate(new Date(Date.now() + 86400000))
   const monday = fmtDate(nextMonday())
