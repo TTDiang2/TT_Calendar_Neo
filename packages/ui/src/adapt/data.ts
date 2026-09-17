@@ -21,9 +21,11 @@ export const GRADED_PALETTES = {
   灰: ['#f8fafc', '#e2e8f0', '#94a3b8', '#475569', '#1e293b'],
 }
 
-// 待办忙度双调色板：predict = 未来（琥珀），done = 过去（钢蓝）
+// 待办忙度双调色板：predict = 未来（琥珀），done = 过去（GitHub 贡献图绿系——
+// 20260917 任务书 1.2-5：已完成默认色阶改绿，与热力图/打卡心智统一；
+// 深绿=完成多，浅绿=完成少，白/空=无完成）
 export const TODO_BUSY_PREDICT_COLORS = ['#fef3c7', '#fde68a', '#fbbf24', '#f59e0b', '#b45309']
-export const TODO_BUSY_DONE_COLORS    = ['#e0e7ff', '#c7d2fe', '#818cf8', '#4f46e5', '#3730a3']
+export const TODO_BUSY_DONE_COLORS    = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']
 
 // 解析 'YYYY-MM-DD' 为本地 date（避开 toISOString 的 UTC 偏移问题）
 export function parseDateStr(s: string): Date {

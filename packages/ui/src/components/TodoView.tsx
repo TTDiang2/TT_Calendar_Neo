@@ -1,12 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, ChevronUp, FolderOpen, Inbox, ListPlus, Pencil, Plus, Settings, Star, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, Flame, FolderOpen, Inbox, ListPlus, Pencil, Plus, Settings, Star, Trash2, Upload } from 'lucide-react'
 import clsx from 'clsx'
 import { getTodoLists, getTodos, getTodoStats, createTodo, updateTodo, deleteTodo, createTodoList, updateTodoList, deleteTodoList, importTodosCsv, reorderTodoLists, reorderTodos } from '../adapt/api'
 import { todayStr } from '../adapt/todoLogic'
 import type { Todo, TodoList, TodoSort, TodoViewMode } from '../adapt/types'
-import { TodoDetailPanel, type TodoDetailPanelRef } from './TodoDetailPanel'
+import { TodoDetailPanel, DueDateQuickPicker, type TodoDetailPanelRef } from './TodoDetailPanel'
 import { TodoMatrixView } from './todo/TodoMatrixView'
 import { TodoKanbanView } from './todo/TodoKanbanView'
 import { TodoGanttView } from './todo/TodoGanttView'
@@ -22,6 +22,14 @@ const SORT_OPTIONS: { key: TodoSort; label: string }[] = [
   { key: 'planned', label: '计划日' },
   { key: 'importance', label: '重要性' },
   { key: 'created', label: '创建时间' },
+]
+
+/** 手机端视图切换选项（Top Bar 移除后收进工具行；看板手机端不呈现，与 20260916 一致） */
+const MOBILE_TODO_VIEWS: { key: TodoViewMode; label: string }[] = [
+  { key: 'list', label: '列表' },
+  { key: 'matrix', label: '矩阵' },
+  { key: 'gantt', label: '甘特' },
+  { key: 'stickies', label: '便签' },
 ]
 
 const IMPORTANCE_LABEL: Record<string, string> = {
@@ -63,23 +71,30 @@ const COMPLEXITY_TAG_CLS: Record<string, string> = {
 
 const DEFAULT_LIST_KEY = 'tt_default_todo_list'
 
-/** App 的 dock 右按钮经此句柄触发新建/编辑待办（自动建默认清单的逻辑留在内部） */
+/** App 的 dock 右按钮 / FAB 经此句柄触发统计抽屉与快速新增（自动建默认清单的逻辑留在内部） */
 export interface TodoViewHandle {
-  /** 打开待办编辑抽屉：无选中则新建 */
-  openTodoEditor: () => void
+  /** 打开快速新增待办抽屉（20260917：统一新建入口，底部弹层） */
+  openQuickAdd: () => void
+  /** 打开待办统计抽屉（20260917：dock 右按钮改为统计，右抽屉不再承担新建/编辑） */
+  openStats: () => void
 }
 
 export const TodoView = forwardRef<TodoViewHandle, {
   viewMode: TodoViewMode
+  /** 视图切换（Top Bar 移除后手机端工具行的视图下拉回调，App 持有持久化状态） */
+  onViewModeChange?: (v: TodoViewMode) => void
   /** 清单抽屉（受控：App 需要知道它开着以禁切页手势） */
   listsDrawerOpen: boolean
   onListsDrawerOpenChange: (open: boolean) => void
   /** 详情抽屉开合上报（App 用于禁手势）；开合本体由内部 selectedTodoId 驱动 */
   onDetailOpenChange?: (open: boolean) => void
+  /** 综合搜索点中的待办（App 切到本页后要自动打开的详情 id，消费完回调清空） */
+  focusTodoId?: string | null
+  onTodoFocusHandled?: () => void
   /** 设置入口（20260916：设置已撤出 Top Bar，手机端收在各页左侧抽屉底部） */
   onOpenSettings?: () => void
 }>(function TodoView(
-  { viewMode, listsDrawerOpen, onListsDrawerOpenChange, onDetailOpenChange, onOpenSettings },
+  { viewMode, onViewModeChange, listsDrawerOpen, onListsDrawerOpenChange, onDetailOpenChange, focusTodoId, onTodoFocusHandled, onOpenSettings },
   ref,
 ) {
   const qc = useQueryClient()
@@ -94,14 +109,30 @@ export const TodoView = forwardRef<TodoViewHandle, {
   const [manualOrder, setManualOrder] = useState<string[] | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [statsOpen, setStatsOpen] = useState(false)
   const leavingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dragTodoId = useRef<string | null>(null)
   const detailRef = useRef<TodoDetailPanelRef>(null)
   const listsDrawerRef = useRef<HTMLElement | null>(null)
 
   useImperativeHandle(ref, () => ({
-    openTodoEditor: () => void openNewTodo(),
+    openQuickAdd: () => void openQuickAddFn(),
+    openStats: () => setStatsOpen(true),
   }))
+
+  // 详情/统计/快速新增任一浮层打开都上报（App 据此禁切页手势）
+  useEffect(() => {
+    onDetailOpenChange?.(selectedTodoId !== null || statsOpen || quickAddOpen)
+  }, [selectedTodoId, statsOpen, quickAddOpen, onDetailOpenChange])
+
+  // 综合搜索点中的待办：切到本页后自动打开详情（清空清单筛选确保能命中）
+  useEffect(() => {
+    if (!focusTodoId) return
+    setSelectedList(null)
+    setSelectedTodoId(focusTodoId)
+    onTodoFocusHandled?.()
+  }, [focusTodoId, onTodoFocusHandled])
 
   // 详情抽屉开合上报（App 据此禁切页手势）
   useEffect(() => {
@@ -176,21 +207,31 @@ export const TodoView = forwardRef<TodoViewHandle, {
     },
   })
 
-  // 新建待办：无清单时先自动建一个默认清单（dock 右按钮与工具栏按钮共用）
-  const openNewTodo = async () => {
-    if (!lists.length) {
-      setAutoList(true)
-      try {
-        const tl = await createTodoList('任务')
-        setSelectedList(tl.id)
-        invalidate()
-      } catch {
-        setAutoList(false)
-        return
-      }
+  // 无清单时先自动建一个默认清单（桌面新建按钮 / 手机快速新增共用）
+  const ensureList = async (): Promise<boolean> => {
+    if (lists.length) return true
+    setAutoList(true)
+    try {
+      const tl = await createTodoList('任务')
+      setSelectedList(tl.id)
+      invalidate()
+    } catch {
       setAutoList(false)
+      return false
     }
+    setAutoList(false)
+    return true
+  }
+
+  // 桌面「新建待办」按钮：走详情抽屉的幻影新建（桌面零变化红线）
+  const openNewTodo = async () => {
+    if (!(await ensureList())) return
     setSelectedTodoId('__NEW__')
+  }
+
+  // 手机 FAB：快速新增底部抽屉（20260917 任务书 1.2-3——新建不再占用右抽屉）
+  const openQuickAddFn = async () => {
+    if (await ensureList()) setQuickAddOpen(true)
   }
 
   const handleToggle = (t: Todo, done: boolean) => {
@@ -281,24 +322,22 @@ export const TodoView = forwardRef<TodoViewHandle, {
 
       {/* 中任务区 */}
       <div className="flex-1 flex flex-col p-2 md:p-4 overflow-hidden min-w-0">
-        {/* 当前清单提示（20260916 任务书：左侧抽屉决定清单后，只保留轻量提示） */}
-        <div className="flex items-center gap-2 mb-1 flex-shrink-0 md:hidden">
+        {/* 20260917 任务书 1.1-9：原三行（清单提示 / 排序筛选 / 新建待办）并为一行；
+            新建待办撤出工具行（手机统一走右下角 FAB，桌面按钮保留）。视图切换在
+            手机端也收进本行（Top Bar 移除后的新家），用下拉保持紧凑。 */}
+        <div className="flex items-center gap-2 mb-2 flex-shrink-0 flex-wrap">
           <button
             onClick={() => onListsDrawerOpenChange(true)}
-            className="pressable flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full bg-white/70 border border-white/80 text-gray-700 shadow-sm active:bg-pink-50 transition-colors"
+            className="md:hidden pressable flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-full bg-white/70 border border-white/80 text-gray-700 shadow-sm active:bg-pink-50 transition-colors flex-shrink-0"
             aria-label="切换待办清单"
           >
             <FolderOpen size={14} className="text-pink-500" />
-            <span className="font-medium max-w-[40vw] truncate">{currentListName}</span>
+            <span className="font-medium max-w-[88px] truncate">{currentListName}</span>
             <span className="text-[11px] text-gray-400">{stats?.incomplete ?? ''}</span>
-            <ChevronDown size={13} className="text-gray-400 -rotate-90" />
           </button>
-        </div>
-
-        <div className="flex items-center justify-between gap-2 mb-3 flex-shrink-0 flex-wrap">
           {/* 不加 overflow-x-auto：一轴 auto 会把另一轴的 visible 算成 auto，
               FilterSelect 的 absolute 下拉会被裁进行高里（20260916 智者 P0-4） */}
-          <div className="flex items-center gap-2 md:gap-3">
+          <div className="flex items-center gap-1.5 md:gap-3 min-w-0">
             <FilterSelect
               label="排序"
               value={sort}
@@ -313,8 +352,17 @@ export const TodoView = forwardRef<TodoViewHandle, {
                 onChange={(v) => { setTagFilter(v); setManualOrder(null) }}
               />
             )}
+            {/* 手机端视图切换（md:hidden）：Top Bar 移除后收进工具行 */}
+            <div className="md:hidden">
+              <FilterSelect
+                label="视图"
+                value={viewMode}
+                options={MOBILE_TODO_VIEWS.map((o) => ({ value: o.key, label: o.label }))}
+                onChange={(v) => onViewModeChange?.(v as TodoViewMode)}
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="hidden md:flex items-center gap-2 flex-shrink-0 ml-auto">
             {/* CSV 导入桌面专属：手机文件选择器体验边缘，与移动瘦身方针一致（20260916 智者 P2-8） */}
             <label className="hidden md:flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer" title="CSV 导入">
               <Upload size={14} /> CSV 导入
@@ -364,7 +412,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
             />
           ) : filteredIncomplete.length === 0 && completedCount === undefined ? (
             <div className="h-full flex items-center justify-center text-gray-300 text-sm">
-              {tagFilter ? `没有「${tagFilter}」标签的待办` : '暂无待办，点「新建待办」开始'}
+              {tagFilter ? `没有「${tagFilter}」标签的待办` : '暂无待办，点右下角 + 新建'}
             </div>
           ) : (
             <div className="flex flex-col gap-2 md:gap-1">
@@ -489,6 +537,28 @@ export const TodoView = forwardRef<TodoViewHandle, {
         onDelete={(id) => { deleteMut.mutate(id); setSelectedTodoId(null) }}
       />
 
+      {/* 手机：快速新增待办——FAB 唤出的底部抽屉（20260917 任务书 1.2-3）。
+          portal 到 body：手势容器残留 transform 会把 fixed 圈进内容区（同清单抽屉的理由） */}
+      {quickAddOpen && createPortal(
+        <QuickAddSheet
+          lists={lists}
+          defaultListId={selectedList ?? lists[0]?.id ?? ''}
+          onClose={() => setQuickAddOpen(false)}
+          onCreate={(data) => {
+            createMut.mutate(data)
+            setQuickAddOpen(false)
+          }}
+        />,
+        document.body,
+      )}
+
+      {/* 手机：待办统计右抽屉——dock 右按钮唤出（20260917 任务书 1.2-3：
+          右抽屉回归「查看」，新建/编辑走 FAB + 点条目；这里呈现轻统计） */}
+      {statsOpen && createPortal(
+        <TodoStatsDrawer lists={lists} currentListName={currentListName} onClose={() => setStatsOpen(false)} onGoDetail={(id) => { setStatsOpen(false); setSelectedTodoId(id) }} />,
+        document.body,
+      )}
+
       {/* 手机：清单抽屉（dock 左按钮 / 清单提示 chip 唤出）——与桌面左列同一份管理组件。
           portal 到 body：待办页在手势容器内，容器残留 transform 会把 fixed 抽屉圈进
           内容区矩形（遮罩盖不住 dock），portal 彻底绕开包含块问题 */}
@@ -536,6 +606,234 @@ export const TodoView = forwardRef<TodoViewHandle, {
     setSelectedList(id)
   }
 })
+
+/**
+ * 快速新增待办（手机底部抽屉，20260917 任务书 1.2-3）：标题 + 清单 + 截止 + 重要性，
+ * 一次滑动一次输入法，保存即建。detail 抽屉回归纯查看/编辑。
+ */
+function QuickAddSheet({
+  lists,
+  defaultListId,
+  onClose,
+  onCreate,
+}: {
+  lists: TodoList[]
+  defaultListId: string
+  onClose: () => void
+  onCreate: (data: { list_id: string; title: string; importance: string; due_date: string | null }) => void
+}) {
+  const sheetRef = useRef<HTMLDivElement | null>(null)
+  const [title, setTitle] = useState('')
+  const [listId, setListId] = useState(defaultListId)
+  const [dueDate, setDueDate] = useState('')
+  const [importance, setImportance] = useState<'high' | 'normal' | 'low'>('normal')
+
+  useEffect(() => {
+    animDrawerIn(sheetRef.current, 1)
+  }, [])
+
+  const canSave = title.trim().length > 0 && !!listId
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div ref={sheetRef} className="glass-sheet relative w-full rounded-t-3xl px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="flex justify-center mb-2">
+          <div className="w-10 h-1 rounded-full bg-gray-300" />
+        </div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-gray-800">新建待办</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl" aria-label="关闭">
+            ×
+          </button>
+        </div>
+
+        <input
+          autoFocus
+          className="tt-input text-base mb-3"
+          placeholder="要做什么？"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && canSave) onCreate({ list_id: listId, title: title.trim(), importance, due_date: dueDate || null })
+          }}
+        />
+
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <label className="text-xs text-gray-500">
+            <span className="block mb-1">清单</span>
+            <select className="tt-input" value={listId} onChange={(e) => setListId(e.target.value)}>
+              {lists.map((l) => (
+                <option key={l.id} value={l.id}>{l.display_name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs text-gray-500">
+            <span className="block mb-1">截止日期</span>
+            <DueDateQuickPicker value={dueDate} onChange={setDueDate} expanded={false} setExpanded={() => {}} />
+          </label>
+        </div>
+
+        <div className="mb-4">
+          <p className="text-xs text-gray-500 mb-1.5">重要性</p>
+          <div className="grid grid-cols-3 gap-2">
+            {([['high', '重要'], ['normal', '普通'], ['low', '次要']] as const).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setImportance(k)}
+                className={clsx(
+                  'py-2 rounded-xl text-sm border transition',
+                  importance === k
+                    ? 'border-pink-400 bg-pink-50 text-pink-700 font-semibold'
+                    : 'border-gray-200 bg-white/70 text-gray-600',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={() => canSave && onCreate({ list_id: listId, title: title.trim(), importance, due_date: dueDate || null })}
+          disabled={!canSave}
+          className="w-full py-3 text-[15px] font-semibold bg-pink-500 text-white rounded-2xl active:bg-pink-600 disabled:opacity-40 transition-colors"
+        >
+          添加待办
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 待办统计右抽屉（20260917 任务书 1.2-3）：dock 右按钮呼出的轻统计——
+ * 未完成 / 已过期 / 即将到期 / 重要 / 今日计划 / 今日已完成 + 各清单分布。
+ */
+function TodoStatsDrawer({
+  lists,
+  currentListName,
+  onClose,
+  onGoDetail,
+}: {
+  lists: TodoList[]
+  currentListName: string
+  onClose: () => void
+  onGoDetail: (id: string) => void
+}) {
+  const drawerRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    animDrawerIn(drawerRef.current, 1)
+  }, [])
+  const today = todayStr()
+  const listNameOf = (id: string) => lists.find((l) => l.id === id)?.display_name ?? '未命名清单'
+  const { data: stats } = useQuery({ queryKey: ['todoStats', null], queryFn: () => getTodoStats(undefined) })
+  const { data: open = [] } = useQuery({
+    queryKey: ['todos', null, 'incomplete', 'due_importance'],
+    queryFn: () => getTodos({ status: 'notStarted', sort: 'due_importance' }),
+  })
+  const { data: todayDone = [] } = useQuery({
+    queryKey: ['todos', 'doneOn', today],
+    queryFn: () => getTodos({ status: 'completed', completed_on: today }),
+  })
+
+  const dayDiff = (d: string) => Math.round((new Date(d + 'T00:00:00').getTime() - new Date(today + 'T00:00:00').getTime()) / 86400000)
+  const overdue = open.filter((t) => t.due_date != null && dayDiff(t.due_date) < 0)
+  const dueToday = open.filter((t) => t.due_date === today)
+  const dueSoon = open.filter((t) => t.due_date != null && dayDiff(t.due_date) >= 0 && dayDiff(t.due_date) <= 7)
+  const important = open.filter((t) => t.importance === 'high')
+  const plannedToday = open.filter((t) => t.planned_date === today)
+
+  const byList = new Map<string, Todo[]>()
+  for (const t of open) {
+    const arr = byList.get(t.list_id) ?? []
+    arr.push(t)
+    byList.set(t.list_id, arr)
+  }
+
+  const rows: { icon: React.ReactNode; label: string; count: number; tone: string; items?: Todo[] }[] = [
+    { icon: <Inbox size={15} />, label: '未完成', count: stats?.incomplete ?? open.length, tone: 'text-gray-500' },
+    { icon: <AlertTriangle size={15} />, label: '已过期', count: overdue.length, tone: 'text-red-500', items: overdue },
+    { icon: <Clock size={15} />, label: '今天截止', count: dueToday.length, tone: 'text-orange-500', items: dueToday },
+    { icon: <Clock size={15} />, label: '7 天内到期', count: dueSoon.length, tone: 'text-amber-500', items: dueSoon },
+    { icon: <Flame size={15} />, label: '重要', count: important.length, tone: 'text-rose-500', items: important },
+    { icon: <Star size={15} />, label: '今日计划', count: plannedToday.length, tone: 'text-pink-500', items: plannedToday },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={onClose} />
+      <aside ref={drawerRef} className="glass-sheet absolute inset-y-0 right-0 w-[300px] max-w-[85vw] rounded-l-3xl flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold text-gray-800">待办统计</h2>
+            <p className="text-[11px] text-gray-400 truncate">范围：全部清单 · 当前查看「{currentListName}」</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl flex-shrink-0" aria-label="关闭">
+            ×
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-3 pb-3">
+          <div className="grid grid-cols-2 gap-2">
+            {rows.map((r) => (
+              <div key={r.label} className="rounded-2xl bg-white/80 border border-black/5 px-3 py-2.5">
+                <p className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                  <span className={r.tone}>{r.icon}</span>
+                  {r.label}
+                </p>
+                <p className="text-xl font-bold text-gray-800 tabular-nums mt-0.5">{r.count}</p>
+              </div>
+            ))}
+            <div className="rounded-2xl bg-emerald-50/80 border border-emerald-100 px-3 py-2.5">
+              <p className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                <Check size={15} className="text-emerald-500" />
+                今日已完成
+              </p>
+              <p className="text-xl font-bold text-emerald-600 tabular-nums mt-0.5">{todayDone.length}</p>
+            </div>
+          </div>
+
+          {/* 即将到期/重要的具体条目：点一条直接打开其详情 */}
+          {(dueToday.length > 0 || overdue.length > 0) && (
+            <div className="mt-4">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-1.5">需要立刻关注</p>
+              <div className="flex flex-col gap-1">
+                {[...overdue, ...dueToday].slice(0, 5).map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => onGoDetail(t.id)}
+                    className="flex items-center gap-2 text-left px-2.5 py-2 rounded-xl bg-white/80 border border-black/5 active:bg-pink-50 transition-colors"
+                  >
+                    <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', overdue.includes(t) ? 'bg-red-500' : 'bg-orange-400')} />
+                    <span className="text-[13px] text-gray-700 truncate flex-1">{t.title}</span>
+                    <span className={clsx('text-[10px] flex-shrink-0', overdue.includes(t) ? 'text-red-500 font-medium' : 'text-gray-400')}>
+                      {overdue.includes(t) ? '已过期' : '今天'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {byList.size > 0 && (
+            <div className="mt-4">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-1.5">各清单未完成</p>
+              <div className="flex flex-col gap-1 px-1">
+                {[...byList.entries()].map(([lid, arr]) => (
+                  <div key={lid} className="flex items-center gap-2 text-[13px]">
+                    <span className="text-gray-600 truncate flex-1">{listNameOf(lid)}</span>
+                    <span className="text-gray-400 tabular-nums">{arr.length}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
+    </div>
+  )
+}
 
 /** 清单管理（桌面左列 / 手机抽屉共用）：全部 + 各清单（拖拽排序、重命名、删默认星标）+ 新建 */
 function TodoListManager({

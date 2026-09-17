@@ -28,14 +28,20 @@ export function MonthGrid(props: Props) {
   return isMobile ? <MobileMonthGrid {...props} /> : <DesktopMonthGrid {...props} />
 }
 
-/* 手机：iOS 风格月视图 —— 无边框格子、大数字圆片、点点一行，涂色=圆底、
-   今天=玫瑰色实心圆、选中=粉色圆环；点击日期弹出底部详情（右上 FAB 新建）。 */
-function MobileMonthGrid({ monthData, layers, selectedDate, onSelect }: Props) {
+/* 手机：iOS 风格月视图 —— 无边框格子、大数字圆片、点点在左上角，涂色=圆底、
+   今天=玫瑰色实心圆、选中=粉色圆环；点日期 = 下方信息栏切换显示当天（不弹右抽屉，
+   右抽屉只由 dock 右按钮呼出——20260917 任务书 1.1-2）。 */
+function MobileMonthGrid({
+  monthData,
+  layers,
+  selectedDate,
+  onSelect,
+}: Props) {
   const today = todayStr()
   const qc = useQueryClient()
   // 忙度配色整个网格只查一次配置（桌面 DayCell 是每格一查，量级不同）
   const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
-  // 今日议程里的待办可直接勾选（20260916 智者 P1-5：议程是手机月视图下半屏主体）
+  // 议程里的待办可直接勾选（20260916 智者 P1-5：议程是手机月视图下半屏主体）
   const toggleTodoMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => updateTodo(id, data),
     onSuccess: () => {
@@ -46,6 +52,11 @@ function MobileMonthGrid({ monthData, layers, selectedDate, onSelect }: Props) {
   })
 
   const todayDay = useMemo(() => monthData.days.find((d) => d.date === today) ?? null, [monthData, today])
+  // 信息栏默认显示今天；点其它日期后原地切换为那天（20260917 任务书 1.1-2）
+  const agendaDay = useMemo(
+    () => (selectedDate ? monthData.days.find((d) => d.date === selectedDate) ?? todayDay : todayDay),
+    [monthData, selectedDate, todayDay],
+  )
 
   return (
     <div className="flex-1 flex flex-col min-h-0 gap-1.5">
@@ -74,11 +85,13 @@ function MobileMonthGrid({ monthData, layers, selectedDate, onSelect }: Props) {
         </div>
       </div>
 
-      {/* 今日 agenda 占满月视图剩余空间（翻到不含今天的月份时隐藏，整月铺满） */}
-      {todayDay && (
+      {/* 信息栏：默认今天，点选日期后原地切换（无选中且当月不含今天时隐藏，整月铺满） */}
+      {agendaDay && (
         <TodayAgenda
-          day={todayDay}
+          key={agendaDay.date}
+          day={agendaDay}
           layers={layers}
+          isToday={agendaDay.date === today}
           className="flex-1 min-h-0"
           onSelect={onSelect}
           onToggleTodo={(t, done) => toggleTodoMut.mutate({ id: t.id, data: { ...t, id: t.id, status: done ? 'completed' : 'notStarted' } })}
@@ -88,7 +101,9 @@ function MobileMonthGrid({ monthData, layers, selectedDate, onSelect }: Props) {
   )
 }
 
-/** 手机月格：数字圆片 + 点点行（iOS 日历风格，无边框无事件标题） */
+/** 手机月格：数字圆片居中 + 点点挂在格子左上角（20260917 任务书 1.1-4：
+    底部点点行让人分不清归属上下，挪到左上角一眼就知道是哪天的；最多 3 枚，
+    多出的折叠成 +N。） */
 function MobileDayCell({
   day,
   layers,
@@ -127,13 +142,26 @@ function MobileDayCell({
 
   const { dots } = collectDayVisuals(day, layers)
   const isToday = day.is_today
+  const shownDots = dots.slice(0, 3)
+  const extraDots = dots.length - shownDots.length
 
   return (
     <button
       onClick={() => onClick(day.date)}
-      className="relative flex flex-col items-center gap-0.5 py-1 rounded-2xl active:bg-pink-50/70 transition-colors"
+      className="relative flex flex-col items-center justify-center py-1 rounded-2xl active:bg-pink-50/70 transition-colors min-h-[44px]"
       aria-label={`${day.date}${isToday ? '，今天' : ''}${selected ? '，已选中' : ''}`}
     >
+      {/* 点点：左上角一枚枚小色点，密集排布（有涂色的日子自动让位给右上班角） */}
+      {(shownDots.length > 0 || extraDots > 0) && (
+        <span className="absolute top-[3px] left-[5px] flex items-center gap-[2px] max-w-[70%]">
+          {shownDots.map((c, i) => (
+            <span key={i} className="w-[5px] h-[5px] rounded-full flex-shrink-0 ring-1 ring-white/80" style={{ backgroundColor: c }} />
+          ))}
+          {extraDots > 0 && (
+            <span className="text-[7px] leading-none text-gray-400 font-semibold tabular-nums">+{extraDots}</span>
+          )}
+        </span>
+      )}
       <span className="relative flex items-center justify-center w-9 h-9">
         {circleColor && !isToday && (
           <span
@@ -157,12 +185,6 @@ function MobileDayCell({
         {day.holiday?.is_workday_made_up && (
           <span className="absolute -top-0.5 -right-1.5 text-[8px] leading-none bg-amber-500 text-white px-1 py-px rounded-full z-20">班</span>
         )}
-      </span>
-      {/* 点点行：高度固定防跳动，没有点点时占位 */}
-      <span className="flex items-center gap-[3px] h-1.5">
-        {dots.slice(0, 4).map((c, i) => (
-          <span key={i} className="w-1 h-1 rounded-full flex-shrink-0" style={{ backgroundColor: c }} />
-        ))}
       </span>
     </button>
   )
@@ -231,19 +253,22 @@ function DesktopMonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleC
 const WEEK_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 /**
- * 手机月视图下方常驻的「今日」议程卡：日程 / 事件 / 待办一屏扫完，最大化利用格子铺不满的留白。
- * 行可点：点日程/事件行 = 打开当日详情抽屉（编辑/删除都在里面，20260916 智者 P1-5）；
- * 待办行可直接勾选完成。
+ * 手机月视图下方常驻的信息栏卡：默认显示今天，点选其它日期后原地切换为那天
+ * （20260917 任务书 1.1-2）。日程 / 事件 / 待办一屏扫完；
+ * 行可点：点日程/事件行 = 打开当日详情抽屉；待办行可直接勾选完成。
  */
 function TodayAgenda({
   day,
   layers,
+  isToday = true,
   className,
   onSelect,
   onToggleTodo,
 }: {
   day: Day
   layers: Layer[]
+  /** 显示的是否今天（false 时头部标出具体日期，提示用户已离开「今日」） */
+  isToday?: boolean
   className?: string
   onSelect?: (date: string) => void
   onToggleTodo?: (todo: Todo, done: boolean) => void
@@ -279,7 +304,11 @@ function TodayAgenda({
     <section className={clsx('flex flex-col glass-card rounded-2xl overflow-hidden', className)}>
       <header className="px-3 py-2 border-b border-black/5 flex items-center justify-between gap-2 bg-white/40 flex-shrink-0 rounded-t-2xl">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-semibold text-gray-400 flex-shrink-0">今日</span>
+          {isToday ? (
+            <span className="text-xs font-semibold text-gray-400 flex-shrink-0">今日</span>
+          ) : (
+            <span className="text-[11px] font-semibold text-pink-500 bg-pink-50 rounded-full px-2 py-0.5 flex-shrink-0">已选</span>
+          )}
           <span className="text-sm font-bold text-gray-800 flex-shrink-0">{m}月{d}日</span>
           <span className="text-[11px] text-gray-400 truncate">{weekday}</span>
           {day.lunar && <span className="text-[11px] text-gray-400 truncate">{day.lunar}</span>}

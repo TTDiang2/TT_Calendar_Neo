@@ -31,7 +31,7 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 import { getStatsSummary, getTodoLists, getTodos } from '../adapt/api'
-import { COLORING_COLORS, TODO_BUSY_PREDICT_COLORS, todayStr } from '../adapt/data'
+import { TODO_BUSY_PREDICT_COLORS, todayStr } from '../adapt/data'
 import { animCountUp, animGrowBars, animDrawerIn, animRing, animStaggerChildren } from '../anim'
 
 const SEGMENT_COLORS = [
@@ -41,9 +41,8 @@ const SEGMENT_COLORS = [
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
-// 贡献图配色：完成次数用 GitHub 绿系；充实度直接用它的五档真色（本来就是涂色语言）
+// 贡献图配色：完成次数用 GitHub 绿系（20260917 起热力图只有这一个口径）
 const DONE_HEAT_COLORS = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']
-const EMPTY_CELL = '#ebedf0'
 
 // 累计完成里程碑阶梯（称号, 门槛）
 const MILESTONES: { title: string; at: number }[] = [
@@ -142,8 +141,6 @@ export function StatsView({
   // 每日完成柱状图：窗口大小 + 相对末端的偏移（< 向历史翻，> 向今天回）
   const [windowSize, setWindowSize] = useState<7 | 14 | 30>(30)
   const [windowOffset, setWindowOffset] = useState(0)
-  // 贡献热力图模式（完成次数 / 充实度）
-  const [heatMode, setHeatMode] = useState<'done' | 'coloring'>('done')
 
   const gridRef = useRef<HTMLDivElement | null>(null)
   const barsRef = useRef<HTMLDivElement[]>([])
@@ -153,7 +150,6 @@ export function StatsView({
   const milestonesDrawerRef = useRef<HTMLDivElement | null>(null)
 
   const daily = data?.daily_done ?? []
-  const coloringDaily = data?.coloring_daily ?? []
   const busyPredict = data?.busy_predict ?? []
 
   // 里程碑推演
@@ -185,11 +181,11 @@ export function StatsView({
     },
     [data],
   )
-  const coloringDays = useMemo(() => coloringDaily.filter((c) => c.level >= 3).length, [coloringDaily])
+  // 20260917 任务书 1.2-4：充实度染色退场，分析页不再维护它的统计图
+  // （充实度每日档位 / 高充实天数 chip / 热力图充实度切换均已移除）
 
-  // 贡献热力图数据（近 26 周）
+  // 贡献热力图数据（近 26 周）：只保留「完成次数」一个口径
   const doneByDate = useMemo(() => new Map(daily.map((d) => [d.date, d.count])), [daily])
-  const coloringByDate = useMemo(() => new Map(coloringDaily.map((c) => [c.date, c.level])), [coloringDaily])
 
   useEffect(() => {
     if (!data) return
@@ -269,8 +265,8 @@ export function StatsView({
       <button
         onClick={() => setScope(null)}
         className={clsx(
-          'flex items-center justify-between px-2 py-2 rounded-md text-sm mb-0.5',
-          scopeList === null ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
+          'flex items-center justify-between px-3 py-2.5 rounded-xl text-sm mb-1',
+          scopeList === null ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-black/[0.04]',
         )}
       >
         <span className="flex items-center gap-1.5"><Inbox size={14} /> 全部清单</span>
@@ -280,17 +276,44 @@ export function StatsView({
           key={l.id}
           onClick={() => setScope(l.id)}
           className={clsx(
-            'flex items-center px-2 py-2 rounded-md text-sm mb-0.5 truncate',
-            scopeList === l.id ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
+            'flex items-center px-3 py-2.5 rounded-xl text-sm mb-1 truncate',
+            scopeList === l.id ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-black/[0.04]',
           )}
         >
           <span className="truncate">{l.display_name}</span>
         </button>
       ))}
+
+      {/* 洞察速览（20260917 任务书 1.1-11：左抽屉不再只是「选个范围」，把有价值的
+          概览数字直接摆进来） */}
+      <div className="mt-4">
+        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-2">洞察</p>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-2xl bg-white/80 border border-black/5 px-3 py-2.5">
+            <p className="text-[11px] text-gray-400 flex items-center gap-1"><CheckCircle2 size={12} /> 累计完成</p>
+            <p className="text-lg font-bold text-gray-800 tabular-nums mt-0.5">{data.stats.completed}</p>
+          </div>
+          <div className="rounded-2xl bg-white/80 border border-black/5 px-3 py-2.5">
+            <p className="text-[11px] text-gray-400 flex items-center gap-1"><Flame size={12} /> 连续打卡</p>
+            <p className="text-lg font-bold text-gray-800 tabular-nums mt-0.5">{streaks.current} 天</p>
+          </div>
+          <div className="rounded-2xl bg-white/80 border border-black/5 px-3 py-2.5">
+            <p className="text-[11px] text-gray-400 flex items-center gap-1"><BarChart3 size={12} /> 日均（30天）</p>
+            <p className="text-lg font-bold text-gray-800 tabular-nums mt-0.5">
+              {(daily.slice(0, 30).reduce((s, d) => s + d.count, 0) / 30).toFixed(1)}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white/80 border border-black/5 px-3 py-2.5">
+            <p className="text-[11px] text-gray-400 flex items-center gap-1"><Trophy size={12} /> 完成率</p>
+            <p className="text-lg font-bold text-gray-800 tabular-nums mt-0.5">{Math.round(doneRate * 100)}%</p>
+          </div>
+        </div>
+      </div>
+
       {onOpenSettings && (
         <button
           onClick={onOpenSettings}
-          className="mt-auto flex items-center gap-2 px-2 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl transition-colors"
+          className="mt-auto flex items-center gap-2 px-2 py-3 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl transition-colors"
         >
           <Settings size={16} className="text-gray-400" /> 设置
         </button>
@@ -298,30 +321,65 @@ export function StatsView({
     </div>
   )
 
+  // 里程碑成就墙（20260917 任务书 1.1-11：更丰满的阶梯——勋章位阶、达成描述、
+  // 进度数字、下一枚提示，铺满抽屉而不是一列干巴巴的标题）
+  const milestoneMeta: Record<string, string> = {
+    初试身手: '完成头 10 项待办，体系开始转起来',
+    渐入佳境: '50 项达成，计划-执行的习惯已经成形',
+    百炼成钢: '百项俱乐部：你已经能稳定交付',
+    身经百战: '250 项，执行力进入熟练区',
+    千锤百炼: '千项里程碑，长期主义的复利看得见',
+    二千斩: '两千斩达成，日历上全是你的足迹',
+    待办传奇: '五千项，传奇就是你本人',
+  }
   const milestonesPanel = (
-    <div className="flex flex-col gap-2">
-      {milestones.map((m) => (
-        <div
-          key={m.title}
-          className={clsx(
-            'rounded-2xl border p-3',
-            m.reached ? 'border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50' : 'border-gray-100 bg-white/60',
-          )}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className={clsx('text-sm font-semibold', m.reached ? 'text-amber-700' : 'text-gray-500')}>
-              {m.reached ? '🏅 ' : ''}{m.title}
-            </span>
-            <span className="text-[11px] text-gray-400 tabular-nums">{m.at} 项</span>
+    <div className="flex flex-col gap-2.5">
+      {/* 当前位阶英雄条 */}
+      <div className="rounded-2xl p-4 text-white bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 shadow-md shadow-orange-400/30">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/80">当前位阶</p>
+        <p className="text-xl font-bold mt-0.5">{currentMilestone.title}</p>
+        <p className="text-xs text-white/85 mt-1">
+          累计 {data.stats.completed} 项 · 连续 {streaks.current} 天
+        </p>
+      </div>
+
+      {milestones.map((m, i) => {
+        const medal = m.reached ? (i >= 6 ? '👑' : i >= 4 ? '🥇' : i >= 2 ? '🥈' : '🥉') : undefined
+        const remain = Math.max(0, m.at - data.stats.completed)
+        return (
+          <div
+            key={m.title}
+            className={clsx(
+              'rounded-2xl border p-3.5 transition',
+              m.reached
+                ? 'border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 shadow-sm'
+                : 'border-gray-100 bg-white/70',
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className={clsx('text-[15px] font-bold flex items-center gap-1.5', m.reached ? 'text-amber-700' : 'text-gray-500')}>
+                <span className="text-base">{medal ?? '🔒'}</span>
+                {m.title}
+              </span>
+              <span className={clsx('text-[11px] tabular-nums flex-shrink-0', m.reached ? 'text-amber-600 font-semibold' : 'text-gray-400')}>
+                {m.reached ? '已达成' : `${data.stats.completed} / ${m.at}`}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1 leading-snug">
+              {m.reached ? milestoneMeta[m.title] ?? `累计完成 ${m.at} 项` : `${milestoneMeta[m.title] ?? `累计完成 ${m.at} 项`} · 还差 ${remain} 项`}
+            </p>
+            <div className="h-2 rounded-full bg-black/5 overflow-hidden mt-2.5">
+              <div
+                className={clsx(
+                  'h-full rounded-full transition-[width] duration-700',
+                  m.reached ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-gradient-to-r from-pink-400 to-rose-400',
+                )}
+                style={{ width: `${Math.max(4, Math.round(m.progress * 100))}%` }}
+              />
+            </div>
           </div>
-          <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mt-2">
-            <div
-              className={clsx('h-full rounded-full', m.reached ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-pink-400')}
-              style={{ width: `${Math.round(m.progress * 100)}%` }}
-            />
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 
@@ -382,37 +440,21 @@ export function StatsView({
               <CheckCircle2 size={13} /> 最长 {streaks.longest} 天
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 backdrop-blur px-3 py-1.5 text-xs font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-300" /> 高充实 {coloringDays} 天
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 backdrop-blur px-3 py-1.5 text-xs font-medium">
               <ListTodo size={13} /> 待处理 {data.stats.incomplete}
             </span>
           </div>
         </section>
 
-        {/* ── 贡献热力图（GitHub 绿块风格）：完成 / 充实度 双切换 ── */}
+        {/* ── 贡献热力图（GitHub 绿块风格，20260917 起只保留完成口径） ── */}
         <section className="glass-card rounded-3xl p-4 md:p-5 lg:col-span-2">
           <div className="flex items-center justify-between mb-3 gap-2">
             <h3 className="text-sm font-semibold text-gray-700">贡献热力图</h3>
-            <div className="inline-flex rounded-full border border-gray-200 p-0.5 bg-gray-50">
-              {(['done', 'coloring'] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setHeatMode(m)}
-                  className={clsx(
-                    'px-2.5 py-0.5 text-xs rounded-full transition',
-                    heatMode === m ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
-                  )}
-                >
-                  {m === 'done' ? '完成' : '充实度'}
-                </button>
-              ))}
-            </div>
+            <span className="text-[11px] text-gray-400">近 26 周 · 每日完成</span>
           </div>
-          <Heatmap mode={heatMode} done={doneByDate} coloring={coloringByDate} />
+          <Heatmap done={doneByDate} />
           <div className="flex items-center justify-end gap-1.5 mt-2 text-[10px] text-gray-400">
             <span>少</span>
-            {(heatMode === 'done' ? DONE_HEAT_COLORS : [EMPTY_CELL, ...COLORING_COLORS]).map((c) => (
+            {DONE_HEAT_COLORS.map((c) => (
               <span key={c} className="w-2.5 h-2.5 rounded-[2px]" style={{ backgroundColor: c }} />
             ))}
             <span>多</span>
@@ -596,14 +638,14 @@ export function StatsView({
         </section>
       </div>
 
-      {/* ── 左侧边栏：统计范围（portal，理由同待办页抽屉） ── */}
+      {/* ── 左侧边栏：统计与洞察（portal，理由同待办页抽屉） ── */}
       {scopeOpen && createPortal(
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={() => onScopeOpenChange(false)} />
-          <div ref={scopeDrawerRef} className="glass-sheet absolute inset-y-0 left-0 w-[290px] max-w-[85vw] rounded-r-3xl p-3 pt-3 overflow-y-auto flex flex-col">
+          <div ref={scopeDrawerRef} className="glass-sheet absolute inset-y-0 left-0 w-[300px] max-w-[86vw] rounded-r-3xl p-3 pt-3 overflow-y-auto flex flex-col">
             <div className="flex items-center justify-between mb-2 pl-1">
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">统计范围</h2>
-              <button onClick={() => onScopeOpenChange(false)} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md text-lg" aria-label="关闭">×</button>
+              <h2 className="text-base font-bold text-gray-800">统计与洞察</h2>
+              <button onClick={() => onScopeOpenChange(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl" aria-label="关闭">×</button>
             </div>
             {scopePanel}
             <div className="pt-2">
@@ -623,12 +665,12 @@ export function StatsView({
       {milestonesOpen && createPortal(
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={() => onMilestonesOpenChange(false)} />
-          <aside ref={milestonesDrawerRef} className="glass-sheet absolute inset-y-0 right-0 w-[300px] max-w-[85vw] rounded-l-3xl p-4 pt-3 overflow-y-auto flex flex-col">
+          <aside ref={milestonesDrawerRef} className="glass-sheet absolute inset-y-0 right-0 w-[320px] max-w-[88vw] rounded-l-3xl p-4 pt-3 overflow-y-auto flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1.5">
-                <Trophy size={13} className="text-amber-400" /> 里程碑
+              <h2 className="text-base font-bold text-gray-800 flex items-center gap-1.5">
+                <Trophy size={16} className="text-amber-400" /> 里程碑
               </h2>
-              <button onClick={() => onMilestonesOpenChange(false)} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md text-lg" aria-label="关闭">×</button>
+              <button onClick={() => onMilestonesOpenChange(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl" aria-label="关闭">×</button>
             </div>
             {milestonesPanel}
           </aside>
@@ -654,14 +696,10 @@ export function StatsView({
  * 后端取数窗口 190 天 = 182 + 6，保证最左回退列也有数据（20260916 审核项 B）。
  */
 function Heatmap({
-  mode,
   done,
-  coloring,
   weeks = 26,
 }: {
-  mode: 'done' | 'coloring'
   done: Map<string, number>
-  coloring: Map<string, number>
   weeks?: number
 }) {
   const cells = useMemo(() => {
@@ -672,13 +710,13 @@ function Heatmap({
     start.setDate(start.getDate() - (weeks * 7 - 1))
     const startDow = (start.getDay() + 6) % 7 // 周一=0
     start.setDate(start.getDate() - startDow)
-    const out: { date: string; count: number; level: number }[] = []
+    const out: { date: string; count: number }[] = []
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const key = fmt(d)
-      out.push({ date: key, count: done.get(key) ?? 0, level: coloring.get(key) ?? -1 })
+      out.push({ date: key, count: done.get(key) ?? 0 })
     }
     return out
-  }, [done, coloring, weeks])
+  }, [done, weeks])
 
   const quantize = (n: number): number => (n <= 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : n <= 6 ? 3 : 4)
 
@@ -693,15 +731,8 @@ function Heatmap({
             {Array.from({ length: 7 }, (_, ri) => {
               const cell = col[ri]
               if (!cell) return <span key={ri} className="w-[10px] h-[10px]" />
-              let color: string
-              let label: string
-              if (mode === 'done') {
-                color = DONE_HEAT_COLORS[quantize(cell.count)]!
-                label = `${cell.date}：完成 ${cell.count} 项`
-              } else {
-                color = cell.level >= 0 ? COLORING_COLORS[Math.min(cell.level, 4)]! : EMPTY_CELL
-                label = `${cell.date}：${cell.level >= 0 ? `充实度 ${cell.level + 1} 档` : '未涂色'}`
-              }
+              const color = DONE_HEAT_COLORS[quantize(cell.count)]!
+              const label = `${cell.date}：完成 ${cell.count} 项`
               return (
                 <span
                   key={ri}

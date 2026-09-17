@@ -1,18 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import clsx from 'clsx'
-import { AlertTriangle, CalendarClock, ChevronDown, Coffee, Hourglass } from 'lucide-react'
+import { AlertTriangle, CalendarClock, Coffee, Hourglass } from 'lucide-react'
 import type { Todo, TodoList } from '../../adapt/types'
 import { dueInDays, isImportant, urgencyOf } from '../../adapt/todoLogic'
 import { useIsMobile } from '../../hooks/useMedia'
 import { TodoMiniCard } from './TodoMiniCard'
 
 /**
- * 手机堆叠模式下每个象限的展示节奏（20260916 任务书：四象限不要挤在同一屏，
- * 每个矩阵拉高到能放进两三个以上条目，靠整页上下滑看全）：
- * 首屏展示 MOBILE_BATCH 条，点「还有 N 条」按批展开——页面滚动归外层，象限内部不再滚动。
+ * 手机端四象限（20260917 任务书 1.1-7 再修）：每个象限就是一张足够长的大卡，
+ * 内容全量展开不再折叠（上一轮的「还有 N 条」批展开被用户否掉——在 小空间里
+ * 看四个象限不可接受），整页上下滑顺序看完全部四块。
  */
-const MOBILE_BATCH = 8
-
 interface Props {
   todos: Todo[]
   lists: TodoList[]
@@ -74,7 +72,7 @@ function subText(t: Todo, lists: TodoList[]): string {
   return parts.join(' · ')
 }
 
-/** 单个象限卡：手机按批展开（点「还有 N 条」续看），桌面全量展示 */
+/** 单个象限卡：手机全量展开（卡片随内容长高，最低半屏），桌面全量展示 */
 function QuadrantCard({
   q,
   items,
@@ -92,19 +90,23 @@ function QuadrantCard({
   onSelect: (id: string) => void
   onToggle: (todo: Todo, done: boolean) => void
 }) {
-  const [expanded, setExpanded] = useState(false)
   const Icon = q.icon
   const soonCount = items.filter((t) => urgencyOf(t) === 'soon').length
-  const shown = isMobile && !expanded ? items.slice(0, MOBILE_BATCH) : items
-  const rest = items.length - shown.length
 
   return (
-    <div className={clsx('rounded-xl border flex flex-col overflow-hidden min-h-0', q.tone, 'md:min-h-0')}>
-      <div className="px-3 py-2 flex items-center justify-between border-b border-black/5 flex-shrink-0">
+    <div
+      className={clsx(
+        'rounded-2xl border flex flex-col overflow-hidden',
+        q.tone,
+        // 手机：每块都是半屏起步的大卡（20260917 任务书 1.1-7：框框要足够长）
+        isMobile && 'min-h-[46vh]',
+      )}
+    >
+      <div className="px-3 py-2.5 flex items-center justify-between border-b border-black/5 flex-shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
-          <Icon size={14} className={clsx(q.head, 'flex-shrink-0')} />
-          <span className={clsx('text-sm font-semibold truncate', q.head)}>{q.title}</span>
-          <span className="text-xs text-gray-400 hidden sm:inline">{q.action}</span>
+          <Icon size={15} className={clsx(q.head, 'flex-shrink-0')} />
+          <span className={clsx('text-[15px] font-semibold truncate', q.head)}>{q.title}</span>
+          <span className="text-[11px] text-gray-400 hidden sm:inline">{q.action}</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {soonCount > 0 && (
@@ -112,35 +114,24 @@ function QuadrantCard({
               {soonCount} 临近
             </span>
           )}
-          <span className="text-xs font-medium text-gray-500">{items.length}</span>
+          <span className="text-sm font-semibold text-gray-500">{items.length}</span>
         </div>
       </div>
-      {/* 桌面：象限内独立滚动（基线行为）；手机：内容生长、整页滚动承接 */}
+      {/* 手机：内容全量生长、整页滚动承接；桌面：象限内独立滚动（基线行为） */}
       <div className="flex-1 overflow-visible md:overflow-y-auto p-2 flex flex-col gap-1.5 min-h-0">
         {items.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-xs text-gray-300 py-3">{q.desc}</div>
+          <div className="flex-1 flex items-center justify-center text-xs text-gray-300 py-6">{q.desc}</div>
         ) : (
-          <>
-            {shown.map((t) => (
-              <TodoMiniCard
-                key={t.id}
-                todo={t}
-                selected={selectedTodoId === t.id}
-                sub={subText(t, lists)}
-                onClick={() => onSelect(t.id)}
-                onToggle={(done) => onToggle(t, done)}
-              />
-            ))}
-            {rest > 0 && (
-              <button
-                onClick={() => setExpanded(true)}
-                className="text-[11px] text-gray-400 hover:text-pink-500 active:text-pink-500 text-center py-1.5 rounded-lg transition-colors"
-              >
-                <ChevronDown size={12} className="inline mr-0.5 -mt-0.5" />
-                还有 {rest} 条
-              </button>
-            )}
-          </>
+          items.map((t) => (
+            <TodoMiniCard
+              key={t.id}
+              todo={t}
+              selected={selectedTodoId === t.id}
+              sub={subText(t, lists)}
+              onClick={() => onSelect(t.id)}
+              onToggle={(done) => onToggle(t, done)}
+            />
+          ))
         )}
       </div>
     </div>

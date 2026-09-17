@@ -55,6 +55,8 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
   const [listId, setListId] = useState('')
   const [status, setStatus] = useState<Todo['status']>('notStarted')
   const [dueExpanded, setDueExpanded] = useState(false)
+  // 手机查看优先模式：当前进入编辑态的字段（null = 纯浏览，不渲染输入框不弹输入法）
+  const [editing, setEditing] = useState<string | null>(null)
   const panelRef = useRef<HTMLElement | null>(null)
 
   useImperativeHandle(ref, () => ({
@@ -160,6 +162,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
       setStatus(todo.status)
       setDueExpanded(false)
       setPlannedExpanded(false)
+      setEditing(null)
       savingRef.current = false
       setSaving(false)
     }
@@ -390,6 +393,175 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
     )
   }
 
+  // ── 手机（<lg）：查看优先的详情抽屉（20260917 任务书 1.1-10）──
+  // 打开即浏览：不渲染任何输入框、不 autofocus，输入法绝不自动弹出；
+  // 点某个字段行才进入该字段的编辑态（输入法随之弹出是用户主动的结果）。
+  // 布局改为通栏行式，修复原 grid-cols-2 挤压问题。
+  const isPhantom = todo.id === '' || todo.id === '__NEW__'
+  const listName = lists.find((l) => l.id === listId)?.display_name ?? '—'
+
+  const metaRow = (key: string, label: string, value: React.ReactNode, editor: React.ReactNode) => (
+    <div className="border-b border-black/5 last:border-b-0">
+      {editing === key ? (
+        <div className="px-4 py-2.5 flex items-center gap-2">
+          <span className="text-[13px] text-gray-400 w-16 flex-shrink-0">{label}</span>
+          <div className="flex-1 min-w-0">{editor}</div>
+          <button
+            onClick={() => setEditing(null)}
+            className="text-xs text-pink-600 font-medium px-1 py-1 flex-shrink-0 active:opacity-60"
+          >
+            完成
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setEditing(key)}
+          className="w-full px-4 py-3 flex items-center gap-2 text-left active:bg-black/[0.04] transition-colors"
+        >
+          <span className="text-[13px] text-gray-400 w-16 flex-shrink-0">{label}</span>
+          <span className="flex-1 min-w-0 text-[15px] text-gray-800 truncate text-right">{value}</span>
+          <svg width="8" height="12" viewBox="0 0 8 12" className="flex-shrink-0 text-gray-300">
+            <path d="M1.5 1L6.5 6L1.5 11" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
+    </div>
+  )
+
+  const mobileBody = (
+    <>
+      {/* 标题：默认纯展示，点一下才进入编辑（输入法只在主动点击后出现） */}
+      {editing === 'title' ? (
+        <div className="px-4 pt-3">
+          <textarea
+            autoFocus
+            rows={2}
+            className="w-full text-lg font-semibold border border-pink-200 rounded-xl p-2 focus:border-pink-400 focus:outline-none resize-none"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => setEditing(null)}
+          />
+        </div>
+      ) : (
+        <button
+          onClick={() => setEditing('title')}
+          className="px-4 pt-4 pb-2 text-left w-full active:bg-black/[0.03] transition-colors"
+        >
+          <p className={clsx('text-lg font-semibold leading-snug break-words', title ? 'text-gray-900' : 'text-gray-300')}>
+            {title || (isPhantom ? '点这里输入标题…' : '无标题（点按编辑）')}
+          </p>
+        </button>
+      )}
+
+      {/* 备注：预览 + 点开全屏笔记编辑器（原本就是手机友好的大编辑面） */}
+      <button
+        onClick={() => setNotesModalOpen(true)}
+        className="mx-4 mb-3 px-3 py-2.5 rounded-xl bg-white/80 border border-black/5 text-left active:bg-black/[0.04] transition-colors"
+      >
+        <p className="text-[11px] text-gray-400 mb-0.5">备注</p>
+        <p className={clsx('text-sm leading-snug break-words whitespace-pre-wrap line-clamp-3', body ? 'text-gray-700' : 'text-gray-300')}>
+          {body || '点开写点备注…'}
+        </p>
+      </button>
+
+      {/* 元信息：通栏行式（label 左 value 右），点行编辑单字段 */}
+      <div className="rounded-2xl bg-white/60 border border-black/5 mx-4 mb-3 overflow-hidden">
+        {metaRow('list', '清单', listName, (
+          <select className="tt-input" value={listId} onChange={(e) => setListId(e.target.value)}>
+            {lists.map((l) => (
+              <option key={l.id} value={l.id}>{l.display_name}</option>
+            ))}
+          </select>
+        ))}
+        {metaRow('importance', '重要性', IMPORTANCE_OPTIONS.find((o) => o.key === importance)?.label ?? importance, (
+          <select className="tt-input" value={importance} onChange={(e) => setImportance(e.target.value as Todo['importance'])}>
+            {IMPORTANCE_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
+        ))}
+        {metaRow('status', '状态', STATUS_OPTIONS.find((o) => o.key === status)?.label ?? status, (
+          <select className="tt-input" value={status} onChange={(e) => setStatus(e.target.value as Todo['status'])}>
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
+        ))}
+        {metaRow('due', '截止', dueDate || '无', (
+          <DueDateQuickPicker value={dueDate} onChange={setDueDate} expanded={false} setExpanded={() => {}} />
+        ))}
+        {metaRow('planned', '计划', plannedDate || '无', (
+          <DueDateQuickPicker value={plannedDate} onChange={setPlannedDate} expanded={false} setExpanded={() => {}} />
+        ))}
+        {metaRow('start', '开始日', startDate || '无', (
+          <input type="date" className="tt-input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        ))}
+        {metaRow('complexity', '复杂度', COMPLEXITY_OPTIONS.find((o) => o.key === complexity)?.label ?? complexity, (
+          <select className="tt-input" value={complexity} onChange={(e) => setComplexity(e.target.value as Todo['complexity'])}>
+            {COMPLEXITY_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
+        ))}
+        {metaRow(
+          'tags',
+          '标签',
+          tags.length ? tags.join('、') : '无',
+          <input
+            className="tt-input"
+            value={tagsText}
+            onChange={(e) => setTagsText(e.target.value)}
+            placeholder="工作, 学习…"
+          />,
+        )}
+      </div>
+
+      {/* 底部操作：完成切换（大按钮）+ 删除 + 保存 */}
+      <div className="mt-auto px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 border-t border-black/5 space-y-2 bg-white/40">
+        <button
+          onClick={() => {
+            const nextStatus: Todo['status'] = status === 'completed' ? 'notStarted' : 'completed'
+            setStatus(nextStatus)
+            if (!isPhantom) {
+              // 全量落盘（含切换后的状态）；面板不关闭，后续继续编辑关闭时仍会正常 flush
+              onSave({ ...buildData(), status: nextStatus })
+            }
+          }}
+          disabled={isPhantom}
+          className={clsx(
+            'w-full py-3 rounded-2xl text-[15px] font-semibold transition-colors disabled:opacity-40',
+            status === 'completed'
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              : 'bg-emerald-500 text-white active:bg-emerald-600',
+          )}
+        >
+          {status === 'completed' ? '↩ 恢复为未完成' : '✓ 标记完成'}
+        </button>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => {
+              // 删除后面板会关闭，必须阻止 cleanup 把这条刚删掉的记录又 flush 回去
+              if (confirm(`删除待办「${todo.title}」？`)) {
+                skipFlushRef.current = true
+                onDelete(todo.id)
+              }
+            }}
+            className="flex items-center gap-1 text-sm text-red-500 active:opacity-60 py-2"
+          >
+            <Trash2 size={15} /> 删除
+          </button>
+          <button
+            onClick={save}
+            disabled={!title.trim() || !listId || saving}
+            className="px-6 py-2 text-sm bg-pink-500 text-white rounded-full active:bg-pink-600 disabled:opacity-40"
+          >
+            {saving ? '保存中…' : '保存'}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+
   // 手机（<lg）：右侧边栏抽屉。portal 到 body —— 待办页在手势容器（contentRef）内，
   // 容器残留的 inline transform 会把 fixed 抽屉圈进内容区矩形（遮罩盖不住 dock），
   // portal 彻底绕开包含块问题（20260916 审核缺陷 2）
@@ -398,12 +570,13 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
       <div className="fixed inset-0 z-[39] bg-black/30" onClick={onClose} />
       <aside
         ref={panelRef}
-        className="glass-sheet fixed inset-y-0 right-0 z-40 w-[300px] max-w-[85vw] rounded-l-3xl flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]"
+        className="glass-sheet fixed inset-y-0 right-0 z-40 w-[320px] max-w-[88vw] rounded-l-3xl flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]"
         onKeyDown={onKeyDownSave}
       >
         {header}
-        {form}
-        {footer}
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          {mobileBody}
+        </div>
         {notesModal}
       </aside>
     </>,
@@ -423,7 +596,8 @@ function nextMonday(): Date {
   return d
 }
 
-function DueDateQuickPicker({
+/** 截止/计划日期快捷选择（详情抽屉与快速新增抽屉共用，20260917 导出复用） */
+export function DueDateQuickPicker({
   value,
   onChange,
   expanded,

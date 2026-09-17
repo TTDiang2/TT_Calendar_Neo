@@ -69,8 +69,10 @@ export function BottomTabBar({
         if (g?.active) {
           wasActive = true
           pill.style.transition = 'none'
+          // 预览方向 = 朝目标页移动，而不是跟着手指走（20260917 任务书 1.1-12：
+          // 手指左滑去右边页，圆片应向右探出；取负号让进度与位移反向）
           const clamped = Math.max(-1.15, Math.min(1.15, g.progress))
-          pill.style.transform = `translateX(${(activeIdx + clamped) * 100}%)`
+          pill.style.transform = `translateX(${(activeIdx - clamped) * 100}%)`
         } else if (wasActive) {
           wasActive = false
           pill.style.transition = SPRING_TRANSITION

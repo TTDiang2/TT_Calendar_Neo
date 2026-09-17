@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { ChevronDown, ChevronRight, Plus, Settings } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Search, Settings } from 'lucide-react'
 import type { Layer } from '../adapt/types'
 import { createLayer, getSubscriptions } from '../adapt/api'
 import { COLOR_PRESETS, GRADED_PALETTES } from '../adapt/data'
@@ -24,7 +24,9 @@ export function Sidebar({ layers, onToggle, countdown }: Props) {
 }
 
 /* 手机：左侧滑出抽屉（dock 左按钮唤出），液态玻璃材质 + 弹簧滑入。
-   20260916 任务书：设置不再占 Top Bar，收进本抽屉底部的「设置」入口 */
+   20260916 任务书：设置不再占 Top Bar，收进本抽屉底部的「设置」入口；
+   20260917 任务书：综合搜索入口也收进本抽屉（Top Bar 移除后搜索的新家），
+   行高/开关放大到手机触控标准（1.1-5 抽屉手机化） */
 export function MobileLayersDrawer({
   open,
   onClose,
@@ -32,7 +34,8 @@ export function MobileLayersDrawer({
   onToggle,
   countdown,
   onOpenSettings,
-}: Props & { open: boolean; onClose: () => void; onOpenSettings?: () => void }) {
+  onOpenSearch,
+}: Props & { open: boolean; onClose: () => void; onOpenSettings?: () => void; onOpenSearch?: () => void }) {
   const panelRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
     if (open) animDrawerIn(panelRef.current, -1)
@@ -41,23 +44,36 @@ export function MobileLayersDrawer({
   return (
     <div className="fixed inset-0 z-50 md:hidden">
       <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={onClose} />
-      <aside ref={panelRef} className="glass-sheet absolute inset-y-0 left-0 w-[290px] max-w-[85vw] rounded-r-3xl p-4 pt-3 overflow-y-auto flex flex-col">
+      <aside ref={panelRef} className="glass-sheet absolute inset-y-0 left-0 w-[300px] max-w-[86vw] rounded-r-3xl p-4 pt-3 overflow-y-auto flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">图层</h2>
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md text-lg"
+            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl"
+            aria-label="关闭"
           >
             ×
           </button>
         </div>
-        <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} showSubscriptions={false} />
+
+        {/* 综合搜索入口（1.1-1）：事件 + 待办一把搜 */}
+        {onOpenSearch && (
+          <button
+            onClick={onOpenSearch}
+            className="mb-3 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/80 border border-black/5 shadow-sm text-sm text-gray-400 active:bg-pink-50 active:text-pink-600 transition-colors"
+          >
+            <Search size={15} className="text-pink-500" />
+            搜索事件、待办…
+          </button>
+        )}
+
+        <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} showSubscriptions={false} roomy />
         {onOpenSettings && (
           <button
             onClick={onOpenSettings}
-            className="mt-auto flex items-center gap-2 px-2 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl mb-2 transition-colors"
+            className="mt-auto flex items-center gap-2 px-2 py-3 text-[15px] text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl mb-2 transition-colors"
           >
-            <Settings size={16} className="text-gray-400" /> 设置
+            <Settings size={17} className="text-gray-400" /> 设置
           </button>
         )}
       </aside>
@@ -65,7 +81,7 @@ export function MobileLayersDrawer({
   )
 }
 
-function LayerTree({ layers, onToggle, countdown, showSubscriptions = true }: Props & { showSubscriptions?: boolean }) {
+function LayerTree({ layers, onToggle, countdown, showSubscriptions = true, roomy = false }: Props & { showSubscriptions?: boolean; roomy?: boolean }) {
   const qc = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
@@ -165,7 +181,7 @@ function LayerTree({ layers, onToggle, countdown, showSubscriptions = true }: Pr
                 {(!hasGroup || !collapsed[grpId]) && (
                   <div className={`flex flex-col gap-0.5 ${hasGroup ? 'ml-2' : ''}`}>
                     {members.map((l) => (
-                      <LayerRow key={l.layer_id} layer={l} onToggle={onToggle} />
+                      <LayerRow key={l.layer_id} layer={l} onToggle={onToggle} roomy={roomy} />
                     ))}
                   </div>
                 )}
@@ -200,7 +216,7 @@ function LayerTree({ layers, onToggle, countdown, showSubscriptions = true }: Pr
                         {!collapsed[grpId] && (
                           <div className="flex flex-col gap-0.5 ml-3">
                             {members.map((l) => (
-                              <LayerRow key={l.layer_id} layer={l} onToggle={onToggle} />
+                              <LayerRow key={l.layer_id} layer={l} onToggle={onToggle} roomy={roomy} />
                             ))}
                           </div>
                         )}
@@ -221,14 +237,14 @@ function LayerTree({ layers, onToggle, countdown, showSubscriptions = true }: Pr
         })}
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-md mt-0.5"
+          className="flex items-center gap-1.5 px-2 py-2.5 text-sm text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl mt-0.5"
         >
-          <Plus size={14} /> 新建图层
+          <Plus size={15} /> 新建图层
         </button>
       </div>
 
       <div className="mt-auto">
-        <div className="rounded-lg bg-gray-100 p-3">
+        <div className={clsx('rounded-2xl p-3', roomy ? 'bg-white/70 border border-black/5' : 'bg-gray-100')}>
           <p className="text-[11px] text-gray-400 mb-1">倒计时</p>
           <p className="text-sm text-gray-600 font-medium select-text">{countdown}</p>
         </div>
@@ -239,26 +255,28 @@ function LayerTree({ layers, onToggle, countdown, showSubscriptions = true }: Pr
   )
 }
 
-function LayerRow({ layer, onToggle }: { layer: Layer; onToggle: (id: string) => void }) {
+function LayerRow({ layer, onToggle, roomy = false }: { layer: Layer; onToggle: (id: string) => void; roomy?: boolean }) {
   return (
-    <div className="flex items-center gap-2 px-1 py-1.5 rounded-md hover:bg-gray-50">
+    <div className={clsx('flex items-center gap-2 px-1 rounded-xl hover:bg-black/[0.03]', roomy ? 'py-2.5' : 'py-1.5')}>
       <span
-        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+        className={clsx('rounded-full flex-shrink-0', roomy ? 'w-3 h-3' : 'w-2.5 h-2.5')}
         style={{ backgroundColor: layer.color ?? '#9ca3af' }}
       />
-      <span className="flex-1 text-sm text-gray-700 truncate">{layer.display_name}</span>
+      <span className={clsx('flex-1 truncate', roomy ? 'text-[15px] text-gray-700' : 'text-sm text-gray-700')}>{layer.display_name}</span>
       <button
         onClick={() => onToggle(layer.layer_id)}
         aria-pressed={layer.enabled}
         className={clsx(
-          'relative inline-flex items-center w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
-          layer.enabled ? 'bg-pink-500' : 'bg-gray-300',
+          'relative inline-flex items-center rounded-full transition-colors flex-shrink-0',
+          roomy ? 'w-[46px] h-7' : 'w-8 h-[18px]',
+          layer.enabled ? 'bg-emerald-500' : 'bg-gray-300',
         )}
       >
         <span
           className={clsx(
-            'inline-block w-3.5 h-3.5 rounded-full bg-white shadow transition-transform duration-200',
-            layer.enabled ? 'translate-x-[16px]' : 'translate-x-[2px]',
+            'inline-block rounded-full bg-white shadow transition-transform duration-200',
+            roomy ? 'w-[22px] h-[22px]' : 'w-3.5 h-3.5',
+            layer.enabled ? (roomy ? 'translate-x-[21px]' : 'translate-x-[16px]') : roomy ? 'translate-x-[3px]' : 'translate-x-[2px]',
           )}
         />
       </button>

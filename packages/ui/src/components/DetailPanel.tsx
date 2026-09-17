@@ -107,35 +107,57 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
         )}
       </div>
 
-      <div className="flex gap-1 mb-4">
-        {onAddEvent && (
-          <button
-            onClick={() => onAddEvent(day.date)}
-            className="flex-1 flex items-center justify-center gap-1 text-xs text-white py-1.5 rounded-md bg-pink-500 hover:bg-pink-600"
-          >
-            <CalendarPlus size={12} /> 事件
-          </button>
+      {/* 20260917 任务书 1.2-1：手机右抽屉统一为「点点 / 涂色」两个入口——
+          事件与日程都是点点（DotEntryDialog 内选图层即涵盖），打卡/完成度等都是涂色；
+          桌面右栏保留原四按钮（桌面零变化红线）。 */}
+      <div className="flex gap-1.5 mb-4">
+        {drawer ? (
+          <>
+            <button
+              onClick={() => onAddDot(day.date)}
+              className="flex-1 flex items-center justify-center gap-1.5 text-sm text-gray-700 py-2.5 rounded-xl bg-white/80 border border-black/5 shadow-sm active:bg-pink-50 active:text-pink-600 transition-colors"
+            >
+              <Clock size={15} className="text-pink-500" /> 加点点
+            </button>
+            <button
+              onClick={() => onAddColor(day.date)}
+              className="flex-1 flex items-center justify-center gap-1.5 text-sm text-gray-700 py-2.5 rounded-xl bg-white/80 border border-black/5 shadow-sm active:bg-pink-50 active:text-pink-600 transition-colors"
+            >
+              <Palette size={15} className="text-amber-500" /> 涂色
+            </button>
+          </>
+        ) : (
+          <>
+            {onAddEvent && (
+              <button
+                onClick={() => onAddEvent(day.date)}
+                className="flex-1 flex items-center justify-center gap-1 text-xs text-white py-1.5 rounded-md bg-pink-500 hover:bg-pink-600"
+              >
+                <CalendarPlus size={12} /> 事件
+              </button>
+            )}
+            {/* 日程快捷入口常驻：手机端没有桌面右键菜单，「编辑日程」又只在已有日程时出现，
+                缺了它空日程日在手机上永远无法添加日程（20260916 智者 P0-3） */}
+            <button
+              onClick={() => onEditSchedule(day.date)}
+              className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"
+            >
+              <CalendarClock size={12} /> 日程
+            </button>
+            <button
+              onClick={() => onAddDot(day.date)}
+              className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"
+            >
+              <Clock size={12} /> 点点
+            </button>
+            <button
+              onClick={() => onAddColor(day.date)}
+              className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"
+            >
+              <Palette size={12} /> 涂色
+            </button>
+          </>
         )}
-        {/* 日程快捷入口常驻：手机端没有桌面右键菜单，「编辑日程」又只在已有日程时出现，
-            缺了它空日程日在手机上永远无法添加日程（20260916 智者 P0-3） */}
-        <button
-          onClick={() => onEditSchedule(day.date)}
-          className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"
-        >
-          <CalendarClock size={12} /> 日程
-        </button>
-        <button
-          onClick={() => onAddDot(day.date)}
-          className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"
-        >
-          <Clock size={12} /> 点点
-        </button>
-        <button
-          onClick={() => onAddColor(day.date)}
-          className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"
-        >
-          <Palette size={12} /> 涂色
-        </button>
       </div>
 
       {day.holiday?.name && (

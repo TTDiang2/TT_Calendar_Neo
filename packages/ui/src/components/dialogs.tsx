@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Modal, Field } from './ui/Modal'
@@ -10,6 +10,7 @@ import {
   deleteColoring,
   upsertMark,
   searchEvents,
+  getTodos,
   getSubscriptions,
   createSubscription,
   patchSubscription,
@@ -23,7 +24,7 @@ import {
 } from '../adapt/api'
 import { Plus, Trash2 } from 'lucide-react'
 import { COLORING_COLORS } from '../adapt/data'
-import type { CalEvent, Layer, Schedule, ScheduleItem } from '../adapt/types'
+import type { CalEvent, Layer, Schedule, ScheduleItem, Todo } from '../adapt/types'
 
 const COLORING_LABELS = ['放松', '轻松', '适中', '充实', '高产']
 
@@ -360,50 +361,133 @@ export function ColoringPicker({
 }
 
 // ===========================================================================
-// 搜索对话框
+// 综合搜索：事件 + 待办（20260917 任务书 1.1-1——原来只搜事件太粗糙）
 // ===========================================================================
 
 export function SearchDialog({
   onClose,
   onJump,
+  onJumpTodo,
+  layers,
+  hideSubscriptions = false,
 }: {
   onClose: () => void
   onJump: (ev: CalEvent) => void
+  /** 点中待办结果：App 切到待办页并打开该待办详情 */
+  onJumpTodo?: (todo: Todo) => void
+  /** 图层表：hideSubscriptions 时用于剔除订阅来源结果（手机端不呈现订阅内容） */
+  layers?: Layer[]
+  hideSubscriptions?: boolean
 }) {
   const [q, setQ] = useState('')
-  const { data, isFetching } = useQuery({
-    queryKey: ['search', q],
-    queryFn: () => searchEvents(q),
-    enabled: q.trim().length > 0,
+  const trimmed = q.trim()
+  const { data: events, isFetching: fetchingEvents } = useQuery({
+    queryKey: ['search', 'events', trimmed],
+    queryFn: () => searchEvents(trimmed),
+    enabled: trimmed.length > 0,
+  })
+  const { data: todos, isFetching: fetchingTodos } = useQuery({
+    queryKey: ['search', 'todos', trimmed],
+    queryFn: async () => {
+      const [open, done] = await Promise.all([
+        getTodos({ status: 'notStarted', limit: 500 }),
+        getTodos({ status: 'completed', limit: 500 }),
+      ])
+      return [...open, ...done]
+    },
+    enabled: trimmed.length > 0,
   })
 
+  const subLayerIds = useMemo(() => {
+    if (!hideSubscriptions || !layers) return new Set<string>()
+    return new Set(layers.filter((l) => l.layer_id.startsWith('jisilu_')).map((l) => l.layer_id))
+  }, [hideSubscriptions, layers])
+
+  const hitEvents = useMemo(() => {
+    if (!events) return []
+    return events.filter((ev) => !subLayerIds.has(ev.layer_id)).slice(0, 30)
+  }, [events, subLayerIds])
+  const hitTodos = useMemo(() => {
+    if (!todos || !trimmed) return []
+    const kw = trimmed.toLowerCase()
+    return todos
+      .filter((t) =>
+        t.title.toLowerCase().includes(kw)
+        || (t.body ?? '').toLowerCase().includes(kw)
+        || (t.tags ?? []).some((tag) => tag.toLowerCase().includes(kw)),
+      )
+      .slice(0, 30)
+  }, [todos, trimmed])
+
+  const searching = fetchingEvents || fetchingTodos
+  const nothing = trimmed.length > 0 && !searching && hitEvents.length === 0 && hitTodos.length === 0
+
   return (
-    <Modal title="搜索事件" onClose={onClose} width={520}>
+    <Modal title="搜索" onClose={onClose} width={520}>
       <input
         className="tt-input mb-3"
-        placeholder="输入关键词…"
+        placeholder="搜事件、日程、待办…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         autoFocus
       />
-      <div className="max-h-72 overflow-y-auto -mx-1">
-        {q.trim() && !isFetching && data && data.length === 0 && (
-          <p className="text-sm text-gray-400 px-1 py-2">未找到匹配「{q}」的事件</p>
+      <div className="max-h-80 overflow-y-auto -mx-1">
+        {nothing && <p className="text-sm text-gray-400 px-1 py-2">未找到与「{trimmed}」相关的事件或待办</p>}
+
+        {hitEvents.length > 0 && (
+          <>
+            <p className="text-[11px] font-semibold text-gray-400 px-1 pt-1 pb-0.5 uppercase tracking-wide">事件 · 日程</p>
+            {hitEvents.map((ev, i) => (
+              <button
+                key={`ev-${ev.id ?? i}`}
+                onClick={() => onJump(ev)}
+                className="w-full flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-md text-left"
+              >
+                <span
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: ev.color ?? '#9ca3af' }}
+                />
+                <span className="flex-1 text-sm text-gray-700 truncate">{ev.title}</span>
+                <span className="text-xs text-gray-400">{ev.date.slice(5)}</span>
+              </button>
+            ))}
+          </>
         )}
-        {data?.map((ev, i) => (
-          <button
-            key={ev.id ?? i}
-            onClick={() => onJump(ev)}
-            className="w-full flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-md text-left"
-          >
-            <span
-              className="w-2 h-2 rounded-full flex-shrink-0"
-              style={{ backgroundColor: ev.color ?? '#9ca3af' }}
-            />
-            <span className="flex-1 text-sm text-gray-700 truncate">{ev.title}</span>
-            <span className="text-xs text-gray-400">{ev.date}</span>
-          </button>
-        ))}
+
+        {hitTodos.length > 0 && (
+          <>
+            <p className="text-[11px] font-semibold text-gray-400 px-1 pt-2 pb-0.5 uppercase tracking-wide">待办</p>
+            {hitTodos.map((t) => {
+              const done = t.status === 'completed'
+              const overdue = !done && t.due_date != null && t.due_date < new Date().toISOString().slice(0, 10)
+              return (
+                <button
+                  key={`todo-${t.id}`}
+                  onClick={() => {
+                    if (onJumpTodo) onJumpTodo(t)
+                    onClose()
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-md text-left"
+                >
+                  <span
+                    className={clsx(
+                      'w-3.5 h-3.5 rounded-full border flex-shrink-0 flex items-center justify-center text-[9px]',
+                      done ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300',
+                    )}
+                  >
+                    {done ? '✓' : ''}
+                  </span>
+                  <span className={clsx('flex-1 text-sm truncate', done ? 'text-gray-400 line-through' : 'text-gray-700')}>{t.title}</span>
+                  {t.due_date && (
+                    <span className={clsx('text-xs flex-shrink-0', overdue ? 'text-red-500 font-medium' : 'text-gray-400')}>
+                      {overdue ? '已过期' : t.due_date.slice(5)}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </>
+        )}
       </div>
     </Modal>
   )
@@ -659,15 +743,18 @@ export function DotEntryDialog({
   onClose: () => void
 }) {
   const qc = useQueryClient()
-  // 点点图层候选：自定义 dot 图层（含日程类）、其他非外部数据源的 dot 图层。
-  // 不限 enabled（让用户能给隐藏中的图层添加内容），排除 jisilu_* 外部数据源（手动加会被同步覆盖）
-  // 和顶层 schedule 图层（已弃用，AM/PM/EV 结构被 schedule_items 取代）。
+  // 点点图层候选：自定义 dot 图层（含日程类）、其他非外部数据源的 dot 图层、
+  // 以及内置 important（重要事件）。20260917 任务书 1.2-1：手机右抽屉只剩
+  // 「点点/涂色」两个入口，原「事件」按钮的职责并入这里。
+  // 不限 enabled（让用户能给隐藏中的图层添加内容），排除 jisilu_* 外部数据源
+  // （手动加会被同步覆盖）和顶层 schedule 图层（已弃用，AM/PM/EV 结构被 schedule_items 取代）。
   const SCHEDULE_CATEGORIES = ['work', 'course', 'sport', 'play', 'other']
   const dotLayers = layers.filter((l) =>
     l.kind === 'dot'
     && !l.layer_id.startsWith('jisilu_')
     && l.layer_id !== 'schedule',
   )
+  const importantLayer = layers.find((l) => l.layer_id === 'important')
   // 日程类点点图层：config.category 属于 5 种日程分类之一
   const scheduleCatLayers = dotLayers.filter((l) => {
     const cat = (l.config as Record<string, unknown>)?.category as string | undefined
@@ -677,7 +764,7 @@ export function DotEntryDialog({
     const cat = (l.config as Record<string, unknown>)?.category as string | undefined
     return !SCHEDULE_CATEGORIES.includes(cat ?? '')
   })
-  const firstOpt = scheduleCatLayers.find((l) => l.enabled) ?? otherDotLayers.find((l) => l.enabled) ?? scheduleCatLayers[0] ?? otherDotLayers[0]
+  const firstOpt = scheduleCatLayers.find((l) => l.enabled) ?? otherDotLayers.find((l) => l.enabled) ?? importantLayer ?? scheduleCatLayers[0] ?? otherDotLayers[0]
   const [targetLayer, setTargetLayer] = useState<string>(firstOpt?.layer_id ?? '')
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
@@ -686,6 +773,7 @@ export function DotEntryDialog({
   const targetCfg = layers.find((l) => l.layer_id === targetLayer)
   const targetCategory = (targetCfg?.config as Record<string, unknown>)?.category as string | undefined
   const isSchedule = SCHEDULE_CATEGORIES.includes(targetCategory ?? '')
+  const isImportantEvent = targetLayer === 'important'
   const targetColor = targetCfg?.color ?? '#3D6BFB'
 
   const saveMut = useMutation({
@@ -724,6 +812,13 @@ export function DotEntryDialog({
                 ))}
               </optgroup>
             )}
+            {importantLayer && (
+              <optgroup label="事件">
+                <option key={importantLayer.layer_id} value={importantLayer.layer_id}>
+                  {importantLayer.display_name}
+                </option>
+              </optgroup>
+            )}
             {otherDotLayers.length > 0 && (
               <optgroup label="其他">
                 {otherDotLayers.map((l) => (
@@ -736,12 +831,14 @@ export function DotEntryDialog({
           </select>
         </Field>
 
-        <div className="flex items-center gap-2">
-          <input type="time" className="tt-input w-[110px]" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-          <span className="text-gray-400 text-xs">至</span>
-          <input type="time" className="tt-input w-[110px]" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: targetColor }} title="图层颜色" />
-        </div>
+        {!isImportantEvent && (
+          <div className="flex items-center gap-2">
+            <input type="time" className="tt-input w-[110px]" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            <span className="text-gray-400 text-xs">至</span>
+            <input type="time" className="tt-input w-[110px]" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: targetColor }} title="图层颜色" />
+          </div>
+        )}
 
         <Field label="内容">
           <textarea

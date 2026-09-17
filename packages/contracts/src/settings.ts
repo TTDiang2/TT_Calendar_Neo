@@ -23,7 +23,7 @@ export const TodoBusyConfig = z.object({
   }),
   /** 长度必须 5，升序，对应档位 0..4 的下限 */
   thresholds: z.array(z.number()).length(5),
-  /** predict = 未来（琥珀）；done = 过去（钢蓝） */
+  /** predict = 未来（琥珀）；done = 过去（GitHub 贡献图绿系，20260917 任务书 1.2-5） */
   predict_colors: z.array(ColorHex).length(5),
   done_colors: z.array(ColorHex).length(5),
 })
@@ -48,7 +48,7 @@ export const DEFAULT_TODO_BUSY_CONFIG: TodoBusyConfig = {
   },
   thresholds: [0, 3, 8, 15, 25],
   predict_colors: ['#FEF3C7', '#FDE68A', '#FBBF24', '#F59E0B', '#B45309'],
-  done_colors: ['#E0E7FF', '#C7D2FE', '#818CF8', '#4F46E5', '#3730A3'],
+  done_colors: ['#EBEDF0', '#9BE9A8', '#40C463', '#30A14E', '#216E39'],
 }
 
 /** meta 表里的键名（同步时会一起走数据仓） */
