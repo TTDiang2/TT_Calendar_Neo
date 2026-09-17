@@ -101,7 +101,7 @@ async function computeDesired(): Promise<DesiredReminder[]> {
   let overdueFired = false
   try { overdueFired = localStorage.getItem('reminders.overdue.fired') === today } catch { /* 隐私模式 */ }
   if (overdue.length > 0 && !overdueFired) {
-    try { localStorage.setItem('reminders.overdue.fired', today) } catch { /* 同上 */ }
+    // 落键动作延后到 refreshReminders 调度成功之时（避免当天白耗一次补报）
     out.push({
       key: `overdue-${today}`,
       at: new Date(Date.now() + 5_000),
@@ -160,6 +160,7 @@ export async function refreshReminders(): Promise<{ scheduled: number } | null> 
     const desired = await computeDesired()
     await plugin.cancelAll()
     let scheduled = 0
+    let overdueScheduled = false
     for (const r of desired) {
       try {
         plugin.sendNotification({
@@ -168,9 +169,13 @@ export async function refreshReminders(): Promise<{ scheduled: number } | null> 
           schedule: plugin.Schedule.at(r.at),
         })
         scheduled += 1
+        if (r.key.startsWith('overdue-')) overdueScheduled = true
       } catch {
         /* 单条失败继续 */
       }
+    }
+    if (overdueScheduled) {
+      try { localStorage.setItem('reminders.overdue.fired', todayStr()) } catch { /* 隐私模式 */ }
     }
     return { scheduled }
   } catch {

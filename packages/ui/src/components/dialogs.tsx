@@ -427,7 +427,7 @@ export function SearchDialog({
         || (t.tags ?? []).some((tag) => tag.toLowerCase().includes(kw)),
       )
       .slice(0, 30)
-  }, [todos, trimmed])
+  }, [todos, debouncedQ])
 
 
   const searching = fetchingEvents || fetchingTodos

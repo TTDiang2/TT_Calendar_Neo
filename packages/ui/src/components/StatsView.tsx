@@ -253,6 +253,15 @@ export function StatsView({
       }))
   }, [data])
 
+  // 洞察推演必须在 early-return 之前挂 hook（智者 P0：hooks 顺序恒定，
+  // 否则 loading→data 切换时 React 抛「Rendered more hooks than during the previous render」）
+  const bestDay = useMemo(() => {
+    let best = { date: '', count: 0 }
+    for (const d of daily) if (d.count > best.count) best = { date: d.date, count: d.count }
+    return best
+  }, [daily])
+  const weekDone = useMemo(() => daily.slice(0, 7).reduce((s, d) => s + d.count, 0), [daily])
+
   if (isLoading || !data) {
     return <main className="flex-1 flex items-center justify-center text-gray-400">加载中…</main>
   }
@@ -262,12 +271,6 @@ export function StatsView({
   // 面板内容（桌面常驻栏 / 手机抽屉共用同一份 JSX）。
   // 20260917 智者 P2-17 按任务书 1.1-11 原意重构：清单范围降级为顶部一行 chips
   // （它本来就不该是左抽屉的主体），「洞察」升为主体内容。
-  const bestDay = useMemo(() => {
-    let best = { date: '', count: 0 }
-    for (const d of daily) if (d.count > best.count) best = { date: d.date, count: d.count }
-    return best
-  }, [daily])
-  const weekDone = useMemo(() => daily.slice(0, 7).reduce((s, d) => s + d.count, 0), [daily])
 
   const scopePanel = (
     <div className="flex flex-col flex-1 min-h-0">
