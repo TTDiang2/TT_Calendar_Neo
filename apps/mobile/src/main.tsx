@@ -7,6 +7,7 @@ import { ErrorBoundary } from '@tt-calendar/ui/components/ErrorBoundary'
 import { createLocalBackend } from './local/backend'
 import { bootLog, bootLogSettle } from './boot-log'
 import { refreshWidgetSnapshot, startWidgetRefresh } from './widget-bridge'
+import { nudgeReminders, startReminders } from './reminders'
 
 // 启动期兜底诊断：任何未捕获 rejection / 脚本错误都必须留痕上屏，
 // 否则真机上就是一张没有线索的白屏（2026-09-13 卡点排查教训）
@@ -188,6 +189,8 @@ async function bootInner(): Promise<void> {
           onSynced: () => {
             void queryClient.invalidateQueries()
             setTimeout(() => void refreshWidgetSnapshot(), 150)
+            // 数据有变 → 重排系统提醒（节流见 reminders.ts）
+            nudgeReminders()
           },
         }),
       )
@@ -199,6 +202,8 @@ async function bootInner(): Promise<void> {
     // 主屏小组件数据桥：数据就绪后先推一次，并启动周期刷新
     void refreshWidgetSnapshot()
     startWidgetRefresh()
+    // 系统提醒调度（20260917 任务书 1.2-6）：到期待办 / 重要日期的 iOS 本地通知
+    startReminders()
   }
   root.innerHTML = ''
   bootLog('root cleared; React render start')

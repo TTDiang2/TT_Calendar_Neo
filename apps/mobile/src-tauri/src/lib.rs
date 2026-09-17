@@ -14,6 +14,8 @@ fn export_widget_snapshot(payload: String) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 本地通知插件（20260917 任务书 1.2-6：待办到期/重要日期的系统提醒）
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![export_widget_snapshot])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
