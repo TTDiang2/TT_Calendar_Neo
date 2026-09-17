@@ -302,6 +302,8 @@ export const TodoView = forwardRef<TodoViewHandle, {
     setManualOrder(null)
   }
 
+  // roomy：手机端抽屉里的大行距 + 操作按钮常显（触屏没有 hover，hover-only
+  // 按钮等于永远不可见——20260917 任务书 1.1-5 抽屉手机化）
   const listManager = (
     <TodoListManager
       lists={lists}
@@ -310,6 +312,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
       selectedList={selectedList}
       onSelect={selectList}
       onDefaultList={setDefaultList}
+      roomy
     />
   )
 
@@ -843,6 +846,7 @@ function TodoListManager({
   selectedList,
   onSelect,
   onDefaultList,
+  roomy = false,
 }: {
   lists: TodoList[]
   statsIncomplete?: number
@@ -850,6 +854,7 @@ function TodoListManager({
   selectedList: string | null
   onSelect: (id: string | null) => void
   onDefaultList: (id: string | null) => void
+  roomy?: boolean
 }) {
   const qc = useQueryClient()
   const [creatingList, setCreatingList] = useState(false)
@@ -891,7 +896,8 @@ function TodoListManager({
       <button
         onClick={() => onSelect(null)}
         className={clsx(
-          'flex items-center justify-between px-2 py-1.5 rounded-md text-sm mb-1',
+          'flex items-center justify-between rounded-xl text-sm mb-1',
+          roomy ? 'px-2.5 py-3' : 'px-2 py-1.5 rounded-md',
           selectedList === null ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
         )}
       >
@@ -922,7 +928,8 @@ function TodoListManager({
               reorderListMut.mutate(ids)
             }}
             className={clsx(
-              'group flex items-center justify-between px-2 py-1.5 rounded-md text-sm cursor-pointer mb-0.5 transition-colors select-none',
+              'group flex items-center justify-between rounded-xl text-sm cursor-pointer mb-0.5 transition-colors select-none',
+              roomy ? 'px-2.5 py-3' : 'px-2 py-1.5 rounded-md',
               selectedList === l.id ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-100',
             )}
             onClick={() => onSelect(l.id)}
@@ -951,21 +958,21 @@ function TodoListManager({
               {counts.get(l.id) ? <span className="text-xs text-gray-400">{counts.get(l.id)}</span> : null}
               <button
                 onClick={(e) => { e.stopPropagation(); onDefaultList(isDefault ? null : l.id) }}
-                className={isDefault ? 'text-amber-400' : 'opacity-0 group-hover:opacity-100 text-gray-300 hover:text-amber-400'}
+                className={clsx('text-gray-300 hover:text-amber-400', isDefault ? 'text-amber-400' : roomy ? '' : 'opacity-0 group-hover:opacity-100')}
                 title={isDefault ? '取消默认' : '设为默认列表'}
               >
                 <Star size={12} fill={isDefault ? 'currentColor' : 'none'} />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setRenamingListId(l.id); setRenameDraft(l.display_name) }}
-                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-pink-500"
+                className={clsx('text-gray-400 hover:text-pink-500', !roomy && 'opacity-0 group-hover:opacity-100')}
                 title="重命名"
               >
                 <Pencil size={12} />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); if (confirm(`删除列表「${l.display_name}」及其所有待办？`)) deleteListMut.mutate(l.id) }}
-                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500"
+                className={clsx('text-gray-400 hover:text-red-500', !roomy && 'opacity-0 group-hover:opacity-100')}
               >
                 <Trash2 size={12} />
               </button>
@@ -989,7 +996,7 @@ function TodoListManager({
           />
         </div>
       ) : (
-        <button onClick={() => setCreatingList(true)} className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-400 hover:text-gray-600 mt-1">
+        <button onClick={() => setCreatingList(true)} className={clsx('flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 mt-1 rounded-xl hover:bg-black/[0.03]', roomy ? 'px-2.5 py-3' : 'px-2 py-1.5')}>
           <ListPlus size={14} /> 新建列表
         </button>
       )}
