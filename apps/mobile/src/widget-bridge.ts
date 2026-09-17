@@ -56,10 +56,12 @@ async function buildSnapshot(): Promise<WidgetSnapshot> {
     }
   }
 
-  // 本月涂色：取涂色图层（coloring_level）非空的日子
+  // 本月完成热力：待办已完成档位（20260917 任务书 1.2-4/1.2-5——充实度退出默认后，
+  // 小组件的热力口径切换到「待办完成」并沿用其 GitHub 绿色阶；day.done_level 由
+  // 后端 day_busy 派生，1-4 档直接可用）
   const coloring = monthView.days
-    .filter((d) => d.coloring_level != null)
-    .map((d) => ({ date: d.date, level: d.coloring_level as number }))
+    .filter((d) => d.done_level != null)
+    .map((d) => ({ date: d.date, level: d.done_level as number }))
 
   return {
     generatedAt: new Date().toISOString(),

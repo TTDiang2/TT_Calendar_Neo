@@ -238,15 +238,16 @@ struct TTCCountdownWidget: Widget {
     }
 }
 
-// ── 本月涂色小组件（当月热力网格） ────────────────────────────────────
+// ── 本月完成小组件（当月待办完成热力网格） ────────────────────────────
 
-/// 与前端 COLORING_COLORS 一致的 5 档绿色
+/// 与前端 TODO_BUSY_DONE_COLORS 一致的 5 档 GitHub 绿（20260917 任务书 1.2-5：
+/// 已完成色阶统一为贡献图绿；充实度退出默认后热力口径切换为待办完成）
 private let coloringPalette = [
-    Color(red: 0.945, green: 0.973, blue: 0.957),
-    Color(red: 0.784, green: 0.902, blue: 0.788),
-    Color(red: 0.506, green: 0.780, blue: 0.518),
-    Color(red: 0.220, green: 0.557, blue: 0.235),
-    Color(red: 0.106, green: 0.369, blue: 0.125),
+    Color(red: 0.922, green: 0.929, blue: 0.941),
+    Color(red: 0.608, green: 0.914, blue: 0.659),
+    Color(red: 0.251, green: 0.769, blue: 0.388),
+    Color(red: 0.188, green: 0.631, blue: 0.306),
+    Color(red: 0.129, green: 0.431, blue: 0.224),
 ]
 
 struct ColoringWidgetView: View {
@@ -270,8 +271,8 @@ struct ColoringWidgetView: View {
             HStack(spacing: 4) {
                 Image(systemName: "paintpalette")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.pink)
-                Text("本月涂色")
+                    .foregroundColor(.green)
+                Text("本月完成")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 Spacer(minLength: 0)
@@ -311,8 +312,8 @@ struct TTCColoringWidget: Widget {
                 ColoringWidgetView(entry: entry)
             }
         }
-        .configurationDisplayName("本月涂色")
-        .description("当月充实度热力图")
+        .configurationDisplayName("本月完成")
+        .description("当月待办完成热力图")
         .supportedFamilies([.systemMedium])
     }
 }
