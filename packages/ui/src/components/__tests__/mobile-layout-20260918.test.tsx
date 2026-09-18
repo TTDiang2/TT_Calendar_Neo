@@ -7,13 +7,13 @@
  *    复杂度/标签/闹钟 一起带给 createTodo（1.3-4 + 1.3-5 alarm_at）
  * 渲染级断言（jsdom）兜住 JSX 结构与回调接线；动画与视觉由真机/预览人工确认。
  */
-import { describe, expect, it, vi, beforeAll } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi, beforeAll, afterEach } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { setBackend, type BackendAdapter } from '../../adapt/api'
 import { MonthGrid } from '../MonthGrid'
-import { QuickAddSheet } from '../TodoView'
+import { QuickAddSheet, TodoView } from '../TodoView'
 import type { Day, MonthData, Todo } from '../../adapt/types'
 
 vi.mock('../../anim', () => ({
@@ -21,6 +21,10 @@ vi.mock('../../anim', () => ({
   animSheetUp: () => {},
   animEnter: () => {},
 }))
+
+// vitest globals:false 下 RTL 不会自动注册 afterEach 清理，portal 到 body 的
+// 浮层（QuickAddSheet 等）会泄漏进后续用例——必须显式 cleanup
+afterEach(cleanup)
 
 // jsdom 没有 matchMedia；这里让「手机竖屏」断点命中，MonthGrid 走 Mobile 分支
 beforeAll(() => {
@@ -156,5 +160,59 @@ describe('快速新增待办 · 更多选项（1.3-4 / 1.3-5）', () => {
       status: 'notStarted',
     })
     expect(onClose).not.toHaveBeenCalled()
+  })
+})
+
+describe('桌面新建待办 · 闹钟不丢（智者 P1 返工回归）', () => {
+  // 这次断链的教训：QuickAddSheet 路径有测试、TodoDetailPanel 幻影新建路径没有——
+  // TodoView onSave 新建分支手工列字段漏了 alarm_at，TS 因可选字段不报错。
+  // 本测试走完整链路：点「新建待办」→ 幻影详情表单设闹钟 → 保存 → createTodo payload。
+  it('幻影新建设了闹钟，保存后 createTodo 必须带上 alarm_at', async () => {
+    const createTodoSpy = vi.fn(async (data: Record<string, unknown>) => ({ id: 'new1', ...data }))
+    setBackend({
+      getTodoLists: async () => [{ id: 'l1', display_name: '任务', sort_order: 0, created_at: null }],
+      getTodoStats: async () => ({ total: 0, incomplete: 0, completed: 0 }),
+      getTodos: async () => [],
+      createTodoList: async (name: string) => ({ id: 'l1', display_name: name, sort_order: 0, created_at: null }),
+      createTodo: createTodoSpy,
+    } as unknown as BackendAdapter)
+
+    render(
+      <TodoView
+        viewMode="list"
+        onViewModeChange={() => {}}
+        listsDrawerOpen={false}
+        onListsDrawerOpenChange={() => {}}
+        onDetailOpenChange={() => {}}
+      />,
+      { wrapper },
+    )
+
+    // 等清单查询就绪（否则 ensureList 走建清单分支，幻影不开）
+    await screen.findByText('任务')
+
+    // 桌面工具行的「新建待办」（jsdom 不执行 CSS，hidden 元素同样可点）
+    fireEvent.click(await screen.findByText('新建待办'))
+
+    // 幻影新建：先点标题进入编辑（手机分支的编辑 textarea 是全页唯一 textarea）
+    fireEvent.click(await screen.findByText('点这里输入标题…'))
+    const titleBox = document.querySelector('textarea') as HTMLTextAreaElement
+    expect(titleBox).not.toBeNull()
+    fireEvent.change(titleBox, { target: { value: '加班' } })
+
+    // 点「闹钟」行进入编辑态，填精确时刻
+    fireEvent.click(screen.getByText('闹钟'))
+    const alarmInput = document.querySelector('input[type="datetime-local"]') as HTMLInputElement
+    expect(alarmInput).not.toBeNull()
+    fireEvent.change(alarmInput, { target: { value: '2026-09-20T07:00' } })
+
+    fireEvent.click(screen.getByText('保存'))
+    await waitFor(() => expect(createTodoSpy).toHaveBeenCalledTimes(1))
+    const payload = createTodoSpy.mock.calls[0]![0] as Record<string, unknown>
+    expect(payload).toMatchObject({
+      list_id: 'l1',
+      title: '加班',
+      alarm_at: '2026-09-20T07:00',
+    })
   })
 })

@@ -51,6 +51,7 @@ if (sets.length === 0) {
 }
 
 let totalCopied = 0
+const mainAppMissing = [] // 主 App 的 iconset 失配 = 硬失败；小组件扩展只告警
 for (const set of sets) {
   const manifestPath = join(set, 'Contents.json')
   if (!existsSync(manifestPath)) {
@@ -74,10 +75,21 @@ for (const set of sets) {
   const rel = set.replace(genDir, 'gen/apple')
   console.log(`[patch-ios-icons] ${rel}: 覆盖 ${copied}/${filenames.length} 枚图标`)
   if (missing.length > 0) {
-    console.warn(`[patch-ios-icons] ⚠️ ${rel} 引用了源目录没有的文件（保持原样）：${missing.join(', ')}`)
+    // 主 App 图标不齐会打出「混合默认图标」的包且肉眼难察觉，必须硬失败；
+    // 小组件扩展的 iconset（路径含 TTWidget）缺图只影响小组件画廊缩略图，告警即可
+    if (rel.includes('TTWidget')) {
+      console.warn(`[patch-ios-icons] ⚠️ ${rel}（小组件扩展）引用了源目录没有的文件（保持原样）：${missing.join(', ')}`)
+    } else {
+      mainAppMissing.push(...missing.map((n) => `${rel} 缺 ${n}`))
+    }
   }
 }
 
+if (mainAppMissing.length > 0) {
+  console.error('[patch-ios-icons] 主 App 图标有缺失，中止构建以防静默出混合默认图标包：')
+  for (const m of mainAppMissing) console.error(`  - ${m}`)
+  process.exit(1)
+}
 if (totalCopied === 0) {
   console.error('[patch-ios-icons] 一枚图标都没覆盖成——工程 Contents.json 与 icons/ios 文件名完全对不上，中止构建以免静默出默认图标包。')
   process.exit(1)

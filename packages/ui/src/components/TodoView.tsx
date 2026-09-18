@@ -576,6 +576,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
               complexity: data.complexity,
               tags: data.tags,
               status: data.status,
+              alarm_at: data.alarm_at,
             })
           } else {
             updateMut.mutate({ id: data.id, data: { ...data, id: data.id } })

@@ -156,6 +156,8 @@ CREATE TABLE IF NOT EXISTS sync_tombstones(
  * 增量列（已存在的老库补列）：基线 CREATE IF NOT EXISTS 对已存在的表不生效，
  * 新列只能走 ALTER。SQL 侧没有 PRAGMA 依赖（sql.js shim 兼容），重复列报错
  * 直接吞掉即幂等。新列加进 schema.ts 的同时必须在这里登记。
+ * 兜底依赖：若 ALTER 因真故障（表锁/权限）被吞，后续首条含新列的写入会
+ * 「响亮失败」而非静默丢数据——故障不会被这个 catch 掩埋到用户无感。
  */
 const ENSURE_COLUMNS: { table: string; ddl: string }[] = [
   { table: 'todo', ddl: 'ALTER TABLE todo ADD COLUMN alarm_at TEXT' },

@@ -89,8 +89,11 @@ async function collectImportantEvents(today: string): Promise<CalEvent[]> {
 async function computeDesired(): Promise<DesiredReminder[]> {
   const today = todayStr()
   const horizon = fmt(addDays(new Date(), 7))
-  const [open, importantEvents] = await Promise.all([
+  const [open, allNonDone, importantEvents] = await Promise.all([
     getTodos({ status: 'notStarted', sort: 'due_importance', limit: 500 }),
+    // 闹钟（1.3-5）要覆盖所有未完成状态：用户给「进行中/等待他人/已推迟」
+    // 的待办显式设的闹钟也必须响（智者 P2-3）
+    getTodos({ status: 'all', sort: 'due_importance', limit: 500 }),
     collectImportantEvents(today),
   ])
 
@@ -122,7 +125,9 @@ async function computeDesired(): Promise<DesiredReminder[]> {
   // 逐条闹钟（20260918 任务书 1.3-5）：todo.alarm_at 是用户显式设的精确时刻
   // （datetime-local 本地时间）。iOS 不开放时钟 App 的闹钟 API，定时本地通知是
   // 最接近「闹钟」的合法实现——到点即使 App 不在前台也会由系统弹出。
-  for (const t of open) {
+  // 覆盖全部非 completed 状态（inProgress/等待他人/已推迟也算）。
+  for (const t of allNonDone) {
+    if (t.status === 'completed') continue
     if (!t.alarm_at || out.length >= MAX_SCHEDULED) continue
     const [dPart, tPart] = t.alarm_at.split('T')
     if (!dPart || !tPart) continue
