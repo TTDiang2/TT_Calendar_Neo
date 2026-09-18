@@ -54,6 +54,8 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
   const [notesModalOpen, setNotesModalOpen] = useState(false)
   const [listId, setListId] = useState('')
   const [status, setStatus] = useState<Todo['status']>('notStarted')
+  // 闹钟（20260918 任务书 1.3-5）：到点弹系统通知（iOS 不开放时钟 App 的闹钟 API）
+  const [alarmAt, setAlarmAt] = useState('')
   const [dueExpanded, setDueExpanded] = useState(false)
   // 手机查看优先模式：当前进入编辑态的字段（null = 纯浏览，不渲染输入框不弹输入法）
   const [editing, setEditing] = useState<string | null>(null)
@@ -75,8 +77,8 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
     prevOpenRef.current = open
   }, [todo?.id, isDesktop])
 
-  const formRef = useRef({ title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status })
-  formRef.current = { title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status }
+  const formRef = useRef({ title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status, alarmAt })
+  formRef.current = { title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status, alarmAt }
 
   const savingRef = useRef(false)
   const [saving, setSaving] = useState(false)
@@ -111,7 +113,8 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         f.complexity !== (target.complexity || 'medium') ||
         JSON.stringify(tags) !== JSON.stringify(target.tags ?? []) ||
         f.listId !== target.list_id ||
-        f.status !== target.status
+        f.status !== target.status ||
+        (f.alarmAt || '') !== (target.alarm_at ?? '')
       if (!changed) return
     }
     onSaveRef.current({
@@ -126,6 +129,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
       tags: tags.length ? tags : null,
       list_id: f.listId,
       status: f.status,
+      alarm_at: f.alarmAt || null,
     })
   }
 
@@ -149,6 +153,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         tagsText: (todo.tags ?? []).join(', '),
         listId: todo.list_id,
         status: todo.status,
+        alarmAt: todo.alarm_at ?? '',
       }
       setTitle(todo.title)
       setBody(todo.body ?? '')
@@ -160,6 +165,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
       setTagsText((todo.tags ?? []).join(', '))
       setListId(todo.list_id)
       setStatus(todo.status)
+      setAlarmAt(todo.alarm_at ?? '')
       setDueExpanded(false)
       setPlannedExpanded(false)
       setEditing(null)
@@ -214,6 +220,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
     tags: tags.length ? tags : null,
     list_id: listId,
     status,
+    alarm_at: alarmAt || null,
   })
 
   // 显式保存：自己提交一次，再用 skipFlushRef 让紧随其后的 cleanup 别重复提交
@@ -312,6 +319,28 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
           </select>
         </label>
       </div>
+
+      {/* 闹钟（1.3-5）：到点由系统通知提醒；留空 = 不设闹钟 */}
+      <label className="text-xs text-gray-500 block">
+        <span className="block mb-1">闹钟（到点弹系统通知，留空不设）</span>
+        <div className="flex gap-1">
+          <input
+            type="datetime-local"
+            className="tt-input flex-1"
+            value={alarmAt}
+            onChange={(e) => setAlarmAt(e.target.value)}
+          />
+          {alarmAt && (
+            <button
+              type="button"
+              onClick={() => setAlarmAt('')}
+              className="px-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md"
+            >
+              清除
+            </button>
+          )}
+        </div>
+      </label>
 
       <label className="text-xs text-gray-500 block">
         <span className="block mb-1">标签（逗号分隔，自定义）</span>
@@ -503,6 +532,25 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
             ))}
           </select>
         ))}
+        {metaRow('alarm', '闹钟', alarmAt ? alarmAt.replace('T', ' ') : '无', (
+          <div className="flex gap-1">
+            <input
+              type="datetime-local"
+              className="tt-input flex-1"
+              value={alarmAt}
+              onChange={(e) => setAlarmAt(e.target.value)}
+            />
+            {alarmAt && (
+              <button
+                type="button"
+                onClick={() => setAlarmAt('')}
+                className="px-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md flex-shrink-0"
+              >
+                清除
+              </button>
+            )}
+          </div>
+        ))}
         {metaRow(
           'tags',
           '标签',
@@ -570,7 +618,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
       <div className="fixed inset-0 z-[39] bg-black/30" onClick={onClose} />
       <aside
         ref={panelRef}
-        className="glass-sheet fixed inset-y-0 right-0 z-40 w-[320px] max-w-[88vw] rounded-l-3xl flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]"
+        className="glass-sheet fixed inset-y-0 right-0 z-40 w-[320px] max-w-[88vw] rounded-l-3xl flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
         onKeyDown={onKeyDownSave}
       >
         {header}

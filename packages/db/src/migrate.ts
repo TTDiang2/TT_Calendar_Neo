@@ -132,7 +132,8 @@ CREATE TABLE IF NOT EXISTS todo(
   complexity TEXT DEFAULT 'medium',
   tags TEXT,
   planned_date TEXT,
-  updated_at TEXT
+  updated_at TEXT,
+  alarm_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_todo_list ON todo(list_id);
 CREATE INDEX IF NOT EXISTS idx_todo_due ON todo(due_date);
@@ -151,6 +152,22 @@ CREATE TABLE IF NOT EXISTS sync_tombstones(
 );
 `
 
+/**
+ * 增量列（已存在的老库补列）：基线 CREATE IF NOT EXISTS 对已存在的表不生效，
+ * 新列只能走 ALTER。SQL 侧没有 PRAGMA 依赖（sql.js shim 兼容），重复列报错
+ * 直接吞掉即幂等。新列加进 schema.ts 的同时必须在这里登记。
+ */
+const ENSURE_COLUMNS: { table: string; ddl: string }[] = [
+  { table: 'todo', ddl: 'ALTER TABLE todo ADD COLUMN alarm_at TEXT' },
+]
+
 export function ensureSchema(sqlite: Database.Database): void {
   sqlite.exec(BASELINE)
+  for (const c of ENSURE_COLUMNS) {
+    try {
+      sqlite.exec(c.ddl)
+    } catch {
+      /* 列已存在：幂等跳过 */
+    }
+  }
 }

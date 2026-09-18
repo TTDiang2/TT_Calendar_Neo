@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlarmClock, CalendarClock, Infinity as InfinityIcon, Plus, Repeat, Sparkles } from 'lucide-react'
 import clsx from 'clsx'
 import { getCountdownList, createCountdown, updateCountdown, deleteCountdown } from '../adapt/api'
 import type { CountdownItem } from '../adapt/types'
+import { animSheetUp } from '../anim'
 
 const CATEGORY_COLORS: Record<string, string> = {
   生日: '#f472b6',
@@ -164,30 +165,51 @@ export function CountdownView() {
           }
         }}
       />
-      {/* 手机（<lg）：点卡片后底部弹层编辑 */}
+      {/* 手机（<lg）：点卡片后底部弹层编辑（上滑入场 + 底部安全区，20260918 任务书 1.2-3/1.2-5） */}
       {selected && (
-        <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setSelectedId(null)} />
-          <div className="relative">
-            <CountdownDetailPanel
-              item={selected}
-              variant="sheet"
-              onClose={() => setSelectedId(null)}
-              onSave={(data, id) => {
-                if (id) updateMut.mutate({ id, data })
-                else createMut.mutate(data)
-                setSelectedId(null)
-              }}
-              onDelete={(id) => {
-                if (confirm('删除该倒数日？')) {
-                  deleteMut.mutate(id)
-                  setSelectedId(null)
-                }
-              }}
-            />
-          </div>
-        </div>
+        <CountdownEditSheet
+          item={selected}
+          onClose={() => setSelectedId(null)}
+          onSave={(data, id) => {
+            if (id) updateMut.mutate({ id, data })
+            else createMut.mutate(data)
+            setSelectedId(null)
+          }}
+          onDelete={(id) => {
+            if (confirm('删除该倒数日？')) {
+              deleteMut.mutate(id)
+              setSelectedId(null)
+            }
+          }}
+        />
       )}
+    </div>
+  )
+}
+
+/** 手机端倒数日编辑底部弹层：动画与安全区收在这里，保持与统一新建 sheet 一致的手感 */
+function CountdownEditSheet({ item, onClose, onSave, onDelete }: {
+  item: CountdownItem
+  onClose: () => void
+  onSave: Parameters<typeof CountdownDetailPanel>[0]['onSave']
+  onDelete: (id: number) => void
+}) {
+  const sheetRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    animSheetUp(sheetRef.current)
+  }, [])
+  return (
+    <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div ref={sheetRef} className="relative pb-[env(safe-area-inset-bottom)]">
+        <CountdownDetailPanel
+          item={item}
+          variant="sheet"
+          onClose={onClose}
+          onSave={onSave}
+          onDelete={onDelete}
+        />
+      </div>
     </div>
   )
 }

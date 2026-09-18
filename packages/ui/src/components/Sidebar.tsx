@@ -27,7 +27,9 @@ export function Sidebar({ layers, onToggle, countdown }: Props) {
 /* 手机：左侧滑出抽屉（dock 左按钮唤出），液态玻璃材质 + 弹簧滑入。
    20260916 任务书：设置不再占 Top Bar，收进本抽屉底部的「设置」入口；
    20260917 任务书：综合搜索入口也收进本抽屉（Top Bar 移除后搜索的新家），
-   行高/开关放大到手机触控标准（1.1-5 抽屉手机化） */
+   行高/开关放大到手机触控标准（1.1-5 抽屉手机化）。
+   20260918 任务书 1.2-2/1.2-3：顶部避让灵动岛；中间内容整段可滚，
+   「设置」固定在抽屉最底部常驻可见——不再和倒计时卡挤在一起。 */
 export function MobileLayersDrawer({
   open,
   onClose,
@@ -45,8 +47,11 @@ export function MobileLayersDrawer({
   return (
     <div className="fixed inset-0 z-50 md:hidden">
       <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={onClose} />
-      <aside ref={panelRef} className="glass-sheet absolute inset-y-0 left-0 w-[300px] max-w-[86vw] rounded-r-3xl p-4 pt-3 overflow-y-auto flex flex-col">
-        <div className="flex items-center justify-between mb-2">
+      <aside
+        ref={panelRef}
+        className="glass-sheet absolute inset-y-0 left-0 w-[300px] max-w-[86vw] rounded-r-3xl p-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden flex flex-col"
+      >
+        <div className="flex items-center justify-between mb-2 flex-shrink-0">
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">图层</h2>
           <button
             onClick={onClose}
@@ -57,22 +62,27 @@ export function MobileLayersDrawer({
           </button>
         </div>
 
-        {/* 综合搜索入口（1.1-1）：事件 + 待办一把搜 */}
-        {onOpenSearch && (
-          <button
-            onClick={onOpenSearch}
-            className="mb-3 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/80 border border-black/5 shadow-sm text-sm text-gray-400 active:bg-pink-50 active:text-pink-600 transition-colors"
-          >
-            <Search size={15} className="text-pink-500" />
-            搜索事件、待办…
-          </button>
-        )}
+        {/* 可滚动主体：搜索 / 图层树 / 倒计时卡（自然流式排列，不再钉底） */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {/* 综合搜索入口（1.1-1）：事件 + 待办一把搜 */}
+          {onOpenSearch && (
+            <button
+              onClick={onOpenSearch}
+              className="mb-3 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/80 border border-black/5 shadow-sm text-sm text-gray-400 active:bg-pink-50 active:text-pink-600 transition-colors"
+            >
+              <Search size={15} className="text-pink-500" />
+              搜索事件、待办…
+            </button>
+          )}
 
-        <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} showSubscriptions={false} roomy />
+          <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} showSubscriptions={false} roomy />
+        </div>
+
+        {/* 设置：固定底部（1.2-2），与滚动内容用发丝线分隔 */}
         {onOpenSettings && (
           <button
             onClick={onOpenSettings}
-            className="mt-auto flex items-center gap-2 px-2 py-3 text-[15px] text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl mb-2 transition-colors"
+            className="flex-shrink-0 mt-2 pt-1 border-t border-black/5 flex items-center gap-2 px-2 py-3 text-[15px] text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl transition-colors"
           >
             <Settings size={17} className="text-gray-400" /> 设置
           </button>

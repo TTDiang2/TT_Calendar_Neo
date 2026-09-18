@@ -668,7 +668,7 @@ export function StatsView({
       {scopeOpen && createPortal(
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={() => onScopeOpenChange(false)} />
-          <div ref={scopeDrawerRef} className="glass-sheet absolute inset-y-0 left-0 w-[300px] max-w-[86vw] rounded-r-3xl p-3 pt-3 overflow-y-auto flex flex-col">
+          <div ref={scopeDrawerRef} className="glass-sheet absolute inset-y-0 left-0 w-[300px] max-w-[86vw] rounded-r-3xl p-3 pt-[max(0.75rem,env(safe-area-inset-top))] overflow-y-auto flex flex-col">
             <div className="flex items-center justify-between mb-2 pl-1">
               <h2 className="text-base font-bold text-gray-800">统计与洞察</h2>
               <button onClick={() => onScopeOpenChange(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl" aria-label="关闭">×</button>
@@ -691,7 +691,7 @@ export function StatsView({
       {milestonesOpen && createPortal(
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={() => onMilestonesOpenChange(false)} />
-          <aside ref={milestonesDrawerRef} className="glass-sheet absolute inset-y-0 right-0 w-[320px] max-w-[88vw] rounded-l-3xl p-4 pt-3 overflow-y-auto flex flex-col">
+          <aside ref={milestonesDrawerRef} className="glass-sheet absolute inset-y-0 right-0 w-[320px] max-w-[88vw] rounded-l-3xl p-4 pt-[max(0.75rem,env(safe-area-inset-top))] overflow-y-auto flex flex-col">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base font-bold text-gray-800 flex items-center gap-1.5">
                 <Trophy size={16} className="text-amber-400" /> 里程碑

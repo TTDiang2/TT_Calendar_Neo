@@ -12,7 +12,7 @@ import { TodoKanbanView } from './todo/TodoKanbanView'
 import { TodoGanttView } from './todo/TodoGanttView'
 import { TodoJarView } from './todo/TodoJarView'
 import { TodoStickiesView } from './todo/TodoStickiesView'
-import { animDrawerIn } from '../anim'
+import { animDrawerIn, animSheetUp } from '../anim'
 
 const SORT_OPTIONS: { key: TodoSort; label: string }[] = [
   { key: 'manual', label: '手动排序' },
@@ -322,56 +322,96 @@ export const TodoView = forwardRef<TodoViewHandle, {
 
       {/* 中任务区 */}
       <div className="flex-1 flex flex-col p-2 md:p-4 overflow-hidden min-w-0">
-        {/* 20260917 任务书 1.1-9：原三行（清单提示 / 排序筛选 / 新建待办）并为一行；
-            新建待办撤出工具行（手机统一走右下角 FAB，桌面按钮保留）。视图切换在
-            手机端也收进本行（Top Bar 移除后的新家），用下拉保持紧凑。 */}
-        <div className="flex items-center gap-2 mb-2 md:mb-3 flex-shrink-0 flex-wrap">
-          <button
-            onClick={() => onListsDrawerOpenChange(true)}
-            className="md:hidden pressable flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-full bg-white/70 border border-white/80 text-gray-700 shadow-sm active:bg-pink-50 transition-colors flex-shrink-0"
-            aria-label="切换待办清单"
-          >
-            <FolderOpen size={14} className="text-pink-500" />
-            <span className="font-medium max-w-[88px] truncate">{currentListName}</span>
-            <span className="text-[11px] text-gray-400">{stats?.incomplete ?? ''}</span>
-          </button>
-          {/* 不加 overflow-x-auto：一轴 auto 会把另一轴的 visible 算成 auto，
-              FilterSelect 的 absolute 下拉会被裁进行高里（20260916 智者 P0-4） */}
-          <div className="flex items-center gap-1.5 md:gap-3 min-w-0">
-            <FilterSelect
-              label="排序"
-              value={sort}
-              options={SORT_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}
-              onChange={(v) => { setSort(v as TodoSort); setManualOrder(null) }}
-            />
-            {allTags.length > 0 && (
-              <FilterSelect
-                label="筛选"
-                value={tagFilter}
-                options={[{ value: '', label: '全部标签' }, ...allTags.map((t) => ({ value: t, label: t }))]}
-                onChange={(v) => { setTagFilter(v); setManualOrder(null) }}
-              />
-            )}
-            {/* 手机端视图切换（md:hidden）：Top Bar 移除后收进工具行 */}
-            <div className="md:hidden">
-              <FilterSelect
-                label="视图"
-                value={viewMode}
-                options={MOBILE_TODO_VIEWS.map((o) => ({ value: o.key, label: o.label }))}
-                onChange={(v) => onViewModeChange?.(v as TodoViewMode)}
-              />
+        {/* 手机端头部（20260918 任务书 1.2-1）：对齐日历 MobileCalendarBar 的布局语言——
+            左侧大标题 = 当前清单（点击开清单抽屉）；右侧 = 视图切换胶囊组（对应日历的
+            月/日/年/倒数）+「全部」粉色胶囊（对应日历「今天」的复位位）。
+            排序 / 筛选各自独占一行，行高放宽，布局从容。桌面（md+）保持原工具行。 */}
+        <div className="md:hidden flex flex-col gap-1.5 mb-2 flex-shrink-0">
+          <div className="flex items-center justify-between gap-1">
+            <button
+              onClick={() => onListsDrawerOpenChange(true)}
+              className="flex items-center gap-1 min-w-0 text-left active:opacity-60 transition-opacity"
+              aria-label="切换待办清单"
+            >
+              <FolderOpen size={18} className="text-pink-500 flex-shrink-0" />
+              <span className="text-[19px] font-bold text-gray-900 truncate">{currentListName}</span>
+              {stats?.incomplete != null && (
+                <span className="text-xs text-gray-400 tabular-nums flex-shrink-0">{stats.incomplete}</span>
+              )}
+            </button>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="inline-flex rounded-full border border-black/5 bg-white/60 p-0.5">
+                {MOBILE_TODO_VIEWS.map((m) => (
+                  <button
+                    key={m.key}
+                    onClick={() => onViewModeChange?.(m.key as TodoViewMode)}
+                    className={clsx(
+                      'px-2 py-1 text-xs rounded-full transition whitespace-nowrap',
+                      viewMode === m.key
+                        ? 'bg-white text-gray-900 shadow-sm font-semibold'
+                        : 'text-gray-500 active:text-gray-700',
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              {/* 「全部」：复位清单筛选（与日历「今天」同位同语义级别的快捷复位） */}
+              <button
+                onClick={() => selectList(null)}
+                aria-pressed={selectedList === null}
+                className={clsx(
+                  'px-2.5 py-1 text-xs font-semibold rounded-full transition-colors flex-shrink-0',
+                  selectedList === null
+                    ? 'text-white bg-pink-500 shadow-sm shadow-pink-500/30'
+                    : 'text-pink-600 bg-pink-50 active:bg-pink-100',
+                )}
+              >
+                全部
+              </button>
             </div>
           </div>
-          <div className="hidden md:flex items-center gap-2 flex-shrink-0 ml-auto">
-            {/* CSV 导入桌面专属：手机文件选择器体验边缘，与移动瘦身方针一致（20260916 智者 P2-8） */}
-            <label className="hidden md:flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer" title="CSV 导入">
+          <FilterRow
+            label="排序"
+            value={sort}
+            options={SORT_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}
+            onChange={(v) => { setSort(v as TodoSort); setManualOrder(null) }}
+          />
+          {allTags.length > 0 && (
+            <FilterRow
+              label="筛选"
+              value={tagFilter}
+              options={[{ value: '', label: '全部标签' }, ...allTags.map((t) => ({ value: t, label: t }))]}
+              onChange={(v) => { setTagFilter(v); setManualOrder(null) }}
+            />
+          )}
+        </div>
+
+        {/* 桌面工具行（md+，桌面零变化红线）：排序 / 筛选 / CSV 导入 / 新建待办 */}
+        <div className="hidden md:flex items-center gap-3 mb-3 flex-shrink-0">
+          <FilterSelect
+            label="排序"
+            value={sort}
+            options={SORT_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}
+            onChange={(v) => { setSort(v as TodoSort); setManualOrder(null) }}
+          />
+          {allTags.length > 0 && (
+            <FilterSelect
+              label="筛选"
+              value={tagFilter}
+              options={[{ value: '', label: '全部标签' }, ...allTags.map((t) => ({ value: t, label: t }))]}
+              onChange={(v) => { setTagFilter(v); setManualOrder(null) }}
+            />
+          )}
+          <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+            <label className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer" title="CSV 导入">
               <Upload size={14} /> CSV 导入
               <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
             </label>
             <button
               onClick={() => void openNewTodo()}
               disabled={autoList}
-              className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
+              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
               <Plus size={14} /> 新建待办
             </button>
@@ -519,7 +559,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
       <TodoDetailPanel
         ref={detailRef}
         todo={selectedTodoId === '__NEW__'
-          ? { id: '' as string, list_id: selectedList ?? lists[0]?.id ?? '', title: '', body: null, importance: 'normal', due_date: null, planned_date: null, start_date: null, complexity: 'medium', tags: null, status: 'notStarted', created_at: null, completed_at: null, sort_order: 0 }
+          ? { id: '' as string, list_id: selectedList ?? lists[0]?.id ?? '', title: '', body: null, importance: 'normal', due_date: null, planned_date: null, start_date: null, complexity: 'medium', tags: null, status: 'notStarted', alarm_at: null, created_at: null, completed_at: null, sort_order: 0 }
           : selectedTodo}
         lists={lists}
         onClose={() => setSelectedTodoId(null)}
@@ -550,6 +590,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
         <QuickAddSheet
           lists={lists}
           defaultListId={selectedList ?? lists[0]?.id ?? ''}
+          allTags={allTags}
           onClose={() => setQuickAddOpen(false)}
           onCreate={(data) => {
             createMut.mutate(data)
@@ -566,14 +607,16 @@ export const TodoView = forwardRef<TodoViewHandle, {
         document.body,
       )}
 
-      {/* 手机：清单抽屉（dock 左按钮 / 清单提示 chip 唤出）——与桌面左列同一份管理组件。
+      {/* 手机：清单抽屉（dock 左按钮 / 标题行唤出）——与桌面左列同一份管理组件。
           portal 到 body：待办页在手势容器内，容器残留 transform 会把 fixed 抽屉圈进
-          内容区矩形（遮罩盖不住 dock），portal 彻底绕开包含块问题 */}
+          内容区矩形（遮罩盖不住 dock），portal 彻底绕开包含块问题。
+          20260918 任务书 1.2-2/1.2-3：顶部避让灵动岛；清单列表整段可滚，
+          「设置 / 完成」固定抽屉底部常驻可见。 */}
       {listsDrawerOpen && createPortal(
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={() => onListsDrawerOpenChange(false)} />
-          <aside ref={listsDrawerRef} className="glass-sheet absolute inset-y-0 left-0 w-[290px] max-w-[85vw] rounded-r-3xl p-3 pt-3 overflow-y-auto flex flex-col">
-            <div className="flex items-center justify-between mb-2 pl-1">
+          <aside ref={listsDrawerRef} className="glass-sheet absolute inset-y-0 left-0 w-[290px] max-w-[85vw] rounded-r-3xl p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-2 pl-1 flex-shrink-0">
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">待办清单</h2>
               <button
                 onClick={() => onListsDrawerOpenChange(false)}
@@ -583,8 +626,10 @@ export const TodoView = forwardRef<TodoViewHandle, {
                 ×
               </button>
             </div>
-            {listManager}
-            <div className="mt-auto pt-2">
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {listManager}
+            </div>
+            <div className="flex-shrink-0 pt-2 mt-1 border-t border-black/5">
               {onOpenSettings && (
                 <button
                   onClick={onOpenSettings}
@@ -595,7 +640,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
               )}
               <button
                 onClick={() => onListsDrawerOpenChange(false)}
-                className="w-full flex items-center gap-2 px-2 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl mb-1 transition-colors"
+                className="w-full flex items-center gap-2 px-2 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl transition-colors"
               >
                 <Check size={16} className="text-gray-400" /> 完成
               </button>
@@ -615,36 +660,88 @@ export const TodoView = forwardRef<TodoViewHandle, {
 })
 
 /**
- * 快速新增待办（手机底部抽屉，20260917 任务书 1.2-3）：标题 + 清单 + 截止 + 重要性，
- * 一次滑动一次输入法，保存即建。detail 抽屉回归纯查看/编辑。
+ * 快速新增待办（手机底部抽屉，20260917 任务书 1.2-3）：标题 + 清单 + 截止 + 重要性
+ * 常驻，一次滑动一次输入法；20260918 任务书 1.3-4：备注 / 状态 / 计划日 / 开始日 /
+ * 复杂度 / 标签 / 闹钟收进「更多选项」折叠区——快速心智不变，全字段可达。
  */
-function QuickAddSheet({
+const QUICK_ADD_CREATE = {
+  list_id: '',
+  title: '',
+  body: null as string | null,
+  importance: 'normal',
+  due_date: null as string | null,
+  planned_date: null as string | null,
+  start_date: null as string | null,
+  complexity: 'medium',
+  tags: null as string[] | null,
+  status: 'notStarted',
+  alarm_at: null as string | null,
+}
+
+/** 快速新增待办抽屉：导出仅供渲染级回归测试使用 */
+export function QuickAddSheet({
   lists,
   defaultListId,
+  allTags = [],
   onClose,
   onCreate,
 }: {
   lists: TodoList[]
   defaultListId: string
+  /** 现有标签集合（更多选项里的快捷 chip） */
+  allTags?: string[]
   onClose: () => void
-  onCreate: (data: { list_id: string; title: string; importance: string; due_date: string | null }) => void
+  onCreate: (data: typeof QUICK_ADD_CREATE) => void
 }) {
   const sheetRef = useRef<HTMLDivElement | null>(null)
   const [title, setTitle] = useState('')
   const [listId, setListId] = useState(defaultListId)
   const [dueDate, setDueDate] = useState('')
   const [importance, setImportance] = useState<'high' | 'normal' | 'low'>('normal')
+  // 更多选项（1.3-4）：默认折叠，保住「快速新增」的心智
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [body, setBody] = useState('')
+  const [status, setStatus] = useState('notStarted')
+  const [plannedDate, setPlannedDate] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [complexity, setComplexity] = useState<'simple' | 'medium' | 'hard'>('medium')
+  const [tagsText, setTagsText] = useState('')
+  const [alarmAt, setAlarmAt] = useState('')
 
   useEffect(() => {
-    animDrawerIn(sheetRef.current, 1)
+    // 底部 sheet 上滑入场（20260918 任务书 1.2-5：此前误用 animDrawerIn 右缘滑入）
+    animSheetUp(sheetRef.current)
   }, [])
 
   const canSave = title.trim().length > 0 && !!listId
+  const tags = tagsText.split(/[,，]/).map((t) => t.trim()).filter(Boolean)
+
+  const buildPayload = (): typeof QUICK_ADD_CREATE => ({
+    ...QUICK_ADD_CREATE,
+    list_id: listId,
+    title: title.trim(),
+    body: body.trim() || null,
+    importance,
+    due_date: dueDate || null,
+    planned_date: plannedDate || null,
+    start_date: startDate || null,
+    complexity,
+    tags: tags.length ? tags : null,
+    status,
+    alarm_at: alarmAt || null,
+  })
+
+  const toggleTag = (t: string) => {
+    const set = new Set(tags)
+    if (set.has(t)) set.delete(t)
+    else set.add(t)
+    setTagsText(Array.from(set).join(','))
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div ref={sheetRef} className="glass-sheet relative w-full rounded-t-3xl px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div ref={sheetRef} className="glass-sheet relative w-full rounded-t-3xl px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] max-h-[92dvh] overflow-y-auto">
         <div className="flex justify-center mb-2">
           <div className="w-10 h-1 rounded-full bg-gray-300" />
         </div>
@@ -662,7 +759,7 @@ function QuickAddSheet({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && canSave) onCreate({ list_id: listId, title: title.trim(), importance, due_date: dueDate || null })
+            if (e.key === 'Enter' && canSave) onCreate(buildPayload())
           }}
         />
 
@@ -681,7 +778,7 @@ function QuickAddSheet({
           </label>
         </div>
 
-        <div className="mb-4">
+        <div className="mb-3">
           <p className="text-xs text-gray-500 mb-1.5">重要性</p>
           <div className="grid grid-cols-3 gap-2">
             {([['high', '重要'], ['normal', '普通'], ['low', '次要']] as const).map(([k, label]) => (
@@ -701,8 +798,88 @@ function QuickAddSheet({
           </div>
         </div>
 
+        {/* 更多选项（1.3-4）：备注 / 状态 / 计划日 / 开始日 / 复杂度 / 标签 / 闹钟 */}
         <button
-          onClick={() => canSave && onCreate({ list_id: listId, title: title.trim(), importance, due_date: dueDate || null })}
+          onClick={() => setMoreOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-3 py-2 mb-3 rounded-xl bg-white/70 border border-black/5 text-sm text-gray-600 active:bg-black/[0.04] transition-colors"
+        >
+          <span>更多选项{tags.length > 0 || body || plannedDate || startDate || alarmAt ? ' · 已填写' : ''}</span>
+          <ChevronDown size={15} className={clsx('text-gray-400 transition-transform', moreOpen && 'rotate-180')} />
+        </button>
+        {moreOpen && (
+          <div className="flex flex-col gap-3 mb-3">
+            <label className="text-xs text-gray-500">
+              <span className="block mb-1">备注</span>
+              <textarea className="tt-input min-h-[56px] resize-y" value={body} onChange={(e) => setBody(e.target.value)} placeholder="可选" />
+            </label>
+
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs text-gray-500">
+                <span className="block mb-1">状态</span>
+                <select className="tt-input" value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="notStarted">未开始</option>
+                  <option value="inProgress">进行中</option>
+                  <option value="waitingOnOthers">等待他人</option>
+                  <option value="deferred">已推迟</option>
+                </select>
+              </label>
+              <label className="text-xs text-gray-500">
+                <span className="block mb-1">复杂度</span>
+                <select className="tt-input" value={complexity} onChange={(e) => setComplexity(e.target.value as 'simple' | 'medium' | 'hard')}>
+                  <option value="simple">简单</option>
+                  <option value="medium">中等</option>
+                  <option value="hard">复杂</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs text-gray-500">
+                <span className="block mb-1">计划日期</span>
+                <DueDateQuickPicker value={plannedDate} onChange={setPlannedDate} />
+              </label>
+              <label className="text-xs text-gray-500">
+                <span className="block mb-1">开始日期</span>
+                <input type="date" className="tt-input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </label>
+            </div>
+
+            <label className="text-xs text-gray-500">
+              <span className="block mb-1">标签（逗号分隔）</span>
+              <input
+                className="tt-input"
+                value={tagsText}
+                onChange={(e) => setTagsText(e.target.value)}
+                placeholder="工作, 学习…"
+              />
+              {allTags.length > 0 && (
+                <span className="flex flex-wrap gap-1 mt-1.5">
+                  {allTags.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => toggleTag(t)}
+                      className={clsx(
+                        'text-[11px] px-2 py-0.5 rounded-full border transition',
+                        tags.includes(t) ? 'bg-pink-50 border-pink-300 text-pink-600' : 'bg-white border-gray-200 text-gray-500',
+                      )}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </span>
+              )}
+            </label>
+
+            <label className="text-xs text-gray-500">
+              <span className="block mb-1">闹钟（到点弹系统通知）</span>
+              <input type="datetime-local" className="tt-input" value={alarmAt} onChange={(e) => setAlarmAt(e.target.value)} />
+            </label>
+          </div>
+        )}
+
+        <button
+          onClick={() => canSave && onCreate(buildPayload())}
           disabled={!canSave}
           className="w-full py-3 text-[15px] font-semibold bg-pink-500 text-white rounded-2xl active:bg-pink-600 disabled:opacity-40 transition-colors"
         >
@@ -771,7 +948,7 @@ function TodoStatsDrawer({
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={onClose} />
       <aside ref={drawerRef} className="glass-sheet absolute inset-y-0 right-0 w-[300px] max-w-[85vw] rounded-l-3xl flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <div className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
           <div className="min-w-0">
             <h2 className="text-base font-bold text-gray-800">待办统计</h2>
             <p className="text-[11px] text-gray-400 truncate">范围：全部清单 · 当前查看「{currentListName}」</p>
@@ -1003,6 +1180,80 @@ function TodoListManager({
         <button onClick={() => setCreatingList(true)} className={clsx('flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 mt-1 rounded-xl hover:bg-black/[0.03]', roomy ? 'px-2.5 py-3' : 'px-2 py-1.5')}>
           <ListPlus size={14} /> 新建列表
         </button>
+      )}
+    </div>
+  )
+}
+
+/** 通栏行式下拉（20260918 任务书 1.2-1）：排序/筛选各占一整行的从容布局。
+    与 FilterSelect 同一套下拉交互，只是行样式铺满宽度、值右对齐。 */
+function FilterRow({ label, value, options, onChange }: {
+  label: string
+  value: string
+  options: { value: string; label: string }[]
+  onChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const current = options.find((o) => o.value === value)
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={clsx(
+          'w-full flex items-center justify-between gap-2 px-3 py-2.5 text-sm rounded-xl border transition',
+          open
+            ? 'border-pink-300 bg-pink-50 text-pink-700 shadow-sm'
+            : 'border-black/5 bg-white/70 text-gray-700 active:bg-black/[0.04]',
+        )}
+      >
+        <span className="text-gray-400 flex-shrink-0">{label}</span>
+        <span className="flex items-center gap-1 min-w-0">
+          <span className="font-medium truncate">{current?.label}</span>
+          <ChevronDown size={14} className={clsx('text-gray-400 transition-transform flex-shrink-0', open && 'rotate-180')} />
+        </span>
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 max-h-[260px] overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-lg py-1 z-30">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => {
+                onChange(o.value)
+                setOpen(false)
+              }}
+              className={clsx(
+                'w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition',
+                o.value === value
+                  ? 'text-pink-600 font-medium'
+                  : 'text-gray-700 hover:bg-gray-50',
+              )}
+            >
+              <span>{o.label}</span>
+              {o.value === value && <Check size={14} className="text-pink-600 flex-shrink-0" />}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   )

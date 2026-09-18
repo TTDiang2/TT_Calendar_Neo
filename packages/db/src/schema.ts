@@ -171,6 +171,8 @@ export const todo = sqliteTable(
     complexity: text('complexity').notNull().default('medium'),
     tags: text('tags'),
     plannedDate: text('planned_date'),
+    /** 闹钟（20260918 1.3-5）：本地时刻 YYYY-MM-DDTHH:mm，null = 未设 */
+    alarmAt: text('alarm_at'),
     updatedAt: text('updated_at'),
   },
   (t) => [index('idx_todo_list').on(t.listId), index('idx_todo_due').on(t.dueDate)],

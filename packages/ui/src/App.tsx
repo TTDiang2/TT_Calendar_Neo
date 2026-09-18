@@ -19,7 +19,7 @@ import { CountdownView } from './components/CountdownView'
 import { StatsView } from './components/StatsView'
 import { WidgetsView } from './components/WidgetsView'
 import { BottomTabBar, type DockGestureState } from './components/BottomTabBar'
-import { animDrawerIn, animEnter, animSlideDirection, animSpringBack } from './anim'
+import { animDrawerIn, animEnter, animSheetUp, animSlideDirection, animSpringBack } from './anim'
 import { useSwipeTabs } from './hooks/useSwipeNav'
 import {
   EventEditor,
@@ -75,7 +75,9 @@ function RightDetailDrawer(props: {
         ref={panelRef}
         className="glass-sheet absolute inset-y-0 right-0 w-[300px] max-w-[85vw] rounded-l-3xl overflow-y-auto"
       >
-        <div className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        {/* 顶部安全区：抽屉是 fixed/absolute 定位，不吃 #root 的 safe-area padding，
+            灵动岛/状态栏会盖住首行内容（20260918 任务书 1.2-3） */}
+        <div className="p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
           <DetailPanel
             variant="drawer"
             day={props.day}
@@ -169,7 +171,9 @@ function MobileCalendarBar({
 function CalendarAddSheet(props: { date: string; onDot: () => void; onColor: () => void; onClose: () => void }) {
   const sheetRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
-    animDrawerIn(sheetRef.current, 1)
+    // 底部 sheet 一律上滑入场（20260918 任务书 1.2-5：此前误用 animDrawerIn
+    // 的右缘滑入，FAB 点开像「从右往左弹抽屉」，与统一新建的心智相悖）
+    animSheetUp(sheetRef.current)
   }, [])
   return (
     <div className="fixed inset-0 z-50 flex items-end">
@@ -789,7 +793,10 @@ export default function App() {
         ) : topTab === 'widgets' ? (
           <WidgetsView />
         ) : mode === 'countdown' ? (
-          <>
+          /* 1.2-4 回归修复：MobileCalendarBar 的包装 div 曾与 CountdownView 平级
+             （contentRef 是横向 flex），标题行占了左侧宽度、把倒数日整个挤到右半屏。
+             这里包一层纵向容器：标题行在上、倒数日占满其余宽度。 */
+          <div className="flex-1 flex flex-col min-w-0 min-h-0">
             {isMobile && (
               <div className="px-3 pt-2 flex-shrink-0">
                 <MobileCalendarBar
@@ -803,7 +810,7 @@ export default function App() {
               </div>
             )}
             <CountdownView />
-          </>
+          </div>
         ) : (
           <>
             <Sidebar

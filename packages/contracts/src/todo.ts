@@ -53,6 +53,8 @@ export const TodoRow = z.object({
   completed_at: DateTimeStr.nullable().optional(),
   sort_order: z.number().int().nullable().optional(),
   updated_at: DateTimeStr.nullable().optional(),
+  /** 闹钟：本地时刻 YYYY-MM-DDTHH:mm（datetime-local），到点由系统通知提醒（1.3-5） */
+  alarm_at: DateTimeStr.nullable().optional(),
 })
 export type TodoRow = z.infer<typeof TodoRow>
 
@@ -72,6 +74,8 @@ export const Todo = z.object({
   created_at: DateTimeStr.nullable(),
   completed_at: DateTimeStr.nullable(),
   sort_order: z.number().int(),
+  /** 闹钟：本地时刻（datetime-local），null = 未设；随 todo 表参与多端同步 */
+  alarm_at: DateTimeStr.nullable(),
 })
 export type Todo = z.infer<typeof Todo>
 
@@ -88,6 +92,7 @@ export const NewTodo = Todo.partial({
   created_at: true,
   completed_at: true,
   sort_order: true,
+  alarm_at: true,
 })
 export type NewTodo = z.infer<typeof NewTodo>
 

@@ -385,7 +385,7 @@ function TodayAgenda({
                   {doneCount > 0 && <span className="text-[10px] font-normal text-gray-400">已完成 {doneCount}</span>}
                 </p>
                 {openTodos.slice(0, 6).map((t) => (
-                  <AgendaTodoRow key={t.id} todo={t} onToggle={onToggleTodo} />
+                  <AgendaTodoRow key={t.id} todo={t} onToggle={onToggleTodo} onOpen={onOpenDetail ? () => onOpenDetail(day.date) : undefined} />
                 ))}
                 {openTodos.length > 6 && (
                   <p className="text-[10px] text-gray-300 text-center pt-0.5">还有 {openTodos.length - 6} 条未完成待办</p>
@@ -399,14 +399,19 @@ function TodayAgenda({
   )
 }
 
-function AgendaTodoRow({ todo, onToggle }: { todo: Todo; onToggle?: (todo: Todo, done: boolean) => void }) {
+function AgendaTodoRow({ todo, onToggle, onOpen }: { todo: Todo; onToggle?: (todo: Todo, done: boolean) => void; onOpen?: () => void }) {
   const overdue = todo.due_date && todo.due_date < todayStr()
   const done = todo.status === 'completed'
   return (
-    <div className="flex items-center gap-2 rounded-md border border-gray-100 bg-white px-2 py-1.5">
+    // 20260918 任务书 1.3-3：行点击 = 呼出当日详情抽屉，与上方日程/事件行对齐
+    //（此前只有勾选框可点，点待办行没有任何反馈）；勾选框 stopPropagation 保持独立
+    <div
+      onClick={onOpen}
+      className={clsx('flex items-center gap-2 rounded-md border border-gray-100 bg-white px-2 py-1.5', onOpen && 'active:bg-gray-100 cursor-pointer transition-colors')}
+    >
       <button
         aria-label={done ? '标记为未完成' : '标记为已完成'}
-        onClick={onToggle ? () => onToggle(todo, !done) : undefined}
+        onClick={onToggle ? (e) => { e.stopPropagation(); onToggle(todo, !done) } : undefined}
         className={clsx(
           'w-3.5 h-3.5 rounded-full flex-shrink-0 flex items-center justify-center border active:scale-90 transition-transform',
           done

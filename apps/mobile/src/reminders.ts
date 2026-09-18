@@ -119,6 +119,25 @@ async function computeDesired(): Promise<DesiredReminder[]> {
       body: t.title,
     })
   }
+  // 逐条闹钟（20260918 任务书 1.3-5）：todo.alarm_at 是用户显式设的精确时刻
+  // （datetime-local 本地时间）。iOS 不开放时钟 App 的闹钟 API，定时本地通知是
+  // 最接近「闹钟」的合法实现——到点即使 App 不在前台也会由系统弹出。
+  for (const t of open) {
+    if (!t.alarm_at || out.length >= MAX_SCHEDULED) continue
+    const [dPart, tPart] = t.alarm_at.split('T')
+    if (!dPart || !tPart) continue
+    const [y, mo, dd] = dPart.split('-').map(Number)
+    const [hh, mi] = tPart.split(':').map(Number)
+    if (!y || !mo || !dd) continue
+    const at = new Date(y, mo - 1, dd, hh ?? 0, mi ?? 0, 0, 0)
+    if (at.getTime() <= Date.now()) continue
+    out.push({
+      key: `alarm-${t.id}`,
+      at,
+      title: '⏰ 待办闹钟',
+      body: t.title,
+    })
+  }
   // 重要日期：前一天 09:00
   for (const ev of importantEvents) {
     if (out.length >= MAX_SCHEDULED) break

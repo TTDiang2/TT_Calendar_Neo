@@ -115,6 +115,7 @@ function rowToTodo(r: TodoT): Todo {
     created_at: r.createdAt ?? null,
     completed_at: r.completedAt ?? null,
     sort_order: r.sortOrder ?? 0,
+    alarm_at: r.alarmAt ?? null,
   }
 }
 
@@ -1154,6 +1155,7 @@ export class SqliteBackend {
     complexity?: string
     tags?: string[] | null
     status?: string
+    alarm_at?: string | null
   }): Todo {
     const id = crypto.randomUUID()
     this.db
@@ -1170,6 +1172,7 @@ export class SqliteBackend {
         startDate: data.start_date ?? null,
         complexity: data.complexity ?? 'medium',
         tags: data.tags ? JSON.stringify(data.tags) : null,
+        alarmAt: data.alarm_at ?? null,
         // 直传 completed 状态时补完成时间（否则既不进 done 也不进 predict 染色）
         completedAt: data.status === 'completed' ? now() : null,
         updatedAt: now(),
@@ -1201,6 +1204,7 @@ export class SqliteBackend {
     if ('tags' in data) set.tags = data.tags ? JSON.stringify(data.tags) : null
     if ('sort_order' in data) set.sortOrder = (data.sort_order as number) ?? cur.sortOrder
     if ('list_id' in data) set.listId = (data.list_id as string) ?? cur.listId
+    if ('alarm_at' in data) set.alarmAt = (data.alarm_at as string | null) ?? null
     this.db.update(s.todo).set(set).where(eq(s.todo.id, id)).run()
     const updated = rowToTodo(this.db.select().from(s.todo).where(eq(s.todo.id, id)).get()!)
     // old/new 受影响日期并集增量重算（旧版 Python _recompute_day_busy_for_todo 语义）

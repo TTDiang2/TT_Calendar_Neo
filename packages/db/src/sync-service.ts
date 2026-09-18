@@ -265,6 +265,7 @@ export class SyncService {
             complexity: str(row.complexity) ?? 'medium',
             tags,
             plannedDate: str(row.planned_date),
+            alarmAt: str(row.alarm_at),
             updatedAt: str(row.updated_at),
           })
           .onConflictDoUpdate({
@@ -281,6 +282,7 @@ export class SyncService {
               complexity: str(row.complexity) ?? 'medium',
               tags,
               plannedDate: str(row.planned_date),
+              alarmAt: str(row.alarm_at),
               updatedAt: str(row.updated_at),
             },
           })
