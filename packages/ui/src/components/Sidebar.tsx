@@ -75,7 +75,7 @@ export function MobileLayersDrawer({
             </button>
           )}
 
-          <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} showSubscriptions={false} roomy />
+          <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} roomy />
         </div>
 
         {/* 设置：固定底部（1.2-2），与滚动内容用发丝线分隔 */}
@@ -92,7 +92,7 @@ export function MobileLayersDrawer({
   )
 }
 
-function LayerTree({ layers, onToggle, countdown, showSubscriptions = true, roomy = false }: Props & { showSubscriptions?: boolean; roomy?: boolean }) {
+function LayerTree({ layers, onToggle, countdown, roomy = false }: Props & { roomy?: boolean }) {
   const qc = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
@@ -112,17 +112,18 @@ function LayerTree({ layers, onToggle, countdown, showSubscriptions = true, room
     })
   }
 
-  // 订阅超级组：组名与订阅 display_name 相同的图层组（集思录等）挂在「订阅」下
+  // 订阅图层判别：Neo 端已决定不做订阅（20260918），全端图层树一律不呈现
+  //（数据仍在库里并参与两端同步，老端 Python 侧继续使用订阅，不能删行）
   const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
   const subNames = useMemo(() => new Set(subs.map((s) => s.display_name)), [subs])
 
   // 第一级：涂色 / 点点（基于 layer.kind）；第二级：group（layer.group）；第三级：图层本身。
-  // 手机端（showSubscriptions=false）：订阅来源图层整组排除——统一判别式见 adapt/subscription.ts
-  // （20260918 修订：判别式只留 jisilu_ 前缀 ∥ 组名=订阅名，sort_order 档位已证伪删除）
+  // 订阅来源图层整组排除——统一判别式见 adapt/subscription.ts
+  //（20260918 修订：判别式只留 jisilu_ 前缀 ∥ 组名=订阅名，sort_order 档位已证伪删除）
   const tree = useMemo(() => {
     const byKind: Record<string, Record<string, Layer[]>> = { color: {}, dot: {} }
     for (const l of layers) {
-      if (!showSubscriptions && subscriptionLayerFilter(subNames)(l)) continue
+      if (subscriptionLayerFilter(subNames)(l)) continue
       const kind = l.kind === 'dot' ? 'dot' : 'color'
       const grp = l.group ?? ''
       ;(byKind[kind][grp] ??= []).push(l)
@@ -133,7 +134,7 @@ function LayerTree({ layers, onToggle, countdown, showSubscriptions = true, room
       }
     }
     return byKind
-  }, [layers, showSubscriptions, subNames])
+  }, [layers, subNames])
 
   const kindMeta: Record<string, { title: string }> = {
     color: { title: '涂色' },
@@ -167,13 +168,7 @@ function LayerTree({ layers, onToggle, countdown, showSubscriptions = true, room
               </button>
               {!collapsed[kindId] && (
                 <div className="flex flex-col gap-1 ml-1">
-          {(() => {
-            const sorted = [...groupKeys].sort()
-            const normalGroups = sorted.filter((g) => !subNames.has(g))
-            const subGroupKeys = sorted.filter((g) => subNames.has(g))
-            return (
-              <>
-          {normalGroups.map((grp) => {
+          {[...groupKeys].sort().map((grp) => {
             const members = groups[grp]
             const hasGroup = grp !== ''
             const grpId = `group:${kind}:${grp}`
@@ -200,48 +195,6 @@ function LayerTree({ layers, onToggle, countdown, showSubscriptions = true, room
               </div>
             )
           })}
-          {subGroupKeys.length > 0 && (
-            <div>
-              <button
-                onClick={() => toggleGroup(`subs:${kind}`)}
-                className="w-full flex items-center gap-1 px-1 py-0.5 text-[11px] text-gray-400 hover:text-gray-600"
-              >
-                {collapsed[`subs:${kind}`] ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
-                订阅
-                <span className="text-[10px] text-gray-300">{subGroupKeys.reduce((n, g) => n + groups[g].length, 0)}</span>
-              </button>
-              {!collapsed[`subs:${kind}`] && (
-                <div className="ml-1">
-                  {subGroupKeys.sort().map((grp) => {
-                    const members = groups[grp]
-                    const grpId = `group:${kind}:${grp}`
-                    return (
-                      <div key={grp} className="mb-0.5">
-                        <button
-                          onClick={() => toggleGroup(grpId)}
-                          className="w-full flex items-center gap-1 py-0.5 text-[11px] text-gray-400 hover:text-gray-600 ml-1"
-                        >
-                          {collapsed[grpId] ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
-                          {grp}
-                          <span className="text-[10px] text-gray-300">{members.length}</span>
-                        </button>
-                        {!collapsed[grpId] && (
-                          <div className="flex flex-col gap-0.5 ml-3">
-                            {members.map((l) => (
-                              <LayerRow key={l.layer_id} layer={l} onToggle={onToggle} roomy={roomy} />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                 </div>
-               )}
-             </div>
-           )}
-              </>
-            )
-          })()}
                 </div>
               )}
             </div>

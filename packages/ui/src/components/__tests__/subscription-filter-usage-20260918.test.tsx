@@ -8,7 +8,7 @@
  *    todo/todo_done）不可选；important（重要日期）始终保留（手动事件默认落点）
  */
 import { describe, expect, it, vi, beforeAll, afterEach } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { setBackend, type BackendAdapter } from '../../adapt/api'
@@ -80,24 +80,24 @@ const backendStub = {
   getLayerSubActions: async () => [],
 } as unknown as BackendAdapter
 
-describe('SettingsDialog 集思录分区（智者 R1）', () => {
-  it('老端自建图层（sort_order=10）不得混进「集思录投资日历」分区，只出现在自定义图层区', async () => {
+describe('SettingsDialog 订阅内容清零（20260918 用户决策：Neo 端不做订阅）', () => {
+  it('设置页不渲染任何订阅图层（集思录分区已整体移除），自建图层正常出现', async () => {
     setBackend(backendStub)
     render(
       <SettingsDialog
         layers={LAYERS}
         onToggleLayer={() => {}}
-        defaultStart="2026-09-01"
-        defaultEnd="2026-09-30"
         onClose={() => {}}
       />,
       { wrapper },
     )
 
-    // 订阅图层在分区里
-    expect(await screen.findByText('集思录·可转债')).toBeTruthy()
-    // 早起只出现一次（自定义图层区）；若旧档位仍在，会同时混进集思录分区出现两次
-    expect(screen.getAllByText('早起')).toHaveLength(1)
+    // 自建图层出现（自定义图层区）
+    expect(await screen.findByText('早起')).toBeTruthy()
+    // 订阅图层在设置页任何位置都不出现（「事件导入」「集思录投资日历」分区已移除）
+    expect(screen.queryByText('集思录·可转债')).toBeNull()
+    expect(screen.queryByText('事件导入')).toBeNull()
+    expect(screen.queryByText('集思录投资日历')).toBeNull()
   })
 })
 

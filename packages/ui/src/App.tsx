@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Layers, Palette, Plus, SlidersHorizontal, Trophy } from 'lucide-react'
 import { useViewData, useCountdown } from './hooks/useApi'
-import { toggleLayer, moveDay, getTodoStats, getTodos, getSyncStatus, getSyncConfig, syncNow, refreshDueSubscriptions, getSubscriptions, getTodoBusyConfig, setTodoBusyConfig } from './adapt/api'
+import { toggleLayer, moveDay, getTodoStats, getTodos, getSyncStatus, getSyncConfig, syncNow, getSubscriptions, getTodoBusyConfig, setTodoBusyConfig } from './adapt/api'
 import { shiftMonthKey, shiftYearKey, todayStr } from './adapt/data'
 import { subscriptionLayerFilter } from './adapt/subscription'
 import type { CalEvent, Day, Layer, MonthData, TopTab, TodoViewMode, ViewMode, YearData } from './adapt/types'
@@ -26,7 +26,6 @@ import {
   ScheduleEditor,
   ColoringPicker,
   SearchDialog,
-  SubscriptionDialog,
   ContextMenu,
   DotEntryDialog,
   ColorEntryDialog,
@@ -42,7 +41,6 @@ type DialogState =
   | { kind: 'dot'; date: string }
   | { kind: 'color'; date: string }
   | { kind: 'search' }
-  | { kind: 'subscription' }
   | { kind: 'settings' }
   | null
 
@@ -396,15 +394,6 @@ export default function App() {
       } catch {
         /* 网络异常等，静默跳过 */
       }
-      // 订阅自动更新：enabled+auto_update+今日未刷的订阅静默拉取（如集思录）
-      try {
-        const r = await refreshDueSubscriptions()
-        if (r.refreshed.some((x) => x.ok && (x.inserted ?? 0) > 0)) {
-          qc.invalidateQueries({ queryKey: ['view'] })
-        }
-      } catch {
-        /* 拉取失败不打扰启动 */
-      }
     }, 2000)
     return () => clearTimeout(t)
   }, [qc])
@@ -675,8 +664,6 @@ export default function App() {
   }, [mode, monthData, dayAnchor])
 
   const monthData2 = mode === 'year' || !monthData || !('days' in monthData) ? null : monthData
-  const importStart = monthData2?.days[6]?.date ?? '2026-08-01'
-  const importEnd = monthData2?.days[36]?.date ?? '2026-08-31'
 
   return (
     <div className="h-full flex flex-col ambient-root">
@@ -748,7 +735,6 @@ export default function App() {
           canPrev={true}
           canNext={true}
           onOpenSearch={() => setDialog({ kind: 'search' })}
-          onOpenSubscription={() => setDialog({ kind: 'subscription' })}
           onOpenSettings={() => setDialog({ kind: 'settings' })}
         />
       </div>
@@ -1068,15 +1054,10 @@ export default function App() {
           excludeSub={isMobile ? isSubLayer : undefined}
         />
       )}
-      {dialog?.kind === 'subscription' && (
-        <SubscriptionDialog onClose={() => setDialog(null)} />
-      )}
       {dialog?.kind === 'settings' && (
         <SettingsDialog
           layers={layers}
           onToggleLayer={toggleLayerFn}
-          defaultStart={importStart}
-          defaultEnd={importEnd}
           onClose={() => setDialog(null)}
         />
       )}

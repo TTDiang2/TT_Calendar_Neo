@@ -1,100 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Trash2 } from 'lucide-react'
 import { Modal, Field } from './ui/Modal'
 import {
-  toggleLayer, importJisilu, getLayerSubActions, updateLayerConfig, deleteLayer,
+  toggleLayer, getLayerSubActions, updateLayerConfig, deleteLayer,
   getTodoBusyConfig, setTodoBusyConfig, recomputeTodoBusy, type TodoBusyConfig,
   getTodoReminderConfig, setTodoReminderConfig, type TodoReminderConfig,
   getSyncConfig, getSyncStatus, saveSyncConfig, testSync, syncNow, resolveSync,
-  getSubscriptions,
   type SyncResult,
 } from '../adapt/api'
-import { subscriptionLayerFilter } from '../adapt/subscription'
 import type { Layer } from '../adapt/types'
 
 interface Props {
   layers: Layer[]
   onToggleLayer: (layerId: string) => void
-  defaultStart: string
-  defaultEnd: string
   onClose: () => void
 }
 
-export function SettingsDialog({ layers, onToggleLayer, defaultStart, defaultEnd, onClose }: Props) {
-  const qc = useQueryClient()
-  const [start, setStart] = useState(defaultStart)
-  const [end, setEnd] = useState(defaultEnd)
-  const [result, setResult] = useState<string | null>(null)
-
-  const importMut = useMutation({
-    mutationFn: () => importJisilu(start, end),
-    onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ['view'] })
-      setResult(`导入 ${res.inserted} 条${res.error ? '；错误：' + res.error : ''}`)
-    },
-  })
-
-  // 订阅分区用统一判别式（20260918 智者 R1）：此前手写 sort_order>=10 档位，
-  // 老端自建图层（固定 sort_order=10，如早起/早睡/约饭）被混进「集思录投资日历」
-  // 分区、与下方自定义图层区重复出现。
-  const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
-  const subNames = useMemo(() => new Set(subs.map((s) => s.display_name)), [subs])
-  const isSubLayer = useMemo(() => subscriptionLayerFilter(subNames), [subNames])
-  const jisilu = layers.filter(isSubLayer).sort((a, b) => a.display_name.localeCompare(b.display_name))
+export function SettingsDialog({ layers, onToggleLayer, onClose }: Props) {
   const customLayers = layers.filter((l) => l.layer_id.startsWith('custom_'))
 
   return (
     <Modal title="设置" onClose={onClose} width={720}>
       <div className="flex flex-col gap-5">
-        {/* 集思录=订阅数据源：手机不允许订阅，入口整节隐藏（桌面保留） */}
-        <section className="hidden md:block">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">事件导入</h3>
-          <div className="flex gap-2 mb-2">
-            <Field label="开始">
-              <input
-                type="date"
-                className="tt-input"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-              />
-            </Field>
-            <Field label="结束">
-              <input
-                type="date"
-                className="tt-input"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-              />
-            </Field>
-          </div>
-          <p className="text-xs text-gray-400 mb-2">
-            从集思录抓取该区间的新股/可转债/分红/期权等数据。已禁用的图层会跳过。
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => importMut.mutate()}
-              disabled={importMut.isPending}
-              className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
-            >
-              {importMut.isPending ? '导入中…' : '开始导入'}
-            </button>
-            {result && <span className="text-sm text-green-600">{result}</span>}
-          </div>
-        </section>
-
-        {jisilu.length > 0 && (
-          <section className="hidden md:block">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">集思录投资日历</h3>
-            <div className="flex flex-col gap-1">
-              {jisilu.map((l) => (
-                <LayerAccordion key={l.layer_id} layer={l} onToggle={onToggleLayer} />
-              ))}
-            </div>
-          </section>
-        )}
-
         <section>
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">自定义图层</h3>
           {customLayers.length === 0 ? (
@@ -514,42 +443,6 @@ function CustomLayerRow({ layer, onToggle }: { layer: Layer; onToggle: (id: stri
           <Trash2 size={13} />
         </button>
       )}
-    </div>
-  )
-}
-
-function LayerAccordion({ layer, onToggle }: { layer: Layer; onToggle: (id: string) => void }) {  const [open, setOpen] = useState(false)
-  return (
-    <div className="border border-gray-200 rounded-md">
-      <div className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50">
-        <span
-          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-          style={{ backgroundColor: layer.color ?? '#9ca3af' }}
-        />
-        <span className="flex-1 text-sm text-gray-700 truncate">{layer.display_name}</span>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="text-[11px] text-pink-600 hover:text-pink-700 px-2"
-        >
-          {open ? '收起子动作' : '展开子动作'}
-        </button>
-        <button
-          onClick={() => onToggle(layer.layer_id)}
-          aria-pressed={layer.enabled}
-          className={clsx(
-            'relative inline-flex items-center w-8 h-[18px] rounded-full transition-colors flex-shrink-0',
-            layer.enabled ? 'bg-pink-500' : 'bg-gray-300',
-          )}
-        >
-          <span
-            className={clsx(
-              'inline-block w-3.5 h-3.5 rounded-full bg-white shadow transition-transform duration-200',
-              layer.enabled ? 'translate-x-[16px]' : 'translate-x-[2px]',
-            )}
-          />
-        </button>
-      </div>
-      {open && <LayerSubActions layer={layer} />}
     </div>
   )
 }

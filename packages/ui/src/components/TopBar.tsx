@@ -1,4 +1,4 @@
-import { BarChart3, Calendar, CheckSquare, ChevronLeft, ChevronRight, ListTodo, Rss, Search, Settings, Sparkles } from 'lucide-react'
+import { BarChart3, Calendar, CheckSquare, ChevronLeft, ChevronRight, ListTodo, Search, Settings, Sparkles } from 'lucide-react'
 import clsx from 'clsx'
 import type { TopTab, TodoViewMode, ViewMode } from '../adapt/types'
 
@@ -16,7 +16,6 @@ interface Props {
   canPrev: boolean
   canNext: boolean
   onOpenSearch: () => void
-  onOpenSubscription: () => void
   onOpenSettings: () => void
 }
 
@@ -46,7 +45,7 @@ const TOP_TABS: { key: TopTab; label: string; icon: React.ReactNode }[] = [
   { key: 'widgets', label: '小组件', icon: <Sparkles size={14} /> },
 ]
 
-export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeChange, onTodoViewChange, onPrev, onNext, onToday, canPrev, canNext, onOpenSearch, onOpenSubscription, onOpenSettings }: Props) {
+export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeChange, onTodoViewChange, onPrev, onNext, onToday, canPrev, canNext, onOpenSearch, onOpenSettings }: Props) {
   return (
     /* 布局：手机竖屏（<md）flex-wrap 拆行——一级 tab 交给底部标签栏（md:hidden），
          本栏只剩：第 1 行 标题+操作、第 2 行 视图模式横滚。
@@ -78,10 +77,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
             </h1>
           </div>
           <div className="order-1 md:order-4 ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
-            {/* 手机不允许订阅（20260915 任务书）；设置手机端收进左侧边栏（20260916） */}
-            <button onClick={onOpenSubscription} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
-              <Rss size={18} />
-            </button>
+            {/* 订阅入口已随「Neo 端不做订阅」决策移除（20260918）；设置手机端收进左侧边栏（20260916） */}
             <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
               <Settings size={18} />
             </button>
@@ -157,9 +153,6 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
               <Search size={14} className="mr-2" />
               搜索事件…
             </button>
-            <button onClick={onOpenSubscription} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
-              <Rss size={18} />
-            </button>
             <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
               <Settings size={18} />
             </button>
@@ -191,9 +184,6 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
           </div>
 
           <div className="order-1 md:order-4 ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
-            <button onClick={onOpenSubscription} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="订阅">
-              <Rss size={18} />
-            </button>
             <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
               <Settings size={18} />
             </button>
