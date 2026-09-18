@@ -163,10 +163,12 @@ describe('快速新增待办 · 更多选项（1.3-4 / 1.3-5）', () => {
   })
 })
 
-describe('桌面新建待办 · 闹钟不丢（智者 P1 返工回归）', () => {
+describe('新建待办 · 闹钟不丢（智者 P1 返工回归）', () => {
   // 这次断链的教训：QuickAddSheet 路径有测试、TodoDetailPanel 幻影新建路径没有——
   // TodoView onSave 新建分支手工列字段漏了 alarm_at，TS 因可选字段不报错。
   // 本测试走完整链路：点「新建待办」→ 幻影详情表单设闹钟 → 保存 → createTodo payload。
+  // 注：matchMedia stub 下实际驱动 TodoDetailPanel 的手机抽屉分支；但被守护的
+  // 断点（TodoView onSave 新建分支）是手机/桌面共用的同一段代码，保护效力一致。
   it('幻影新建设了闹钟，保存后 createTodo 必须带上 alarm_at', async () => {
     const createTodoSpy = vi.fn(async (data: Record<string, unknown>) => ({ id: 'new1', ...data }))
     setBackend({
