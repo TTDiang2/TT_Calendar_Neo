@@ -455,8 +455,8 @@ export default function App() {
   const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
   const subNames = useMemo(() => new Set(subs.map((s) => s.display_name)), [subs])
   // 统一订阅判别式（智者 P0-1，20260918 修订）：jisilu_ 前缀 ∥ 组名=订阅名。
-  // sort_order≥10 档位已删——老端自建图层递增编号（早起/早睡/约饭实测都是 10）
-  // 会被误判，详见 adapt/subscription.ts 注释
+  // sort_order≥10 档位已删——老端自建图层固定 sort_order=10（create_layer
+  // 硬编码，早起/早睡/约饭实测踩雷），详见 adapt/subscription.ts 注释
   const isSubLayer = useMemo(() => subscriptionLayerFilter(subNames), [subNames])
   const calLayers = useMemo(
     () => (isMobile ? layers.filter((l) => !isSubLayer(l)) : layers),

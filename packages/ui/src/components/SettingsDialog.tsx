@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Trash2 } from 'lucide-react'
@@ -8,8 +8,10 @@ import {
   getTodoBusyConfig, setTodoBusyConfig, recomputeTodoBusy, type TodoBusyConfig,
   getTodoReminderConfig, setTodoReminderConfig, type TodoReminderConfig,
   getSyncConfig, getSyncStatus, saveSyncConfig, testSync, syncNow, resolveSync,
+  getSubscriptions,
   type SyncResult,
 } from '../adapt/api'
+import { subscriptionLayerFilter } from '../adapt/subscription'
 import type { Layer } from '../adapt/types'
 
 interface Props {
@@ -34,7 +36,13 @@ export function SettingsDialog({ layers, onToggleLayer, defaultStart, defaultEnd
     },
   })
 
-  const jisilu = layers.filter((l) => l.sort_order >= 10).sort((a, b) => a.display_name.localeCompare(b.display_name))
+  // 订阅分区用统一判别式（20260918 智者 R1）：此前手写 sort_order>=10 档位，
+  // 老端自建图层（固定 sort_order=10，如早起/早睡/约饭）被混进「集思录投资日历」
+  // 分区、与下方自定义图层区重复出现。
+  const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
+  const subNames = useMemo(() => new Set(subs.map((s) => s.display_name)), [subs])
+  const isSubLayer = useMemo(() => subscriptionLayerFilter(subNames), [subNames])
+  const jisilu = layers.filter(isSubLayer).sort((a, b) => a.display_name.localeCompare(b.display_name))
   const customLayers = layers.filter((l) => l.layer_id.startsWith('custom_'))
 
   return (

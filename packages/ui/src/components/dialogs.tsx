@@ -24,6 +24,7 @@ import {
 } from '../adapt/api'
 import { Plus, Trash2 } from 'lucide-react'
 import { COLORING_COLORS } from '../adapt/data'
+import { subscriptionLayerFilter } from '../adapt/subscription'
 import type { CalEvent, Layer, Schedule, ScheduleItem, Todo } from '../adapt/types'
 
 const COLORING_LABELS = ['放松', '轻松', '适中', '充实', '高产']
@@ -47,7 +48,24 @@ export function EventEditor({
 }) {
   const qc = useQueryClient()
   const isEdit = !!event
-  const builtinLayers = layers.filter((l) => l.sort_order < 10)
+  // 事件图层候选（20260918 智者 R2）：订阅图层（统一判别式）与自动图层
+  //（coloring/holiday/todo/todo_done，内容由系统生成，手动挂事件会被覆盖/重算
+  // 冲掉）不可选；important（重要日期）是手动事件的默认落点，始终保留。
+  // 此前的 sort_order<10 档位把老端自建图层（固定 sort_order=10，如早起/约饭）
+  // 挡在候选外，用户无法手动挂事件——同款档位已在订阅判别式里被证伪删除。
+  const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
+  const subNames = useMemo(() => new Set(subs.map((s) => s.display_name)), [subs])
+  const isSubLayer = useMemo(() => subscriptionLayerFilter(subNames), [subNames])
+  const AUTO_EVENT_LAYERS = ['coloring', 'holiday', 'todo', 'todo_done']
+  const builtinLayers = layers.filter(
+    (l) => l.layer_id === 'important' || (!isSubLayer(l) && !AUTO_EVENT_LAYERS.includes(l.layer_id)),
+  )
+  // 编辑既有事件时，其所属图层若已不在候选（如历史上的 holiday 事件），保留为
+  // 选项，避免一打开就悄悄改归属
+  const eventLayer = event && !builtinLayers.some((l) => l.layer_id === event.layer_id)
+    ? layers.find((l) => l.layer_id === event.layer_id)
+    : undefined
+  const layerOptions = eventLayer ? [eventLayer, ...builtinLayers] : builtinLayers
 
   const [title, setTitle] = useState(event?.title ?? '')
   const [edate, setEdate] = useState(event?.date ?? date)
@@ -106,7 +124,7 @@ export function EventEditor({
           {!fixedLayerId && (
             <Field label="图层">
               <select className="tt-input" value={layerId} onChange={(e) => setLayerId(e.target.value)}>
-                {builtinLayers.map((l) => (
+                {layerOptions.map((l) => (
                   <option key={l.layer_id} value={l.layer_id}>
                     {l.display_name}
                   </option>
@@ -757,15 +775,20 @@ export function DotEntryDialog({
   onClose: () => void
 }) {
   const qc = useQueryClient()
+  // 订阅判别统一口径（20260918 智者 R5 对齐）：桌面兜底也走 subscriptionLayerFilter，
+  // 不再各写各的 jisilu_ 前缀判断
+  const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
+  const subNames = useMemo(() => new Set(subs.map((s) => s.display_name)), [subs])
+  const isSubLayer = useMemo(() => subscriptionLayerFilter(subNames), [subNames])
   // 点点图层候选：自定义 dot 图层（含日程类）、其他非外部数据源的 dot 图层、
   // 以及内置 important（重要事件）。20260917 任务书 1.2-1：手机右抽屉只剩
   // 「点点/涂色」两个入口，原「事件」按钮的职责并入这里。
-  // 不限 enabled（让用户能给隐藏中的图层添加内容），排除 jisilu_* 外部数据源
+  // 不限 enabled（让用户能给隐藏中的图层添加内容），排除订阅图层
   // （手动加会被同步覆盖）和顶层 schedule 图层（已弃用，AM/PM/EV 结构被 schedule_items 取代）。
   const SCHEDULE_CATEGORIES = ['work', 'course', 'sport', 'play', 'other']
   const dotLayers = layers.filter((l) =>
     l.kind === 'dot'
-    && !(excludeSub?.(l) ?? l.layer_id.startsWith('jisilu_'))
+    && !(excludeSub?.(l) ?? isSubLayer(l))
     && l.layer_id !== 'schedule',
   )
   const importantLayer = layers.find((l) => l.layer_id === 'important')
@@ -895,11 +918,15 @@ export function ColorEntryDialog({
   onClose: () => void
 }) {
   const qc = useQueryClient()
-  // 自动涂色图层（holiday/important/todo/todo_done）和外部数据源（jisilu_*）不允许手动新增标记
+  // 订阅判别统一口径（20260918 智者 R5 对齐）：桌面兜底也走 subscriptionLayerFilter
+  const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
+  const subNames = useMemo(() => new Set(subs.map((s) => s.display_name)), [subs])
+  const isSubLayer = useMemo(() => subscriptionLayerFilter(subNames), [subNames])
+  // 自动涂色图层（holiday/important/todo/todo_done）和订阅图层不允许手动新增标记
   const AUTO_LAYERS = ['holiday', 'important', 'todo', 'todo_done']
   const colorLayers = layers.filter((l) =>
     l.kind === 'color'
-    && !(excludeSub?.(l) ?? l.layer_id.startsWith('jisilu_'))
+    && !(excludeSub?.(l) ?? isSubLayer(l))
     && !AUTO_LAYERS.includes(l.layer_id),
   )
   const firstOpt =

@@ -118,7 +118,7 @@ function LayerTree({ layers, onToggle, countdown, showSubscriptions = true, room
 
   // 第一级：涂色 / 点点（基于 layer.kind）；第二级：group（layer.group）；第三级：图层本身。
   // 手机端（showSubscriptions=false）：订阅来源图层整组排除——统一判别式见 adapt/subscription.ts
-  // （智者 P0-1：不能再单用 sort_order≥10，会漏掉组名约定的订阅、误判场景交由并集兜底）
+  // （20260918 修订：判别式只留 jisilu_ 前缀 ∥ 组名=订阅名，sort_order 档位已证伪删除）
   const tree = useMemo(() => {
     const byKind: Record<string, Record<string, Layer[]>> = { color: {}, dot: {} }
     for (const l of layers) {
