@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { Trash2 } from 'lucide-react'
 import { Modal, Field } from './ui/Modal'
 import {
-  toggleLayer, getLayerSubActions, updateLayerConfig, deleteLayer,
+  toggleLayer, updateLayerConfig, deleteLayer,
   getTodoBusyConfig, setTodoBusyConfig, recomputeTodoBusy, type TodoBusyConfig,
   getTodoReminderConfig, setTodoReminderConfig, type TodoReminderConfig,
   getSyncConfig, getSyncStatus, saveSyncConfig, testSync, syncNow, resolveSync,
@@ -442,91 +442,6 @@ function CustomLayerRow({ layer, onToggle }: { layer: Layer; onToggle: (id: stri
         >
           <Trash2 size={13} />
         </button>
-      )}
-    </div>
-  )
-}
-
-function LayerSubActions({ layer }: { layer: Layer }) {
-  const qc = useQueryClient()
-  const { data: pairs = [], isLoading } = useQuery({
-    queryKey: ['subActions', layer.layer_id],
-    queryFn: () => getLayerSubActions(layer.layer_id),
-  })
-  // 本地乐观 state：点击立即反馈，不依赖父组件 layers props（localLayers 快照不会随 invalidate 更新）
-  const [current, setCurrent] = useState<{ qtype: string; sub_action: string | null }[]>(
-    () => ((layer.config as Record<string, unknown>)?.sub_qtypes as { qtype: string; sub_action: string | null }[] | undefined) ?? [],
-  )
-  const configMut = useMutation({
-    mutationFn: (sub_qtypes: { qtype: string; sub_action: string | null }[]) =>
-      updateLayerConfig(layer.layer_id, { sub_qtypes }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['view'] })
-      qc.invalidateQueries({ queryKey: ['layers'] })
-    },
-    onError: () => {
-      // 失败回滚为 props 里的原始值
-      setCurrent(((layer.config as Record<string, unknown>)?.sub_qtypes as { qtype: string; sub_action: string | null }[] | undefined) ?? [])
-    },
-  })
-
-  const currentSet = new Set(current.map((r) => `${r.qtype}::${r.sub_action ?? ''}`))
-  const allKey = `${layer.layer_id.replace('jisilu_', '')}::`
-
-  const isChecked = (q: string, s: string | null) => {
-    if (current.length === 0) return true  // 空 = 不过滤 = 全选
-    return currentSet.has(`${q}::${s ?? ''}`)
-  }
-  const isAllOn = current.length === 0
-  const toggle = (q: string, s: string | null) => {
-    const next = isAllOn
-      ? pairs.filter((p) => !(p.qtype === q && p.sub_action === s))
-      : isChecked(q, s)
-        ? current.filter((r) => !(r.qtype === q && r.sub_action === s))
-        : Array.from(new Set([...current.map((r) => `${r.qtype}::${r.sub_action ?? ''}`), `${q}::${s ?? ''}`])).map((k) => {
-            const [qq, ss] = k.split('::')
-            return { qtype: qq, sub_action: ss || null }
-          })
-    setCurrent(next)
-    configMut.mutate(next as never)
-  }
-  const resetAll = () => {
-    setCurrent([])
-    configMut.mutate([])
-  }
-
-  return (
-    <div className="border-t border-gray-200 bg-gray-50 px-3 py-2">
-      {isLoading && <p className="text-xs text-gray-400">读取子动作中…</p>}
-      {!isLoading && pairs.length === 0 && (
-        <p className="text-xs text-gray-400">该图层暂无事件数据，无法列出子动作。请先在「事件导入」拉取一次。</p>
-      )}
-      {!isLoading && pairs.length > 0 && (
-        <>
-          <div className="flex items-center justify-between mb-1.5">
-            <p className="text-[11px] text-gray-500">{isAllOn ? '当前全部显示' : `已过滤 ${current.length}/${pairs.length}`}</p>
-            {!isAllOn && (
-              <button onClick={resetAll} className="text-[11px] text-pink-600 hover:text-pink-700">恢复全部</button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {pairs.map((p) => {
-              const checked = isChecked(p.qtype, p.sub_action)
-              return (
-                <button
-                  key={`${p.qtype}::${p.sub_action}`}
-                  onClick={() => toggle(p.qtype, p.sub_action)}
-                  className={clsx(
-                    'px-2 py-0.5 text-xs rounded border transition',
-                    checked ? 'bg-pink-50 border-pink-300 text-pink-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300',
-                  )}
-                >
-                  {p.sub_action}
-                </button>
-              )
-            })}
-          </div>
-        </>
       )}
     </div>
   )
