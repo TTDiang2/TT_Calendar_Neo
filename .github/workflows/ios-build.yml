@@ -530,6 +530,7 @@ jobs:
       - name: 写入签名材料（证书 + 两个描述文件）
         env:
           P12_B64: ${{ secrets.APPSTORE_P12 }}
+          P12_PASSWORD: ${{ secrets.APPSTORE_P12_PASSWORD }}
           MAIN_B64: ${{ secrets.APPSTORE_PROFILE_MAIN }}
           WIDGET_B64: ${{ secrets.APPSTORE_PROFILE_WIDGET }}
         run: |
@@ -539,13 +540,13 @@ jobs:
           printf '%s' "$MAIN_B64" | base64 -d > signing/tt-main.mobileprovision
           printf '%s' "$WIDGET_B64" | base64 -d > signing/tt-widget.mobileprovision
           ls -la signing/
-          # 真校验：p12 密码可用 + 描述文件是合法 CMS（用 macOS 原生工具，不靠字节猜测）
-          openssl pkcs12 -nocerts -noout -in signing/cert.p12 -passin "pass:$P12_PASSWORD" > /dev/null \
-            || { echo "p12 无效或密码错误"; exit 1; }
+          # 描述文件校验：macOS 原生 security cms 解析（mobileprovision 是二进制 CMS）。
+          # p12 不做 openssl 自检——macOS 自带的是 LibreSSL，读不了 RC2 传统加密格式，
+          # 由下一步 security import 做真校验即可。
           for f in signing/*.mobileprovision; do
             security cms -D -i "$f" > /dev/null || { echo "描述文件无效: $f"; exit 1; }
           done
-          echo "签名材料校验通过"
+          echo "签名材料校验通过（p12 交由 security import 校验）"
 
       - name: 安装签名身份与描述文件
         # 分发证书（ASC API 创建，本地私钥打包 p12）与两个 App Store 描述文件
