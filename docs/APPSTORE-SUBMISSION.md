@@ -92,35 +92,49 @@ TT 日历是一张「会记录你生活」的日历：月历上染色、待办�
 
 ---
 
-## B. 需要你提供的东西（按优先级）
+## B. 密钥与信息（2026-09-21 已全部到位）
 
-### 1. App Store Connect API 密钥（最推荐，自动化全靠它）
-生成路径：[appstoreconnect.apple.com](https://appstoreconnect.apple.com) → 用户和访问 → 集成 → App Store Connect API → 生成（角色选 **App Manager** 或 **Developer**）
-需要三样：
-- **Issuer ID**（页面顶部一串 UUID）
-- **Key ID**（10 位字符）
-- **.p8 私钥文件**（只能下载一次，`AuthKey_<KeyID>.p8`）
+| 项 | 值 | 状态 |
+|---|---|---|
+| Key ID | `PT4T88KGY3`（Agent-key，App Manager） | ✅ 已提供，密钥文件 `E:/AuthKey_PT4T88KGY3.p8` 已验证可用 |
+| Issuer ID | `2ae2a409-677f-4440-ba2d-04b1f2199d18` | ✅ 已提供 |
+| Team ID | `8RRWT62P25` | ✅ 已提供 |
+| Bundle ID | 沿用 `com.tt.calendar.mobile` | ✅ **已在 ASC 注册**（id `2S9UMW77LJ`）；小组件 `com.tt.calendar.mobile.widget`（id `3GLBW9U4N5`） |
+| 首发范围 | 仅中国区 | ✅ 决策完成 |
+| 隐私政策 | `docs/PRIVACY.md`（GitHub 公开链接）+ 应用内设置页展示 | ✅ 已落地 |
 
-用途：自动创建 App 记录、上传构建、管理 TestFlight、写元数据；也能自动签发发布证书与描述文件（配合 fastlane match/cert）。
+### 还剩两步只能网页手动点（公开 API 不开放这两个操作）
 
-### 2. 你的 Team ID（10 位）
-路径：[developer.apple.com/account](https://developer.apple.com/account) → Membership details → Team ID。
-（若给了 API 密钥，也可用脚本自动查到，但直接给我最快。）
+1. **注册 App Group**（签名构建的硬前置）：
+   [developer.apple.com/account/resources/identifiers/list/appGroup](https://developer.apple.com/account/resources/identifiers/list/appGroup) → 「+」→ App Groups → Description 填 `TT Calendar Shared` → Identifier 填 **`group.com.tt.calendar.mobile`** → Register。
+   注册完告诉我，我用 API 把它挂到两个 Bundle ID 上（bundleIdCapabilities）。
 
-### 3. 两个决策（一句话回复即可）
-- **Bundle ID**：沿用 `com.tt.calendar.mobile`，还是换成新的？（换新则现在改，App Group 同步换成 `group.<新ID>`，改动点我已梳理好）
-- **首发范围**：全区域 or 仅中国区？
+2. **创建 App 记录**（App Store Connect）：
+   [appstoreconnect.apple.com/apps](https://appstoreconnect.apple.com/apps) → 「+」新建 App：
+   - 名称：`TT 日历`（若提示重名，按 A 节备选名依次试）
+   - 主要语言：简体中文；Bundle ID：`com.tt.calendar.mobile`；SKU：`tt-calendar-2026`
+   - 用户访问：完全访问
 
-### 4. 隐私政策
-给一个你能长期托管的位置：GitHub 仓库内 `PRIVACY.md`（用 github.io 或仓库直链）即可。**文案我可以起草好你来挂。**
+### 3. 给 GitHub 仓库配三个 Secrets（CI 签名 job 用）
 
-### 5. （可选，若不想用 API 密钥的替代路径）
-- Apple ID 的 **App 专用密码**（appleid.apple.com → 登录和安全 → App 专用密码）——仅用于上传构建
-- 手动创建的 **Apple Distribution 证书 .p12 + 密码**——仅用于签名
-用 API 密钥的话这两样都不需要。
+仓库 Settings → Secrets and variables → Actions → New repository secret：
 
-### 隐私营养标签（App Store Connect 里勾选，提交前我来核对）
-预计申报：不收集任何数据（数据全本地 + 用户自己的 GitHub 仓）→ 这是本应用的最大卖点之一，如实填「不收集数据」。
+| Secret 名 | 值 |
+|---|---|
+| `APPSTORE_KEY_ID` | `PT4T88KGY3` |
+| `APPSTORE_ISSUER_ID` | `2ae2a409-677f-4440-ba2d-04b1f2199d18` |
+| `APPSTORE_P8` | `E:/AuthKey_PT4T88KGY3.p8` 的**完整文本内容**（-----BEGIN PRIVATE KEY----- 到 -----END PRIVATE KEY-----） |
+
+配好后到 Actions → iOS build → Run workflow（勾选只在 dispatch 触发的 `appstore` job 会跑）：归档签名 → 导出 ipa → 自动传 TestFlight。
+
+### API 调用工具
+
+`artifacts/asc/asc.mjs`（本地零依赖 JWT + curl 封装），用法：
+```bash
+export ASC_KEY_PATH="E:/AuthKey_PT4T88KGY3.p8" ASC_KEY_ID="PT4T88KGY3" ASC_ISSUER_ID="2ae2a409-677f-4440-ba2d-04b1f2199d18"
+node asc.mjs token   # 输出 JWT
+curl -H "Authorization: Bearer $TOKEN" https://api.appstoreconnect.apple.com/v1/apps
+```
 
 ---
 
@@ -131,18 +145,19 @@ TT 日历是一张「会记录你生活」的日历：月历上染色、待办�
 - 小组件代码已全部就位（`apps/mobile/widget/TTCalendarWidget.swift` + Rust App Group 桥 + entitlements）；**免费账号签不出 App Group 权限**，这就是小组件此前"搁置"的唯一原因——付费账号直接解锁
 - 正式签名构建需要 Apple 开发者账号凭据 → CI Secrets
 
-### 密钥到位后的改造清单（我可以直接实施）
-1. **签名 CI job**（新增 `device-signed` job，不动现有两个 job）：
-   - Secrets：`APPSTORE_ISSUER_ID` / `APPSTORE_KEY_ID` / `APPSTORE_P8`（API 密钥三件套）
-   - `fastlane match appstore`（或 xcodebuild + 手动 profile）签出：主 App `com.tt.calendar.mobile` + 小组件 extension `com.tt.calendar.mobile.widget` 两个 target 的 App Store 描述文件，且都要勾上 App Group `group.com.tt.calendar.mobile`
-   - `xcodebuild archive` + `xcodebuild -exportArchive`（App Store 方法）→ 产出签名 ipa
-2. **上传 TestFlight**：`xcrun altool --upload-app` 或 fastlane pilot（用同一把 API 密钥）
-3. **App Group 注册**：开发者portal 注册 `group.com.tt.calendar.mobile` + 两个 App ID（带 App Group capability）——有 API 密钥可脚本化，没有就你在网页点两下（我来写步骤）
-4. **Info.plist**：加 `ITSAppUsesNonExemptEncryption=NO`
-5. **App Store Connect 记录**：建 App → 填 A 部分文案 → 传 6 张截图 → 提交审核
-6. **审核注意**：Tauri/WKWebView 壳应用正常可过（4.2 最小功能）；首次提审建议备注「本地数据应用 + 可选 GitHub 同步」，附演示说明
+### 密钥到位后的改造（2026-09-21 已实施）
 
-### 小组件在真机上验证（拿到签名包后）
+1. **签名 CI job 已加**：`.github/workflows/ios-build.yml` 新增 `appstore` job（workflow_dispatch 手动触发，不动现有两个 job）：
+   - xcodebuild 自动签名（`DEVELOPMENT_TEAM=8RRWT62P25` + `-allowProvisioningUpdates` + `-authenticationKey*`），免手工证书/描述文件
+   - 归档 → ExportOptions（app-store-connect + `manageAppVersionAndBuildNumber` 自动递增 build 号）→ `xcrun altool` 上传 TestFlight
+   - 保留小组件硬门槛：`PlugIns/TTWidget.appex` 缺失直接失败
+   - 触发条件：Secrets 三件套配好后，Actions 页手动 Run
+2. **出口合规已声明**：`patch-ios-plist.mjs` 注入 `ITSAppUsesNonExemptEncryption=NO`
+3. **App Group 注册**：公开 API 不支持 → 需开发者在后台网页注册（见 B 节步骤 1）；注册后可用 API 挂到两个 Bundle ID
+4. **App 记录创建**：公开 API 不支持 CREATE → 需 ASC 网页新建（见 B 节步骤 2）
+5. **审核注意**：Tauri/WKWebView 壳应用正常可过（4.2 最小功能）；首次提审建议备注「本地数据应用 + 可选 GitHub 同步」，附演示说明
+
+### 小组件在真机上验证（拿到 TestFlight 包后）
 1. TestFlight 装 App → 长按桌面 → 添加小组件 → 选 TT 日历
 2. 打开 App 一次（触发 widget-bridge 写快照）→ 小组件 15 分钟内刷出今日待办/日程/倒数
 3. 若显示占位文案 = App Group 未生效 → 检查两个 target 的描述文件是否都含 App Group

@@ -435,6 +435,189 @@ jobs:
           path: scripts/ios-install-guide.md
           retention-days: 14
 
+  # ── 签名发布：API Key 自动签名 → TestFlight ─────────────────────────────────
+  # 前置（一次性，全部就位前本 job 会在校验步直接失败并提示）：
+  #   1. 开发者后台 developer.apple.com → Identifiers → App Groups 注册
+  #      group.com.tt.calendar.mobile（App Group 创建不在公开 API 内，只能网页注册）
+  #   2. 仓库 Settings → Secrets and variables → Actions 添加三个 Secret：
+  #      APPSTORE_KEY_ID（如 PT4T88KGY3）/ APPSTORE_ISSUER_ID / APPSTORE_P8（.p8 全文）
+  #   3. App Store Connect 网页 → Apps → 新建 App（bundle com.tt.calendar.mobile，
+  #      主语言 简体中文，SKU tt-calendar-2026）
+  # 签名走 xcodebuild 自动签名 + -authenticationKey*（免证书/描述文件手工管理），
+  # build 号由 manageAppVersionAndBuildNumber 在上传时自动递增。
+  appstore:
+    name: 签名发布（TestFlight）
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 校验 Secrets 是否就位
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          P8: ${{ secrets.APPSTORE_P8 }}
+        run: |
+          missing=0
+          for v in KEY_ID ISSUER_ID P8; do
+            if [ -z "${!v}" ]; then echo "缺少 Secret: $v（见 job 注释的前置条件）"; missing=1; fi
+          done
+          exit $missing
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装 Rust + iOS 真机编译目标
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: 缓存 Rust 编译产物
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/mobile/src-tauri
+
+      - name: 安装依赖（含 pnpm 无头全局配置）
+        run: |
+          printf 'confirm-modules-purge=false\nverify-deps-before-run=false\n' >> "$HOME/.npmrc"
+          pnpm install --frozen-lockfile
+
+      - name: 构建前端
+        working-directory: apps/mobile
+        env:
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+        run: pnpm build
+
+      - name: 生成 Xcode 工程
+        working-directory: apps/mobile
+        run: pnpm tauri ios init --ci
+
+      - name: 注入 Info.plist 权限键（ATS + 本地网络 + 出口合规）
+        run: node scripts/patch-ios-plist.mjs
+
+      - name: 注入主屏小组件 target（WidgetKit）
+        run: node scripts/patch-add-widget.mjs
+
+      - name: 覆盖应用图标
+        run: node scripts/patch-ios-icons.mjs
+
+      - name: 写入 App Store Connect API 私钥
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          P8: ${{ secrets.APPSTORE_P8 }}
+        run: |
+          mkdir -p private_keys "$HOME/.appstoreconnect/private_keys"
+          printf '%s\n' "$P8" > "private_keys/AuthKey_${KEY_ID}.p8"
+          cp "private_keys/AuthKey_${KEY_ID}.p8" "$HOME/.appstoreconnect/private_keys/"
+
+      - name: 归档签名 .xcarchive（自动签名）
+        working-directory: apps/mobile
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          # ── 伪造 tauri options WebSocket 服务（同 device-unsigned，见文件尾注）──
+          pushd "$GITHUB_WORKSPACE/scripts/ci-ios-options-server" >/dev/null
+          cargo build --release 2>&1 | tail -4
+          SRV="$GITHUB_WORKSPACE/scripts/ci-ios-options-server/target/release/ci-ios-options-server"
+          popd >/dev/null
+          "$SRV" &
+          SRV_PID=$!
+          trap 'kill $SRV_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            [ -f "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr" ] && break
+            sleep 0.5
+          done
+          PROJ=$(find src-tauri/gen/apple -maxdepth 1 -name '*.xcodeproj' | head -1)
+          [ -n "$PROJ" ] || { echo "找不到 .xcodeproj"; exit 1; }
+          SCHEME=$(xcodebuild -project "$PROJ" -list | awk '/Schemes:/{f=1;next} f&&/iOS/{print;exit}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          [ -n "$SCHEME" ] || { echo "找不到 iOS scheme"; exit 1; }
+          echo "project=$PROJ scheme=$SCHEME"
+          xcodebuild archive \
+            -project "$PROJ" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$GITHUB_WORKSPACE/TTCalendar.xcarchive" \
+            CI=true \
+            npm_config_confirm_modules_purge=false \
+            npm_config_verify_deps_before_run=false \
+            DEVELOPMENT_TEAM=8RRWT62P25 \
+            CODE_SIGN_STYLE=Automatic \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$GITHUB_WORKSPACE/private_keys/AuthKey_${KEY_ID}.p8" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            > /tmp/xcb-archive.log 2>&1 || { tail -120 /tmp/xcb-archive.log; exit 1; }
+          echo "归档完成"; ls "$GITHUB_WORKSPACE/TTCalendar.xcarchive/Products/Applications"
+
+      - name: 导出签名 .ipa（App Store 方法）
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          cat > ExportOptions.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>8RRWT62P25</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>manageAppVersionAndBuildNumber</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+          # 硬门槛：小组件必须嵌入（同 device-unsigned 的守门）
+          APP="$GITHUB_WORKSPACE/TTCalendar.xcarchive/Products/Applications/TTCalendar.app"
+          ls "$APP" >/dev/null
+          if [ ! -d "$APP/PlugIns/TTWidget.appex" ]; then
+            echo "错误：PlugIns/TTWidget.appex 缺失——小组件未嵌入"; ls -la "$APP"; exit 1
+          fi
+          xcodebuild -exportArchive \
+            -archivePath "$GITHUB_WORKSPACE/TTCalendar.xcarchive" \
+            -exportPath "$GITHUB_WORKSPACE/build/export" \
+            -exportOptionsPlist ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$GITHUB_WORKSPACE/private_keys/AuthKey_${KEY_ID}.p8" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            > /tmp/xcb-export.log 2>&1 || { tail -120 /tmp/xcb-export.log; exit 1; }
+          ls -lh "$GITHUB_WORKSPACE/build/export"
+
+      - name: 上传 TestFlight
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          IPA=$(find "$GITHUB_WORKSPACE/build/export" -name '*.ipa' | head -1)
+          [ -n "$IPA" ] || { echo "未找到 .ipa"; exit 1; }
+          # altool 从 ./private_keys 或 ~/.appstoreconnect/private_keys 读取 .p8
+          xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
+
+      - name: 上传签名 ipa 产物（留档）
+        uses: actions/upload-artifact@v4
+        with:
+          name: tt-calendar-appstore-ipa
+          path: build/export/*.ipa
+          retention-days: 30
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 为什么不用 `tauri ios build` 而用「tauri ios init + 直接 xcodebuild」？
 # ─ tauri ios build 在 CI 无开发者账号时会卡 "requires a development team"；

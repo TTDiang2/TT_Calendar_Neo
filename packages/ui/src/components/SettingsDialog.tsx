@@ -40,11 +40,45 @@ export function SettingsDialog({ layers, onToggleLayer, onClose }: Props) {
         <BusyConfigSection />
         <ReminderConfigSection />
         <SyncConfigSection />
+        <PrivacySection />
       </div>
       <p className="mt-5 pt-3 border-t border-gray-100 text-center text-[11px] text-gray-400 select-none">
         TT Calendar <span className="font-medium">v2.2.0</span>
       </p>
     </Modal>
+  )
+}
+
+function PrivacySection() {
+  return (
+    <section>
+      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">隐私政策</h3>
+      <p className="text-sm text-gray-600 leading-relaxed">
+        你的数据完全属于你：全部数据保存在本设备本地，本应用不含广告与任何第三方追踪组件，不收集、不上传、不出售任何个人数据。
+        唯一可选的数据传输是「数据同步」——若你开启，数据仅在<b>你自己的 GitHub 私有仓库</b>与设备之间流动，开发者无法访问。
+      </p>
+      <details className="mt-2 text-sm">
+        <summary className="cursor-pointer text-pink-600 select-none hover:text-pink-700">查看完整政策</summary>
+        <div className="mt-2 space-y-2 text-xs text-gray-500 leading-relaxed border border-gray-100 rounded-md p-3 bg-gray-50/60">
+          <p><b className="text-gray-600">一、我们不收集任何数据。</b>不含广告 SDK、不嵌入第三方统计/追踪组件；不请求位置、通讯录、照片、健康数据；不注册账号，不建立用户档案。</p>
+          <p><b className="text-gray-600">二、数据存储位置。</b>全部数据（事件、日程、待办、倒数日、涂色、配置）保存在设备本地（SQLite + 应用沙盒），离线可完整使用。小组件快照保存在设备本地的 App Group 共享容器，仅本设备的小组件扩展可读取。</p>
+          <p><b className="text-gray-600">三、唯一可选传输。</b>开启数据同步后，数据仅与你自己的 GitHub 私有仓库同步；认证 Token 仅存本机、永不上传；可随时停用或删除。不开启同步则不产生任何网络传输。</p>
+          <p><b className="text-gray-600">四、权限说明。</b>通知：仅在设置闹钟/每日提醒后弹本地通知；本地网络：仅连接局域网内电脑数据服务时使用。</p>
+          <p><b className="text-gray-600">五、数据删除。</b>卸载应用即删除设备数据；删除同步仓库即删除云端副本。我们没有任何服务器。</p>
+          <p>
+            完整政策（含变更与联系方式）：
+            <a
+              href="https://github.com/TTDiang2/TT_Calendar_Neo/blob/main/docs/PRIVACY.md"
+              target="_blank"
+              rel="noreferrer"
+              className="text-pink-600 hover:underline break-all"
+            >
+              github.com/TTDiang2/TT_Calendar_Neo/blob/main/docs/PRIVACY.md
+            </a>
+          </p>
+        </div>
+      </details>
+    </section>
   )
 }
 

@@ -38,6 +38,11 @@ const LOCAL_NETWORK = `
 \t<key>NSLocalNetworkUsageDescription</key>
 \t<string>日历数据支持连接同一局域网内的电脑数据服务，需要本地网络权限；不使用该功能时不会访问本地网络。</string>
 `
+// 出口合规：仅使用系统 HTTPS（豁免加密），声明后提审无需每次填写法国加密问卷
+const EXPORT_COMPLIANCE = `
+\t<key>ITSAppUsesNonExemptEncryption</key>
+\t<false/>
+`
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -54,6 +59,7 @@ for (const p of walk(ROOT)) {
   const missing = [
     ...(text.includes('NSAppTransportSecurity') ? [] : [ATS]),
     ...(text.includes('NSLocalNetworkUsageDescription') ? [] : [LOCAL_NETWORK]),
+    ...(text.includes('ITSAppUsesNonExemptEncryption') ? [] : [EXPORT_COMPLIANCE]),
   ]
   if (missing.length === 0) continue
   const i = text.lastIndexOf('</dict>')
