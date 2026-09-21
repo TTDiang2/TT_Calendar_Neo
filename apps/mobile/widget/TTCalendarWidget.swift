@@ -110,8 +110,10 @@ func appendAction(kind: String, id: String) {
     }
 }
 
-// ── 一键打卡的 AppIntent（iOS 17+ 小组件交互） ─────────────────────────
+// ── 一键打卡的 AppIntent（iOS 17+ 小组件交互；AppIntents 框架要求 16+，
+//    extension 部署目标 15.0，故整个类型标注可用性，使用处已有 17.0 守卫） ──
 
+@available(iOSApplicationExtension 17.0, *)
 struct CompleteHabitIntent: AppIntent {
     static var title: LocalizedStringResource = "完成今日打卡"
     static var description: IntentDescription? = IntentDescription("把这一项今日打卡标记为已完成")
