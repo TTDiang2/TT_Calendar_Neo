@@ -508,12 +508,11 @@ jobs:
       - name: 覆盖应用图标
         run: node scripts/patch-ios-icons.mjs
 
-      # build 号 = run 编号（ASC 要求同版本每次上传 build 号唯一；tauri init 每次都是 1）
+      # build 号 = run 编号（ASC 要求同版本的 build 号唯一；tauri 每次生成的工程都是固定值）
       - name: 注入唯一 build 号
-        run: |
-          PBXPROJ=$(find apps/mobile/src-tauri/gen/apple -maxdepth 2 -name '*.pbxproj' | head -1)
-          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = ${{ github.run_number }};/g" "$PBXPROJ"
-          grep -c "CURRENT_PROJECT_VERSION = ${{ github.run_number }}" "$PBXPROJ"
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: node scripts/patch-ios-version.mjs
 
       - name: 写入 App Store Connect API 私钥
         env:
@@ -523,6 +522,29 @@ jobs:
           mkdir -p private_keys "$HOME/.appstoreconnect/private_keys"
           printf '%s\n' "$P8" > "private_keys/AuthKey_${KEY_ID}.p8"
           cp "private_keys/AuthKey_${KEY_ID}.p8" "$HOME/.appstoreconnect/private_keys/"
+
+      - name: 安装签名身份与描述文件
+        # 分发证书（ASC API 创建，本地私钥打包 p12）与两个 App Store 描述文件
+        # （主 App + 小组件，均含 App Group group.com.tt.calendar.mobile）走 Secrets。
+        # 走手动签名的原因：云签（automatic + allowProvisioningUpdates）在导出环节
+        # 报 "Cloud signing permission error"（API Key 无创建发布描述文件的权限）。
+        env:
+          P12_PASSWORD: ${{ secrets.APPSTORE_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KC_PASS=$(uuidgen)
+          security create-keychain -p "$KC_PASS" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KC_PASS" build.keychain
+          security set-keychain-settings -lut 3600 build.keychain
+          security import signing/cert.p12 -k build.keychain -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASS" build.keychain
+          echo "--- 可用签名身份 ---"
+          security find-identity -v -p codesigning build.keychain
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp signing/*.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/"
+          echo "--- 已安装描述文件 ---"
+          ls "$HOME/Library/MobileDevice/Provisioning Profiles/"
 
       - name: 归档签名 .xcarchive（自动签名）
         working-directory: apps/mobile
@@ -566,25 +588,122 @@ jobs:
             > /tmp/xcb-archive.log 2>&1 || { tail -120 /tmp/xcb-archive.log; exit 1; }
           echo "归档完成"; ls "$GITHUB_WORKSPACE/TTCalendar.xcarchive/Products/Applications"
 
-      - name: 直接上传 .xcarchive 到 TestFlight
-        # 说明：不走 xcodebuild -exportArchive——它要求云签创建 App Store 描述文件，
-        # 而 API Key 没有该权限（"Cloud signing permission error"）。归档产物本身
-        # 已签名（自动签名在 archive 步已完成），altool 支持 xcarchive 直传 TestFlight。
+      - name: 写入签名材料（证书 + 两个描述文件）
+        env:
+          P12_B64: ${{ secrets.APPSTORE_P12 }}
+          MAIN_B64: ${{ secrets.APPSTORE_PROFILE_MAIN }}
+          WIDGET_B64: ${{ secrets.APPSTORE_PROFILE_WIDGET }}
+        run: |
+          set -euo pipefail
+          mkdir -p signing
+          printf '%s' "$P12_B64" | base64 -d > signing/cert.p12
+          printf '%s' "$MAIN_B64" | base64 -d > signing/tt-main.mobileprovision
+          printf '%s' "$WIDGET_B64" | base64 -d > signing/tt-widget.mobileprovision
+          ls -la signing/
+          # 校验解码结果确实是描述文件（CMS 签名头）而不是被截断的文本
+          for f in signing/*.mobileprovision; do
+            head -c 200 "$f" | grep -q "BEGIN CERTIFICATE" || { echo "描述文件解码异常: $f"; exit 1; }
+          done
+
+      - name: 归档 .xcarchive（自动签名，dev 描述文件由云签创建）
+        working-directory: apps/mobile
         env:
           KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
         run: |
           set -euo pipefail
-          APP="$GITHUB_WORKSPACE/TTCalendar.xcarchive/Products/Applications/TTCalendar.app"
-          ls "$APP" >/dev/null
-          # 硬门槛：小组件必须真的嵌进归档（同 device-unsigned 的守门）
-          if [ ! -d "$APP/PlugIns/TTWidget.appex" ]; then
-            echo "错误：PlugIns/TTWidget.appex 缺失——小组件未嵌入"; ls -la "$APP"; exit 1
-          fi
-          echo "已嵌入 extension："; find "$APP/PlugIns" -maxdepth 1 | sed 's/^/  /'
+          # ── 伪造 tauri options WebSocket 服务（同 device-unsigned，见文件尾注）──
+          pushd "$GITHUB_WORKSPACE/scripts/ci-ios-options-server" >/dev/null
+          cargo build --release 2>&1 | tail -4
+          SRV="$GITHUB_WORKSPACE/scripts/ci-ios-options-server/target/release/ci-ios-options-server"
+          popd >/dev/null
+          "$SRV" &
+          SRV_PID=$!
+          trap 'kill $SRV_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            [ -f "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr" ] && break
+            sleep 0.5
+          done
+          PROJ=$(find src-tauri/gen/apple -maxdepth 1 -name '*.xcodeproj' | head -1)
+          [ -n "$PROJ" ] || { echo "找不到 .xcodeproj"; exit 1; }
+          SCHEME=$(xcodebuild -project "$PROJ" -list | awk '/Schemes:/{f=1;next} f&&/iOS/{print;exit}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          [ -n "$SCHEME" ] || { echo "找不到 iOS scheme"; exit 1; }
+          echo "project=$PROJ scheme=$SCHEME"
+          xcodebuild archive \
+            -project "$PROJ" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$GITHUB_WORKSPACE/TTCalendar.xcarchive" \
+            CI=true \
+            npm_config_confirm_modules_purge=false \
+            npm_config_verify_deps_before_run=false \
+            DEVELOPMENT_TEAM=8RRWT62P25 \
+            CODE_SIGN_STYLE=Automatic \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$GITHUB_WORKSPACE/private_keys/AuthKey_${KEY_ID}.p8" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            > /tmp/xcb-archive.log 2>&1 || { tail -120 /tmp/xcb-archive.log; exit 1; }
+          echo "归档完成"; ls "$GITHUB_WORKSPACE/TTCalendar.xcarchive/Products/Applications"
+
+      - name: 导出签名 .ipa（手动签名，用自建描述文件）
+        # 关键的「绕开云签」一步：provisioningProfiles 映射显式指定两个 target 的
+        # App Store 描述文件，xcodebuild 便不再尝试云签创建（那一步没有权限）。
+        run: |
+          set -euo pipefail
+          cat > ExportOptions.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>8RRWT62P25</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.tt.calendar.mobile</key>
+              <string>TT Calendar AppStore</string>
+              <key>com.tt.calendar.mobile.widget</key>
+              <string>TT Widget AppStore</string>
+            </dict>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$GITHUB_WORKSPACE/TTCalendar.xcarchive" \
+            -exportPath "$GITHUB_WORKSPACE/build/export" \
+            -exportOptionsPlist ExportOptions.plist \
+            > /tmp/xcb-export.log 2>&1 || { tail -120 /tmp/xcb-export.log; exit 1; }
+          ls -lh "$GITHUB_WORKSPACE/build/export"
+
+      - name: 上传 TestFlight
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          IPA=$(find "$GITHUB_WORKSPACE/build/export" -name '*.ipa' | head -1)
+          [ -n "$IPA" ] || { echo "未找到 .ipa"; exit 1; }
+          # 硬门槛：小组件必须真的嵌进 ipa（同 device-unsigned 的守门）
+          unzip -l "$IPA" | grep -q "PlugIns/TTWidget.appex" || {
+            echo "错误：ipa 内 PlugIns/TTWidget.appex 缺失——小组件未嵌入"; unzip -l "$IPA" | head -30; exit 1
+          }
           # altool 从 ./private_keys 或 ~/.appstoreconnect/private_keys 读取 .p8
-          xcrun altool --upload-app -f "$GITHUB_WORKSPACE/TTCalendar.xcarchive" -t ios \
+          xcrun altool --upload-app -f "$IPA" -t ios \
             --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
+
+      - name: 上传签名 ipa 产物（留档）
+        uses: actions/upload-artifact@v4
+        with:
+          name: tt-calendar-appstore-ipa
+          path: build/export/*.ipa
+          retention-days: 30
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 为什么不用 `tauri ios build` 而用「tauri ios init + 直接 xcodebuild」？
