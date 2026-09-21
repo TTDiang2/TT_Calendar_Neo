@@ -448,10 +448,13 @@ export function StatsView({
                 <span>下一枚：{nextMilestone.title}</span>
                 <span className="tabular-nums">{data.stats.completed} / {nextMilestone.at}</span>
               </div>
+              {/* 进度条与右侧「已完成 / 下一枚阈值」同口径：总量占比。
+                  此前用「阶段内占比」，115/250 的标注配 10% 的条，视觉自相矛盾
+                  （20260921 商店截图视觉审核抓出） */}
               <div className="h-2 rounded-full bg-white/25 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-white/90 transition-[width] duration-700"
-                  style={{ width: `${Math.round(((data.stats.completed - currentMilestone.at) / (nextMilestone.at - currentMilestone.at)) * 100)}%` }}
+                  style={{ width: `${Math.min(100, Math.round((data.stats.completed / nextMilestone.at) * 100))}%` }}
                 />
               </div>
             </div>
