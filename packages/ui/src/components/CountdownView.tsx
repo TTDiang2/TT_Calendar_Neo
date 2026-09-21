@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlarmClock, CalendarClock, Infinity as InfinityIcon, Plus, Repeat, Sparkles } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { getCountdownList, createCountdown, updateCountdown, deleteCountdown } from '../adapt/api'
 import type { CountdownItem } from '../adapt/types'
@@ -204,7 +205,10 @@ export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownV
   )
 })
 
-/** 手机端倒数日编辑底部弹层：动画与安全区收在这里，保持与统一新建 sheet 一致的手感 */
+/** 手机端倒数日编辑/新建底部弹层。
+ *  必须像 QuickAddSheet 一样 portal 到 body：手势容器残留的 inline transform 会把
+ *  fixed 弹层圈进内容区——表现为抽屉不贴底（与 dock 之间露一条缝）、统一新建 FAB
+ *  浮在抽屉上盖住创建按钮（20260921 走查实录）。portal 后 z-50 压过 FAB(z-30)。 */
 function CountdownEditSheet({ item, onClose, onSave, onDelete }: {
   item: CountdownItem | null
   onClose: () => void
@@ -215,10 +219,10 @@ function CountdownEditSheet({ item, onClose, onSave, onDelete }: {
   useEffect(() => {
     animSheetUp(sheetRef.current)
   }, [])
-  return (
-    <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end">
+  return createPortal(
+    <div className="lg:hidden fixed inset-0 z-50 flex items-end">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div ref={sheetRef} className="relative pb-[env(safe-area-inset-bottom)]">
+      <div ref={sheetRef} className="relative w-full pb-[env(safe-area-inset-bottom)]">
         <CountdownDetailPanel
           item={item}
           variant="sheet"
@@ -227,7 +231,8 @@ function CountdownEditSheet({ item, onClose, onSave, onDelete }: {
           onDelete={onDelete}
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -346,14 +351,14 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
   return (
     <aside
       className={clsx(
-        'bg-white flex flex-col overflow-hidden',
+        'flex flex-col overflow-hidden',
         sheet
-          ? 'w-full max-h-[72dvh] rounded-t-2xl shadow-[0_-8px_30px_rgba(0,0,0,0.15)]'
-          : 'hidden lg:flex w-72 border-l border-gray-200',
+          ? 'glass-sheet w-full max-h-[88dvh] rounded-t-3xl'
+          : 'bg-white hidden lg:flex w-72 border-l border-gray-200',
       )}
     >
       {sheet && (
-        <div className="flex justify-center pt-1.5 pb-0.5">
+        <div className="flex justify-center pt-2 pb-0.5">
           <div className="w-10 h-1 rounded-full bg-gray-300" />
         </div>
       )}
@@ -467,34 +472,70 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
         </label>
       </div>
 
-      <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-        {item ? (
-          <button
-            onClick={() => onDelete(item.id)}
-            className="flex items-center gap-1 text-sm text-red-500 hover:text-red-600"
-          >
-            删除
-          </button>
-        ) : <span />}
-        <button
-          disabled={!name.trim() || !baseDate}
-          onClick={() => onSave({
-            name: name.trim(),
-            category: category.trim() || '其他',
-            base_date: baseDate,
-            repeat_yearly: repeatYearly,
-            repeat_type: repeatType,
-            milestone_rule: milestoneRule.trim() || null,
-            never_expire: neverExpire,
-            notes: notes.trim() || null,
-          }, item?.id)}
-          className={clsx(
-            'px-3 py-1.5 text-sm rounded-lg',
-            (!name.trim() || !baseDate) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-pink-500 text-white hover:bg-pink-600',
-          )}
-        >
-          {item ? '保存' : '创建'}
-        </button>
+      {/* 底部操作：桌面「删除 + 保存」行内；手机通栏主按钮（创建/保存），删除挪到
+          名称行下方——右对齐小按钮会被右下角统一 FAB 盖住（20260921 走查实录） */}
+      <div className={clsx('border-t border-black/5', sheet ? 'px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-2' : 'px-4 py-3 flex items-center justify-between')}>
+        {sheet ? (
+          <>
+            {item && (
+              <button
+                onClick={() => onDelete(item.id)}
+                className="w-full text-sm text-red-500 py-1.5"
+              >
+                删除该倒数日
+              </button>
+            )}
+            <button
+              disabled={!name.trim() || !baseDate}
+              onClick={() => onSave({
+                name: name.trim(),
+                category: category.trim() || '其他',
+                base_date: baseDate,
+                repeat_yearly: repeatYearly,
+                repeat_type: repeatType,
+                milestone_rule: milestoneRule.trim() || null,
+                never_expire: neverExpire,
+                notes: notes.trim() || null,
+              }, item?.id)}
+              className={clsx(
+                'w-full py-3 rounded-2xl text-[15px] font-semibold transition-colors',
+                (!name.trim() || !baseDate) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-pink-500 text-white active:bg-pink-600',
+              )}
+            >
+              {item ? '保存' : '创建'}
+            </button>
+          </>
+        ) : (
+          <>
+            {item ? (
+              <button
+                onClick={() => onDelete(item.id)}
+                className="flex items-center gap-1 text-sm text-red-500 hover:text-red-600"
+              >
+                删除
+              </button>
+            ) : <span />}
+            <button
+              disabled={!name.trim() || !baseDate}
+              onClick={() => onSave({
+                name: name.trim(),
+                category: category.trim() || '其他',
+                base_date: baseDate,
+                repeat_yearly: repeatYearly,
+                repeat_type: repeatType,
+                milestone_rule: milestoneRule.trim() || null,
+                never_expire: neverExpire,
+                notes: notes.trim() || null,
+              }, item?.id)}
+              className={clsx(
+                'px-3 py-1.5 text-sm rounded-lg',
+                (!name.trim() || !baseDate) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-pink-500 text-white hover:bg-pink-600',
+              )}
+            >
+              {item ? '保存' : '创建'}
+            </button>
+          </>
+        )}
       </div>
     </aside>
   )
