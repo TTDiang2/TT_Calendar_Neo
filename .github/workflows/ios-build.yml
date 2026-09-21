@@ -449,8 +449,12 @@ jobs:
   #      APPSTORE_KEY_ID（如 PT4T88KGY3）/ APPSTORE_ISSUER_ID / APPSTORE_P8（.p8 全文）
   #   3. App Store Connect 网页 → Apps → 新建 App（bundle com.tt.calendar.mobile，
   #      主语言 简体中文，SKU tt-calendar-2026）
-  # 签名走 xcodebuild 自动签名 + -authenticationKey*（免证书/描述文件手工管理），
-  # build 号由 manageAppVersionAndBuildNumber 在上传时自动递增。
+  # 签名走**手动签名**：自建 Apple Distribution 证书 + 两份 App Store 描述文件
+  # （由 ASC API 创建，证书私钥与描述文件内容存 Secrets，见 docs/APPSTORE-SUBMISSION.md）。
+  # 不用云签（automatic + -allowProvisioningUpdates）的原因：云签在全新 CI 机器上找不到
+  # 可复用的开发证书就会**新建**一张，账户证书配额很快被吃满，之后构建全部失败
+  # （20260921 实录：reached the maximum number of certificates）。
+  # build 号由 scripts/patch-ios-version.mjs 注入为 run 编号。
   appstore:
     name: 签名发布（TestFlight）
     if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -524,6 +528,9 @@ jobs:
 
       - name: 收敛为 iPhone 专用（iPad 支持未经真机验证，且会强制要 iPad 截图）
         run: node scripts/patch-ios-device-family.mjs
+
+      - name: 改为手动签名（自建发布证书 + 描述文件，避开云签证书配额）
+        run: node scripts/patch-ios-signing.mjs
 
       - name: 覆盖应用图标
         run: node scripts/patch-ios-icons.mjs
@@ -620,12 +627,6 @@ jobs:
             CI=true \
             npm_config_confirm_modules_purge=false \
             npm_config_verify_deps_before_run=false \
-            DEVELOPMENT_TEAM=8RRWT62P25 \
-            CODE_SIGN_STYLE=Automatic \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$GITHUB_WORKSPACE/private_keys/AuthKey_${KEY_ID}.p8" \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID" \
             > /tmp/xcb-archive.log 2>&1 || { tail -120 /tmp/xcb-archive.log; exit 1; }
           echo "归档完成"; ls "$GITHUB_WORKSPACE/TTCalendar.xcarchive/Products/Applications"
 
