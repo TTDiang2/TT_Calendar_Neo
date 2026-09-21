@@ -448,7 +448,8 @@ jobs:
   appstore:
     name: 签名发布（TestFlight）
     if: ${{ github.event_name == 'workflow_dispatch' }}
-    runs-on: macos-15
+    # iOS 26 SDK 起 Apple 不再接受更低版本构建（上传校验直接拒收）→ appstore job 用 macos-26
+    runs-on: macos-26
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -468,6 +469,12 @@ jobs:
             if [ -z "${!v}" ]; then echo "缺少 Secret: $v（见 job 注释的前置条件）"; missing=1; fi
           done
           exit $missing
+
+      - name: 打印工具链版本（排查 SDK 版本门槛用）
+        run: |
+          xcodebuild -version
+          xcode-select -p
+          ls /Applications | grep -i "^Xcode" || true
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
