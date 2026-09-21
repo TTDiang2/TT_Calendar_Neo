@@ -1,8 +1,12 @@
 # App Store 上架材料 —— TT 日历（Neo）
 
-> 2026-09-21 整理。分三部分：**A. 商店文案（可直接粘贴）**、**B. 需要你提供的信息/密钥**、
-> **C. 上架流程与 CI 签名改造方案**。
+> 2026-09-21 整理。分三部分：**A. 商店文案（可直接粘贴）**、**B. 账密/证书现状**、
+> **C. 上架流程状态**。
 > 截图成品在 `artifacts/preview/frames/`（6 张，1290×2796，6.7" 规格）。
+>
+> **当前状态：构建 69 已上传并通过 Apple 处理（VALID），TestFlight 内测就绪
+> （READY_FOR_BETA_TESTING）。** 下一步：真机装 TestFlight 版验证小组件 →
+> 提交审核。
 
 ---
 
@@ -155,22 +159,45 @@ curl -H "Authorization: Bearer $TOKEN" https://api.appstoreconnect.apple.com/v1/
 - 小组件代码已全部就位（`apps/mobile/widget/TTCalendarWidget.swift` + Rust App Group 桥 + entitlements）；**免费账号签不出 App Group 权限**，这就是小组件此前"搁置"的唯一原因——付费账号直接解锁
 - 正式签名构建需要 Apple 开发者账号凭据 → CI Secrets
 
-### 密钥到位后的改造（2026-09-21 已实施）
+### 密钥到位后的改造（2026-09-21 已实施并跑通）
 
-1. **签名 CI job 已加**：`.github/workflows/ios-build.yml` 新增 `appstore` job（workflow_dispatch 手动触发，不动现有两个 job）：
-   - xcodebuild 自动签名（`DEVELOPMENT_TEAM=8RRWT62P25` + `-allowProvisioningUpdates` + `-authenticationKey*`），免手工证书/描述文件
-   - 归档 → ExportOptions（app-store-connect + `manageAppVersionAndBuildNumber` 自动递增 build 号）→ `xcrun altool` 上传 TestFlight
-   - 保留小组件硬门槛：`PlugIns/TTWidget.appex` 缺失直接失败
-   - 触发条件：Secrets 三件套配好后，Actions 页手动 Run
-2. **出口合规已声明**：`patch-ios-plist.mjs` 注入 `ITSAppUsesNonExemptEncryption=NO`
-3. **App Group 注册**：公开 API 不支持 → 需开发者在后台网页注册（见 B 节步骤 1）；注册后可用 API 挂到两个 Bundle ID
-4. **App 记录创建**：公开 API 不支持 CREATE → 需 ASC 网页新建（见 B 节步骤 2）
-5. **审核注意**：Tauri/WKWebView 壳应用正常可过（4.2 最小功能）；首次提审建议备注「本地数据应用 + 可选 GitHub 同步」，附演示说明
+1. **签名 CI job 已落地**：`.github/workflows/ios-build.yml` 的 `appstore` job（手动触发，
+   不影响另外两个 job）：
+   - **归档**：自动签名（`DEVELOPMENT_TEAM=8RRWT62P25` + `-allowProvisioningUpdates` + API Key）
+   - **注入 build 号**：`scripts/patch-ios-version.mjs`（ASC 要求 build 号唯一；tauri 生成的
+     工程里主 App 是字面量、小组件走 `$(CURRENT_PROJECT_VERSION)`，统一改成 run 编号）
+   - **导出**：`signingStyle=manual` + `provisioningProfiles` 显式映射两份自建描述文件
+     （**关键**：自动签名导出走云签，API Key 无创建发布描述文件的权限，报
+     `Cloud signing permission error`；手动签名彻底绕开）
+   - **上传**：`xcrun altool --upload-app`，上传前硬校验 ipa 内含 `PlugIns/TTWidget.appex`
+   - **运行环境**：`runs-on: macos-26`（**Apple 2026 起拒收 iOS 18.5 SDK 构建**，
+     必须 iOS 26 SDK；macos-15 镜像带的是 Xcode 16.4）
+2. **出口合规**：`patch-ios-plist.mjs` 注入 `ITSAppUsesNonExemptEncryption=NO`（已验证生效：
+   ASC 上 `usesNonExemptEncryption: false`，提审不再需要每次作答）
+3. **App Group / 描述文件**：App Group 由开发者在后台注册（API 不开放创建）；
+   发布证书与两份 App Store 描述文件（均含 App Group）由 ASC API 创建，
+   证书私钥与描述文件内容存 Secrets
+4. **App 记录**：`6814356398`（TT 日历 / com.tt.calendar.mobile / SKU tt-calendar-2026）
+5. **审核注意**：Tauri/WKWebView 壳应用正常可过；首次提审建议备注「本地数据应用 +
+   可选 GitHub 同步（用户自己的私有仓库）」，无需演示账号
 
-### 小组件在真机上验证（拿到 TestFlight 包后）
-1. TestFlight 装 App → 长按桌面 → 添加小组件 → 选 TT 日历
-2. 打开 App 一次（触发 widget-bridge 写快照）→ 小组件 15 分钟内刷出今日待办/日程/倒数
-3. 若显示占位文案 = App Group 未生效 → 检查两个 target 的描述文件是否都含 App Group
+**当前版本号**：预发布版本 `0.1.0`（= `apps/mobile/src-tauri/tauri.conf.json` 的 version）。
+若希望商店显示 `1.0` 而非 `0.1.0`，改 tauri.conf.json 的 version 后重跑一次 appstore job
+（第一次提审前改，已上传的 TestFlight 构建不受影响）。
+
+### 小组件在真机上验证（TestFlight 装好后）
+1. iPhone 装 TestFlight → 安装 TT 日历（构建 69+）
+2. 打开 App 一次（触发 widget-bridge 写快照到 App Group）
+3. 长按桌面 → 添加小组件 → 选 TT 日历 → 15 分钟内刷出今日待办/日程/倒数/本月完成热力
+4. 若显示占位文案 = App Group 未生效：检查两个 target 装入的描述文件是否含
+   `group.com.tt.calendar.mobile`（构建日志「已安装描述文件」一节可见）
+
+### 提交审核前的剩余事项
+1. TestFlight 真机走查（小组件 + 主流程）
+2. ASC 填写：描述/关键词/截图（A 节文案）、隐私营养标签「不收集数据」、
+   年龄分级问卷、版权、审核备注
+3. 添加 TestFlight 内测人员（如需给他人试装）
+4. 提交审核（App 版本 0.1.0 或改号后的 1.0 + 构建 69+）
 
 ---
 
