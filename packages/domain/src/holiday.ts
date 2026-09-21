@@ -9,6 +9,7 @@
  */
 
 import type { DateStr } from '@tt-calendar/contracts'
+import { isWeekend } from './date'
 
 export interface HolidayInfo {
   /** 节假日名称；null 表示这天不是法定节假日 */
@@ -79,4 +80,14 @@ export function isWorkdayMadeUp(date: DateStr): boolean {
 export function coversYear(year: number): boolean {
   const c = provider.coverage
   return !!c && year >= c.from && year <= c.to
+}
+
+/**
+ * 是否工作日：法定节假日排除、调休补班周末算工作日；
+ * 日历数据没覆盖该日期时回退「周一~周五」（HANDOFF-repeat-to-neo §4.2）。
+ */
+export function isWorkday(date: DateStr): boolean {
+  const info = provider.holidayOf(date)
+  if (info) return info.is_workday_made_up
+  return !isWeekend(date)
 }

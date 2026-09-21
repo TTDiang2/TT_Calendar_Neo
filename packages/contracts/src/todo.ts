@@ -55,6 +55,8 @@ export const TodoRow = z.object({
   updated_at: DateTimeStr.nullable().optional(),
   /** 闹钟：本地时刻 YYYY-MM-DDTHH:mm（datetime-local），到点由系统通知提醒（1.3-5） */
   alarm_at: DateTimeStr.nullable().optional(),
+  /** 重复：NULL=不重复 | daily 每日 | weekdays 每工作日 | weekly 每周；未知值原样透传（老端 20260921） */
+  repeat: z.string().nullable().optional(),
 })
 export type TodoRow = z.infer<typeof TodoRow>
 
@@ -76,6 +78,8 @@ export const Todo = z.object({
   sort_order: z.number().int(),
   /** 闹钟：本地时刻（datetime-local），null = 未设；随 todo 表参与多端同步 */
   alarm_at: DateTimeStr.nullable(),
+  /** 重复模式；null = 不重复。完成转化时由端内生成下一期（HANDOFF-repeat-to-neo §4） */
+  repeat: z.string().nullable(),
 })
 export type Todo = z.infer<typeof Todo>
 
@@ -93,6 +97,7 @@ export const NewTodo = Todo.partial({
   completed_at: true,
   sort_order: true,
   alarm_at: true,
+  repeat: true,
 })
 export type NewTodo = z.infer<typeof NewTodo>
 
@@ -127,6 +132,13 @@ export const COMPLEXITY_LABELS: Record<Complexity, string> = {
   hard: '困难',
   medium: '中等',
   simple: '简单',
+}
+
+/** 重复模式文案（与老端 todo.repeat 枚举对齐；未知值前端显示原值） */
+export const REPEAT_LABELS: Record<string, string> = {
+  daily: '每天',
+  weekdays: '每工作日',
+  weekly: '每周',
 }
 
 export const STATUS_LABELS: Record<TodoStatus, string> = {

@@ -173,6 +173,8 @@ export const todo = sqliteTable(
     plannedDate: text('planned_date'),
     /** 闹钟（20260918 1.3-5）：本地时刻 YYYY-MM-DDTHH:mm，null = 未设 */
     alarmAt: text('alarm_at'),
+    /** 重复（老端 20260921 交接）：NULL=不重复 | daily | weekdays | weekly；未知值原样透传 */
+    repeat: text('repeat'),
     updatedAt: text('updated_at'),
   },
   (t) => [index('idx_todo_list').on(t.listId), index('idx_todo_due').on(t.dueDate)],

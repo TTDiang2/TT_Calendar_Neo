@@ -41,6 +41,7 @@ import {
   buildView,
   computeTodoBusyLevel,
   monthDays,
+  nextRepeatDate,
   todayStr,
   weekDays,
   windowRange,
@@ -116,6 +117,7 @@ function rowToTodo(r: TodoT): Todo {
     completed_at: r.completedAt ?? null,
     sort_order: r.sortOrder ?? 0,
     alarm_at: r.alarmAt ?? null,
+    repeat: r.repeat ?? null,
   }
 }
 
@@ -1156,6 +1158,7 @@ export class SqliteBackend {
     tags?: string[] | null
     status?: string
     alarm_at?: string | null
+    repeat?: string | null
   }): Todo {
     const id = crypto.randomUUID()
     this.db
@@ -1173,6 +1176,7 @@ export class SqliteBackend {
         complexity: data.complexity ?? 'medium',
         tags: data.tags ? JSON.stringify(data.tags) : null,
         alarmAt: data.alarm_at ?? null,
+        repeat: data.repeat ?? null,
         // 直传 completed 状态时补完成时间（否则既不进 done 也不进 predict 染色）
         completedAt: data.status === 'completed' ? now() : null,
         updatedAt: now(),
@@ -1205,14 +1209,56 @@ export class SqliteBackend {
     if ('sort_order' in data) set.sortOrder = (data.sort_order as number) ?? cur.sortOrder
     if ('list_id' in data) set.listId = (data.list_id as string) ?? cur.listId
     if ('alarm_at' in data) set.alarmAt = (data.alarm_at as string | null) ?? null
+    if ('repeat' in data) set.repeat = (data.repeat as string | null) ?? null
     this.db.update(s.todo).set(set).where(eq(s.todo.id, id)).run()
+    // 重复待办的下一期：只在本地完成动作（非 completed → completed）时生成。
+    // 同步导入不走本方法（sync-service 直写 DB），天然不会双生（HANDOFF §4.1）。
+    const spawnedDates =
+      set.completedAt && cur.status !== 'completed'
+        ? this.spawnNextRepeat({ ...cur, ...set }, set.completedAt)
+        : []
     const updated = rowToTodo(this.db.select().from(s.todo).where(eq(s.todo.id, id)).get()!)
     // old/new 受影响日期并集增量重算（旧版 Python _recompute_day_busy_for_todo 语义）
     this.recomputeBusyForDates([
       ...SqliteBackend.busyDatesOf(oldTodo),
       ...SqliteBackend.busyDatesOf(updated),
+      ...spawnedDates,
     ])
     return updated
+  }
+
+  /**
+   * 完成重复待办时生成下一期克隆（HANDOFF-repeat-to-neo §4.2/§4.3，逐字实现）：
+   * 新 uuid、notStarted、completed_at=NULL、planned=下一期、due/start 按相同位移平移、
+   * 其余字段（含 repeat/alarm_at）原样继承。未知 repeat 值或无 planned_date 不生成。
+   * 返回新行触及的忙度日期。
+   */
+  private spawnNextRepeat(row: TodoT, completedAt: string): (string | null)[] {
+    const next = nextRepeatDate(row.repeat ?? '', row.plannedDate ?? '', completedAt.slice(0, 10))
+    if (!row.plannedDate || !next) return []
+    const delta = diffDays(row.plannedDate, next)
+    const dueDate = row.dueDate ? addDays(row.dueDate, delta) : null
+    const values = {
+      id: crypto.randomUUID(),
+      listId: row.listId,
+      title: row.title,
+      body: row.body,
+      status: 'notStarted',
+      importance: row.importance,
+      dueDate,
+      createdAt: row.createdAt,
+      completedAt: null,
+      sortOrder: row.sortOrder,
+      startDate: row.startDate ? addDays(row.startDate, delta) : null,
+      complexity: row.complexity,
+      tags: row.tags,
+      plannedDate: next,
+      alarmAt: row.alarmAt,
+      repeat: row.repeat,
+      updatedAt: now(),
+    }
+    this.db.insert(s.todo).values(values).run()
+    return [dueDate, next]
   }
 
   deleteTodo(id: string): { ok: boolean } {

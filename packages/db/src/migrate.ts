@@ -133,7 +133,8 @@ CREATE TABLE IF NOT EXISTS todo(
   tags TEXT,
   planned_date TEXT,
   updated_at TEXT,
-  alarm_at TEXT
+  alarm_at TEXT,
+  repeat TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_todo_list ON todo(list_id);
 CREATE INDEX IF NOT EXISTS idx_todo_due ON todo(due_date);
@@ -161,6 +162,7 @@ CREATE TABLE IF NOT EXISTS sync_tombstones(
  */
 const ENSURE_COLUMNS: { table: string; ddl: string }[] = [
   { table: 'todo', ddl: 'ALTER TABLE todo ADD COLUMN alarm_at TEXT' },
+  { table: 'todo', ddl: 'ALTER TABLE todo ADD COLUMN repeat TEXT' },
 ]
 
 export function ensureSchema(sqlite: Database.Database): void {

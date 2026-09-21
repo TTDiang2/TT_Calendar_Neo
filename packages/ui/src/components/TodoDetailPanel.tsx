@@ -39,6 +39,19 @@ const COMPLEXITY_OPTIONS: { key: string; label: string }[] = [
   { key: 'hard', label: '复杂' },
 ]
 
+// 重复（老端 20260921 todo.repeat）：完成后端内自动生成下一期；'' = 不重复。
+// 未知枚举值（老端新档位先行）也列进选项，避免打开面板保存时被静默清掉。
+const REPEAT_OPTIONS: { key: string; label: string }[] = [
+  { key: '', label: '不重复' },
+  { key: 'daily', label: '每天' },
+  { key: 'weekdays', label: '每工作日' },
+  { key: 'weekly', label: '每周' },
+]
+
+function repeatLabel(v: string): string {
+  return REPEAT_OPTIONS.find((o) => o.key === v)?.label ?? v
+}
+
 export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function TodoDetailPanel(
   { todo, lists, onClose, onSave, onDelete },
   ref,
@@ -56,6 +69,8 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
   const [status, setStatus] = useState<Todo['status']>('notStarted')
   // 闹钟（20260918 任务书 1.3-5）：到点弹系统通知（iOS 不开放时钟 App 的闹钟 API）
   const [alarmAt, setAlarmAt] = useState('')
+  // 重复（20260921 老端 todo.repeat 交接）：完成后自动生成下一期
+  const [repeat, setRepeat] = useState('')
   const [dueExpanded, setDueExpanded] = useState(false)
   // 手机查看优先模式：当前进入编辑态的字段（null = 纯浏览，不渲染输入框不弹输入法）
   const [editing, setEditing] = useState<string | null>(null)
@@ -77,8 +92,8 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
     prevOpenRef.current = open
   }, [todo?.id, isDesktop])
 
-  const formRef = useRef({ title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status, alarmAt })
-  formRef.current = { title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status, alarmAt }
+  const formRef = useRef({ title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status, alarmAt, repeat })
+  formRef.current = { title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status, alarmAt, repeat }
 
   const savingRef = useRef(false)
   const [saving, setSaving] = useState(false)
@@ -114,7 +129,8 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         JSON.stringify(tags) !== JSON.stringify(target.tags ?? []) ||
         f.listId !== target.list_id ||
         f.status !== target.status ||
-        (f.alarmAt || '') !== (target.alarm_at ?? '')
+        (f.alarmAt || '') !== (target.alarm_at ?? '') ||
+        (f.repeat || '') !== (target.repeat ?? '')
       if (!changed) return
     }
     onSaveRef.current({
@@ -130,6 +146,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
       list_id: f.listId,
       status: f.status,
       alarm_at: f.alarmAt || null,
+      repeat: f.repeat || null,
     })
   }
 
@@ -154,6 +171,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         listId: todo.list_id,
         status: todo.status,
         alarmAt: todo.alarm_at ?? '',
+        repeat: todo.repeat ?? '',
       }
       setTitle(todo.title)
       setBody(todo.body ?? '')
@@ -166,6 +184,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
       setListId(todo.list_id)
       setStatus(todo.status)
       setAlarmAt(todo.alarm_at ?? '')
+      setRepeat(todo.repeat ?? '')
       setDueExpanded(false)
       setPlannedExpanded(false)
       setEditing(null)
@@ -207,6 +226,11 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
 
   const tags = tagsText.split(/[,，]/).map((t) => t.trim()).filter(Boolean)
 
+  // 当前值是未知档位（老端新枚举先行）时补进选项，避免一打开面板保存就被静默清掉
+  const repeatOptions = REPEAT_OPTIONS.some((o) => o.key === repeat)
+    ? REPEAT_OPTIONS
+    : [...REPEAT_OPTIONS, { key: repeat, label: repeatLabel(repeat) }]
+
   // 构造完整保存数据（与 useEffect 自动保存的字段一一对应）
   const buildData = (): Todo => ({
     ...todo!,
@@ -221,6 +245,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
     list_id: listId,
     status,
     alarm_at: alarmAt || null,
+    repeat: repeat || null,
   })
 
   // 显式保存：自己提交一次，再用 skipFlushRef 让紧随其后的 cleanup 别重复提交
@@ -314,6 +339,14 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
           <span className="block mb-1">状态</span>
           <select className="tt-input" value={status} onChange={(e) => setStatus(e.target.value as Todo['status'])}>
             {STATUS_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-gray-500">
+          <span className="block mb-1">重复</span>
+          <select className="tt-input" value={repeat} onChange={(e) => setRepeat(e.target.value)}>
+            {repeatOptions.map((o) => (
               <option key={o.key} value={o.key}>{o.label}</option>
             ))}
           </select>
@@ -528,6 +561,13 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         {metaRow('complexity', '复杂度', COMPLEXITY_OPTIONS.find((o) => o.key === complexity)?.label ?? complexity, (
           <select className="tt-input" value={complexity} onChange={(e) => setComplexity(e.target.value as Todo['complexity'])}>
             {COMPLEXITY_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
+        ))}
+        {metaRow('repeat', '重复', repeat ? repeatLabel(repeat) : '不重复', (
+          <select className="tt-input" value={repeat} onChange={(e) => setRepeat(e.target.value)}>
+            {repeatOptions.map((o) => (
               <option key={o.key} value={o.key}>{o.label}</option>
             ))}
           </select>

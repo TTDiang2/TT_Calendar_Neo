@@ -559,7 +559,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
       <TodoDetailPanel
         ref={detailRef}
         todo={selectedTodoId === '__NEW__'
-          ? { id: '' as string, list_id: selectedList ?? lists[0]?.id ?? '', title: '', body: null, importance: 'normal', due_date: null, planned_date: null, start_date: null, complexity: 'medium', tags: null, status: 'notStarted', alarm_at: null, created_at: null, completed_at: null, sort_order: 0 }
+          ? { id: '' as string, list_id: selectedList ?? lists[0]?.id ?? '', title: '', body: null, importance: 'normal', due_date: null, planned_date: null, start_date: null, complexity: 'medium', tags: null, status: 'notStarted', alarm_at: null, repeat: null, created_at: null, completed_at: null, sort_order: 0 }
           : selectedTodo}
         lists={lists}
         onClose={() => setSelectedTodoId(null)}
@@ -577,6 +577,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
               tags: data.tags,
               status: data.status,
               alarm_at: data.alarm_at,
+              repeat: data.repeat,
             })
           } else {
             updateMut.mutate({ id: data.id, data: { ...data, id: data.id } })
@@ -677,6 +678,7 @@ const QUICK_ADD_CREATE = {
   tags: null as string[] | null,
   status: 'notStarted',
   alarm_at: null as string | null,
+  repeat: null as string | null,
 }
 
 /** 快速新增待办抽屉：导出仅供渲染级回归测试使用 */

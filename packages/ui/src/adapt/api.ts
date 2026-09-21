@@ -210,6 +210,7 @@ export interface BackendAdapter {
     tags?: string[] | null
     status?: string
     alarm_at?: string | null
+    repeat?: string | null
   }): Promise<Todo>
   updateTodo(id: string, data: Record<string, unknown>): Promise<Todo>
   deleteTodo(id: string): Promise<{ ok: boolean }>
@@ -354,6 +355,7 @@ export const createTodo = (data: {
   tags?: string[] | null
   status?: string
   alarm_at?: string | null
+  repeat?: string | null
 }) => getBackend().createTodo(data)
 export const updateTodo = (id: string, data: Record<string, unknown>) => getBackend().updateTodo(id, data)
 export const deleteTodo = (id: string) => getBackend().deleteTodo(id)

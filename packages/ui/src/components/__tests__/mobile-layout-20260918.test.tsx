@@ -66,6 +66,7 @@ function makeTodo(overrides: Partial<Todo> = {}): Todo {
     completed_at: null,
     sort_order: 0,
     alarm_at: null,
+    repeat: null,
     ...overrides,
   }
 }

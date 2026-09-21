@@ -266,6 +266,7 @@ export class SyncService {
             tags,
             plannedDate: str(row.planned_date),
             alarmAt: str(row.alarm_at),
+            repeat: str(row.repeat),
             updatedAt: str(row.updated_at),
           })
           .onConflictDoUpdate({
@@ -283,6 +284,7 @@ export class SyncService {
               tags,
               plannedDate: str(row.planned_date),
               alarmAt: str(row.alarm_at),
+              repeat: str(row.repeat),
               updatedAt: str(row.updated_at),
             },
           })
