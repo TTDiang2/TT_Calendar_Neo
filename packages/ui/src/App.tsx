@@ -15,7 +15,7 @@ import { DayView } from './components/DayView'
 import { YearView } from './components/YearView'
 import { DetailPanel } from './components/DetailPanel'
 import { TodoView, type TodoViewHandle } from './components/TodoView'
-import { CountdownView } from './components/CountdownView'
+import { CountdownView, type CountdownViewHandle } from './components/CountdownView'
 import { StatsView } from './components/StatsView'
 import { WidgetsView } from './components/WidgetsView'
 import { BottomTabBar, type DockGestureState } from './components/BottomTabBar'
@@ -259,6 +259,8 @@ export default function App() {
   const [statsScopeOpen, setStatsScopeOpen] = useState(false)
   const [statsMilestonesOpen, setStatsMilestonesOpen] = useState(false)
   const todoViewRef = useRef<TodoViewHandle>(null)
+  // 倒数页新建入口：统一新建 FAB 在倒数模式点击后经 ref 打开本页抽屉
+  const countdownViewRef = useRef<CountdownViewHandle>(null)
   const [dockSuspended, setDockSuspended] = useState(false)
   const dragSource = useRef<string | null>(null)
   const qc = useQueryClient()
@@ -797,7 +799,7 @@ export default function App() {
                 />
               </div>
             )}
-            <CountdownView />
+            <CountdownView ref={countdownViewRef} />
           </div>
         ) : (
           <>
@@ -949,12 +951,16 @@ export default function App() {
       />
 
       {/* 统一新建 FAB（20260917 任务书 1.2-3）：日历/待办页右下角粉色加号，
-          点开从底部弹抽屉——日历选「点点/涂色」，待办直接进入快速新增 */}
-      {isMobile && (topTab === 'todo' || (topTab === 'calendar' && mode !== 'countdown')) && (
+          点开从底部弹抽屉——日历（月/日/年）选「点点/涂色」，倒数打开倒数日
+          新建抽屉（20260921 走查补），待办直接进入快速新增 */}
+      {isMobile && (topTab === 'todo' || topTab === 'calendar') && (
         <button
           onClick={() => {
-            if (topTab === 'calendar') setAddSheetDate(selectedDate ?? todayStr())
-            else todoViewRef.current?.openQuickAdd()
+            if (topTab === 'calendar') {
+              // 倒数模式：打开倒数日新建抽屉；月/日/年：点点/涂色选择抽屉
+              if (mode === 'countdown') countdownViewRef.current?.openCreate()
+              else setAddSheetDate(selectedDate ?? todayStr())
+            } else todoViewRef.current?.openQuickAdd()
           }}
           className="md:hidden fixed right-4 z-30 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 text-white shadow-xl shadow-pink-500/40 flex items-center justify-center active:scale-90 transition-transform"
           style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom, 0px))' }}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlarmClock, CalendarClock, Infinity as InfinityIcon, Plus, Repeat, Sparkles } from 'lucide-react'
 import clsx from 'clsx'
@@ -13,13 +13,22 @@ const CATEGORY_COLORS: Record<string, string> = {
   重要事件: '#60a5fa',
 }
 
-export function CountdownView() {
+export interface CountdownViewHandle {
+  /** 打开新建倒数日抽屉（App 统一新建 FAB 在倒数模式下的入口，20260921 走查） */
+  openCreate: () => void
+}
+
+export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownView(_props, ref) {
   const qc = useQueryClient()
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | 'NEW' | null>(null)
   // 手机端「右下角大加号」新建（20260921 走查：NEW 状态下编辑弹层因 item=null
   // 直接 return null，手机上新建按钮等于摆设——改为显式 createOpen 驱动）
   const [createOpen, setCreateOpen] = useState(false)
+
+  useImperativeHandle(ref, () => ({
+    openCreate: () => setCreateOpen(true),
+  }))
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['countdown', 'list'],
@@ -189,22 +198,11 @@ export function CountdownView() {
           }}
         />
       )}
-
-      {/* 手机：右下角大加号 FAB（新建逻辑统一，20260921 走查要求） */}
-      <button
-        onClick={() => setCreateOpen(true)}
-        aria-label="新建倒数日"
-        className={clsx(
-          'lg:hidden fixed z-30 right-4 w-14 h-14 rounded-full bg-pink-500 text-white shadow-lg',
-          'flex items-center justify-center active:bg-pink-600 transition-transform active:scale-95',
-        )}
-        style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}
-      >
-        <Plus size={26} />
-      </button>
+      {/* 手机右下角的新建按钮由 App.tsx 的「统一新建 FAB」承担（倒数模式下点击
+          经 openCreate 打开本页抽屉）——不再自造样式不一致的第二颗按钮 */}
     </div>
   )
-}
+})
 
 /** 手机端倒数日编辑底部弹层：动画与安全区收在这里，保持与统一新建 sheet 一致的手感 */
 function CountdownEditSheet({ item, onClose, onSave, onDelete }: {
