@@ -36,8 +36,8 @@ const study = be.createTodoList('学习')
 
 // ---------- 待办 ----------
 be.createTodo({ list_id: work.id, title: '准备季度汇报 PPT', body: '数据图先从统计页导出', importance: 'high', due_date: d(4), planned_date: d(0), complexity: 'hard', tags: ['汇报'], status: 'inProgress' })
-be.createTodo({ list_id: work.id, title: '写周报', importance: 'normal', due_date: d(2), planned_date: d(0), complexity: 'simple', tags: ['周更'] })
-be.createTodo({ list_id: work.id, title: '评审小程序模块的 PR', importance: 'normal', due_date: d(5), planned_date: d(1), complexity: 'medium' })
+be.createTodo({ list_id: work.id, title: '写周报', body: '本周重点：季度汇报初稿、评审 3 个 PR、沉淀周报模板。数据部分引用统计页的贡献热力图与忙度预测两张图。', importance: 'normal', due_date: d(2), planned_date: d(0), complexity: 'simple', tags: ['周更'] })
+be.createTodo({ list_id: work.id, title: '评审小程序模块的 PR', body: '重点看状态管理和离线缓存两块的实现，性能问题直接在行内评论，周五前给结论。', importance: 'normal', due_date: d(5), planned_date: d(1), complexity: 'medium' })
 be.createTodo({ list_id: work.id, title: '回复合作方邮件', importance: 'low', due_date: d(-1), planned_date: d(-1), tags: ['沟通'] })
 be.createTodo({ list_id: work.id, title: '整理会议纪要归档', importance: 'low', due_date: d(-2), planned_date: d(-2) })
 be.createTodo({ list_id: work.id, title: '每日站会同步进展', importance: 'normal', planned_date: d(0), complexity: 'simple', repeat: 'daily' })
@@ -46,15 +46,23 @@ be.createTodo({ list_id: work.id, title: '处理报销单', importance: 'normal'
 be.createTodo({ list_id: work.id, title: '更新项目排期表', importance: 'normal', planned_date: d(-1), status: 'completed' })
 
 be.createTodo({ list_id: life.id, title: '晚上跑步 5 公里', body: '江边路线', importance: 'normal', planned_date: d(0), complexity: 'medium', tags: ['运动'] })
-be.createTodo({ list_id: life.id, title: '预约洗牙', importance: 'normal', due_date: d(9), tags: ['健康'] })
+be.createTodo({ list_id: life.id, title: '预约洗牙', body: '周六上午人少，记得提前一天打电话确认档期，带上医保卡。', importance: 'normal', due_date: d(9), tags: ['健康'] })
 be.createTodo({ list_id: life.id, title: '采购周末食材', body: '番茄、牛排、酸奶', importance: 'low', planned_date: d(2) })
 be.createTodo({ list_id: life.id, title: '给爸妈打电话', importance: 'high', planned_date: d(0), repeat: 'weekly' })
 be.createTodo({ list_id: life.id, title: '取快递', importance: 'low', planned_date: d(0), status: 'completed' })
 
-be.createTodo({ list_id: study.id, title: '读《思考，快与慢》第 7 章', importance: 'normal', planned_date: d(0), complexity: 'medium', tags: ['阅读'] })
+be.createTodo({ list_id: study.id, title: '读《思考，快与慢》第 7 章', body: '本章讲锚定效应：三个经典实验 + 一段销售定价的应用，读完顺手把批注整理进笔记本。', importance: 'normal', planned_date: d(0), complexity: 'medium', tags: ['阅读'] })
 be.createTodo({ list_id: study.id, title: '背 50 个英语单词', importance: 'normal', planned_date: d(0), complexity: 'simple', repeat: 'daily' })
 be.createTodo({ list_id: study.id, title: '完成网课单元测验', importance: 'high', due_date: d(3), planned_date: d(1), complexity: 'medium' })
 be.createTodo({ list_id: study.id, title: '整理错题本', importance: 'low', planned_date: d(-1), status: 'completed' })
+
+// 补充：四象限四格都有内容，矩阵视图截图更充实
+be.createTodo({ list_id: work.id, title: '缴纳房租', body: '银行转账，备注写 9 月房租', importance: 'high', due_date: d(1), tags: ['生活账单'] })
+be.createTodo({ list_id: work.id, title: '确认乙方合同条款', body: '第 4 条违约金比例要改成 5%，法务已回复意见', importance: 'high', due_date: d(2), tags: ['合同'] })
+be.createTodo({ list_id: life.id, title: '体检预约', body: '年度体检套餐，约周四上午空腹项目', importance: 'high', due_date: d(12), tags: ['健康'] })
+be.createTodo({ list_id: life.id, title: '制定旅行攻略', body: '高铁票 + 民宿先订，景点列表发到共享文档投票', importance: 'normal', due_date: d(12), tags: ['旅行'] })
+be.createTodo({ list_id: life.id, title: '换季衣物收纳', body: '真空袋 4 个，厚外套送洗衣店之前先拍照登记', importance: 'low', planned_date: d(15) })
+be.createTodo({ list_id: study.id, title: '整理云端相册', body: '重复截图清一遍，去年旅行的照片按月份建相册', importance: 'low', due_date: d(25) })
 
 // ---------- 重要日期（important 图层事件） ----------
 be.createEvent({ layer_id: 'important', source: 'manual', date: d(0), title: '季度目标对齐会', description: null, extra: {} })
