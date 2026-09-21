@@ -10,7 +10,7 @@
  */
 
 import { rmSync } from 'node:fs'
-import { SqliteBackend, layerConfig, openDb } from '@tt-calendar/db'
+import { SqliteBackend, openDb } from '@tt-calendar/db'
 
 const target = process.argv[2] ?? 'artifacts/preview/demo.db'
 for (const f of [target, `${target}-shm`, `${target}-wal`]) rmSync(f, { force: true })
@@ -25,35 +25,9 @@ function d(delta: number): string {
   return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`
 }
 
-// ---------- 图层（镜像真实库的内置层；订阅源已下线，不带 jisilu_*） ----------
-const LAYERS: [string, string, number, string, number, string | null, string][] = [
-  // id, 名称, enabled, color, sort, group, kind
-  ['important', '重要日期', 1, '#EF5350', 1, null, 'color'],
-  ['coloring', '充实度染色', 1, '#388E3C', 2, null, 'color'],
-  ['holiday', '公共节假日', 1, '#8E24AA', 3, null, 'color'],
-  ['todo', '待办', 1, '#F59E0B', 4, null, 'color'],
-  ['todo_done', '待办·已完成', 1, '#818CF8', 5, null, 'color'],
-  ['schedule_work', '工作', 1, '#3D6BFB', 5, '日程', 'dot'],
-  ['schedule_course', '课程', 1, '#8E24AA', 6, '日程', 'dot'],
-  ['schedule_sport', '运动', 1, '#10B981', 7, '日程', 'dot'],
-  ['schedule_play', '玩耍', 1, '#F59E0B', 8, '日程', 'dot'],
-  ['schedule_other', '其他', 1, '#64748B', 9, '日程', 'dot'],
-]
-db.insert(layerConfig)
-  .values(
-    LAYERS.map(([layerId, displayName, enabled, color, sortOrder, group, kind]) => ({
-      layerId,
-      displayName,
-      enabled,
-      color,
-      sortOrder,
-      kind,
-      groupName: group,
-      configJson: '{}',
-      updatedAt: null,
-    })),
-  )
-  .run()
+// ---------- 图层 ----------
+// 内置图层由 SqliteBackend 构造时的 bootstrapDefaultLayers 播种（20260921 起），
+// 这里不再重复插入——那会撞 UNIQUE(layer_config.layer_id)。
 
 // ---------- 清单 ----------
 const work = be.createTodoList('工作')
@@ -98,30 +72,37 @@ be.createScheduleItem({ date: d(0), start_time: '20:30', end_time: '22:00', titl
 be.createScheduleItem({ date: d(1), start_time: '09:30', end_time: '11:30', title: '季度汇报彩排', color: '#3D6BFB', sort_order: 1, category: 'work' })
 be.createScheduleItem({ date: d(2), start_time: '15:00', end_time: '16:00', title: '跨部门沟通会', color: '#3D6BFB', sort_order: 1, category: 'work' })
 
-// ---------- 倒数日 ----------
-be.createCountdown({ name: '项目上线', category: '工作', base_date: d(21), color: '#3D6BFB' })
-be.createCountdown({ name: '期末考试', category: '学习', base_date: d(9), color: '#8E24AA' })
-be.createCountdown({ name: '国庆假期', category: '生活', base_date: '2026-10-01', color: '#EF5350' })
-be.createCountdown({ name: '结对纪念日', category: '生活', base_date: '2021-05-20', repeat_yearly: true, never_expire: true, color: '#F59E0B' })
-be.createCountdown({ name: '出发去旅行', category: '生活', base_date: d(16), color: '#10B981' })
-be.createCountdown({ name: '驾照科目一', category: '学习', base_date: d(5), color: '#64748B' })
-be.createCountdown({ name: '爸爸生日', category: '生活', base_date: '1975-11-08', repeat_yearly: true, never_expire: true, color: '#EC4899' })
-be.createCountdown({ name: '妈妈生日', category: '生活', base_date: '1978-12-24', repeat_yearly: true, never_expire: true, color: '#8B5CF6' })
+// ---------- 倒数日（分类即语义色：生日粉 / 纪念日黄 / 节日紫 / 重要事件蓝） ----------
+be.createCountdown({ name: '项目上线', category: '重要事件', base_date: d(21), color: '#3D6BFB' })
+be.createCountdown({ name: '期末考试', category: '重要事件', base_date: d(9), color: '#60a5fa' })
+be.createCountdown({ name: '国庆假期', category: '节日', base_date: '2026-10-01', color: '#a78bfa' })
+be.createCountdown({ name: '春节', category: '节日', base_date: '2027-02-06', color: '#a78bfa' })
+be.createCountdown({ name: '结对纪念日', category: '纪念日', base_date: '2021-05-20', repeat_yearly: true, never_expire: true, color: '#f59e0b' })
+be.createCountdown({ name: '出发去旅行', category: '重要事件', base_date: d(16), color: '#60a5fa' })
+be.createCountdown({ name: '驾照科目一', category: '重要事件', base_date: d(5), color: '#60a5fa' })
+be.createCountdown({ name: '爸爸生日', category: '生日', base_date: '1975-11-08', repeat_yearly: true, never_expire: true, color: '#f472b6' })
+be.createCountdown({ name: '妈妈生日', category: '生日', base_date: '1978-12-24', repeat_yearly: true, never_expire: true, color: '#f472b6' })
 
-// ---------- 充实度染色（近 45 天，工作日饱满、周末多留白） ----------
+// ---------- 充实度染色（近 300 天，有节奏的深浅白：项目冲刺深绿、平淡期浅绿、假期留白） ----------
 let seed = 42
 const rand = () => {
   seed = (seed * 1103515245 + 12345) % 2147483648
   return seed / 2147483648
 }
-for (let i = 45; i >= 1; i -= 1) {
+for (let i = 300; i >= 1; i -= 1) {
   const date = d(-i)
   const dow = new Date(`${date}T00:00:00`).getDay()
+  // 项目节奏波：以 5 周为周期，冲刺周深绿多、收尾周留白多
+  const wave = Math.sin((i / 35) * Math.PI * 2)
   if (dow === 0 || dow === 6) {
-    if (rand() < 0.35) be.upsertColoring(date, 1 + Math.floor(rand() * 2))
+    if (rand() < 0.3 + wave * 0.15) be.upsertColoring(date, 1 + Math.floor(rand() * 2))
     continue
   }
-  const level = rand() < 0.12 ? 0 : 1 + Math.floor(rand() * 4)
+  let level: number
+  const r = rand()
+  if (wave > 0.4) level = r < 0.08 ? 0 : 3 + Math.floor(rand() * 2)      // 冲刺：多深绿
+  else if (wave > -0.3) level = r < 0.12 ? 0 : 1 + Math.floor(rand() * 3) // 平常：中绿为主
+  else level = r < 0.35 ? 0 : 1 + Math.floor(rand() * 2)                  // 轻松：多浅绿留白
   be.upsertColoring(date, Math.min(level, 4))
 }
 
@@ -136,12 +117,12 @@ const HIST_POOL = [
 ]
 const HIST_LISTS = [work.id, life.id, study.id]
 let histSeq = 0
-for (let i = 56; i >= 1; i -= 1) {
+for (let i = 320; i >= 1; i -= 1) {
   const date = d(-i)
   const dow = new Date(`${date}T00:00:00`).getDay()
   const weekend = dow === 0 || dow === 6
-  // 工作日 2-3 条，周末大概率休息；最近 14 天每天至少 1 条（连续天数好看）
-  let count = weekend ? (rand() < 0.4 ? 1 : 0) : 2 + Math.floor(rand() * 2)
+  // 起伏感：0-5 条不等（柱状图有高有低，热力有深有浅有白）；最近 14 天每天至少 1 条（连续天数）
+  let count = weekend ? Math.floor(rand() * 3) : Math.floor(rand() * 6)
   if (i <= 14 && count === 0) count = 1
   for (let k = 0; k < count; k += 1) {
     histSeq += 1
@@ -167,4 +148,4 @@ for (let i = 56; i >= 1; i -= 1) {
 be.recomputeTodoBusy()
 
 console.log(`[seed-demo] 演示数据已写入 ${target}`)
-console.log(`[seed-demo] 清单 3 / 待办 19 / 历史完成 ${histSeq} / 重要日期 6 / 日程 6 / 倒数日 4`)
+console.log(`[seed-demo] 清单 3 / 待办 19 / 历史完成 ${histSeq} / 重要日期 6 / 日程 6 / 倒数日 9`)
