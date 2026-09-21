@@ -17,6 +17,9 @@ export function CountdownView() {
   const qc = useQueryClient()
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | 'NEW' | null>(null)
+  // 手机端「右下角大加号」新建（20260921 走查：NEW 状态下编辑弹层因 item=null
+  // 直接 return null，手机上新建按钮等于摆设——改为显式 createOpen 驱动）
+  const [createOpen, setCreateOpen] = useState(false)
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['countdown', 'list'],
@@ -117,9 +120,10 @@ export function CountdownView() {
             <CalendarClock size={15} className="flex-shrink-0" />
             <span className="truncate">倒数日{selectedCategory ? ` · ${selectedCategory}` : ''}</span>
           </h2>
+          {/* 手机走右下角 FAB（新建逻辑统一，20260921 走查）；桌面保留行内按钮 */}
           <button
             onClick={() => { setSelectedCategory(null); setSelectedId('NEW') }}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 flex-shrink-0"
+            className="hidden md:flex items-center gap-1 px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 flex-shrink-0"
           >
             <Plus size={14} /> 新建
           </button>
@@ -131,7 +135,7 @@ export function CountdownView() {
           ) : filtered.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-gray-300 gap-2">
               <AlarmClock size={40} />
-              <p className="text-sm">暂无倒数日，点「新建」添加</p>
+              <p className="text-sm">暂无倒数日，点右下角 + 新建</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
@@ -165,15 +169,17 @@ export function CountdownView() {
           }
         }}
       />
-      {/* 手机（<lg）：点卡片后底部弹层编辑（上滑入场 + 底部安全区，20260918 任务书 1.2-3/1.2-5） */}
-      {selected && (
+      {/* 手机（<lg）：点卡片后底部弹层编辑；FAB 新建走同一弹层（createOpen）。
+          CountdownDetailPanel 的 sheet 分支已支持 item=null（新建表单）。 */}
+      {(selected || createOpen) && (
         <CountdownEditSheet
           item={selected}
-          onClose={() => setSelectedId(null)}
+          onClose={() => { setSelectedId(null); setCreateOpen(false) }}
           onSave={(data, id) => {
             if (id) updateMut.mutate({ id, data })
             else createMut.mutate(data)
             setSelectedId(null)
+            setCreateOpen(false)
           }}
           onDelete={(id) => {
             if (confirm('删除该倒数日？')) {
@@ -183,13 +189,26 @@ export function CountdownView() {
           }}
         />
       )}
+
+      {/* 手机：右下角大加号 FAB（新建逻辑统一，20260921 走查要求） */}
+      <button
+        onClick={() => setCreateOpen(true)}
+        aria-label="新建倒数日"
+        className={clsx(
+          'lg:hidden fixed z-30 right-4 w-14 h-14 rounded-full bg-pink-500 text-white shadow-lg',
+          'flex items-center justify-center active:bg-pink-600 transition-transform active:scale-95',
+        )}
+        style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}
+      >
+        <Plus size={26} />
+      </button>
     </div>
   )
 }
 
 /** 手机端倒数日编辑底部弹层：动画与安全区收在这里，保持与统一新建 sheet 一致的手感 */
 function CountdownEditSheet({ item, onClose, onSave, onDelete }: {
-  item: CountdownItem
+  item: CountdownItem | null
   onClose: () => void
   onSave: Parameters<typeof CountdownDetailPanel>[0]['onSave']
   onDelete: (id: number) => void
@@ -313,14 +332,17 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
   const isNew = !item
   const sheet = variant === 'sheet'
 
-  // 无选中时：桌面占位提示；手机弹层不显示
+  // 无选中时：桌面占位提示；手机弹层渲染「新建」表单（item=null 即新建，20260921 修复）
   if (!item) {
-    if (sheet) return null
-    return (
-      <aside className="hidden lg:block w-72 bg-white border-l border-gray-200 p-4 flex-shrink-0">
-        <p className="text-sm text-gray-400">点击卡片查看 / 编辑</p>
-      </aside>
-    )
+    if (sheet) {
+      // 落到下面的表单渲染：字段已由上方 effect 重置为空
+    } else {
+      return (
+        <aside className="hidden lg:block w-72 bg-white border-l border-gray-200 p-4 flex-shrink-0">
+          <p className="text-sm text-gray-400">点击卡片查看 / 编辑</p>
+        </aside>
+      )
+    }
   }
 
   return (

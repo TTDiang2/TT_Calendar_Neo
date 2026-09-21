@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm'
 
 import type { MonthData } from '@tt-calendar/contracts'
 import { merge, tombKey } from '@tt-calendar/domain'
-import { openDb, SqliteBackend, SyncService } from './index'
+import { DEFAULT_BUILTIN_LAYERS, openDb, SqliteBackend, SyncService } from './index'
 import * as s from './schema'
 
 function freshBackend() {
@@ -306,8 +306,10 @@ describe('SyncService（纯数据面三方合并落库）', () => {
     }
     const r = sync.syncWith(null, remote as never, { base: {}, remote: {}, local: {} }, 'pull_overwrite')
     expect(r.report.pulled).toBe(1)
-    // 本地独有的 todo 行 + todo_list 行都按协议被删（远端整表为空也照删）
-    expect(r.report.deleted).toBe(2)
+    // 本地独有的 todo 行 + todo_list 行都按协议被删（远端整表为空也照删）。
+    // 全新库构造时播种的内置默认图层同样算「本地独有行」，一并删除——协议语义
+    // 不变；数量 = 2 + DEFAULT_BUILTIN_LAYERS.length（种子行数变化时测试不脆）。
+    expect(r.report.deleted).toBe(2 + DEFAULT_BUILTIN_LAYERS.length)
     expect(backend.getTodos({ status: 'all' }).map((t) => t.title)).toEqual(['远端'])
   })
 

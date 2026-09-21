@@ -122,3 +122,109 @@ pub fn write_shared_snapshot(content: &str) -> Result<String, String> {
 pub fn write_shared_snapshot(_content: &str) -> Result<String, String> {
     Err("主屏小组件仅在 iOS 上可用".into())
 }
+
+/// 共享的小组件数据通道：读/写 App Group 容器里的文件（iOS）。
+/// 供 write_shared_snapshot 与 consume_widget_actions 共用的目录解析。
+#[cfg(target_os = "ios")]
+mod group_io {
+    use std::ffi::{c_char, CStr, CString};
+    use std::mem::transmute;
+
+    pub const GROUP_ID: &str = "group.com.tt.calendar.mobile";
+
+    #[repr(C)]
+    pub struct ObjCObject {
+        _private: [u8; 0],
+    }
+
+    #[repr(C)]
+    pub struct ObjCSelector {
+        _private: [u8; 0],
+    }
+
+    pub type MsgSendToObject = unsafe extern "C" fn(*mut ObjCObject, *mut ObjCSelector) -> *mut ObjCObject;
+    pub type MsgSendToObjectWithObject =
+        unsafe extern "C" fn(*mut ObjCObject, *mut ObjCSelector, *mut ObjCObject) -> *mut ObjCObject;
+    pub type MsgSendToObjectWithCStr =
+        unsafe extern "C" fn(*mut ObjCObject, *mut ObjCSelector, *const c_char) -> *mut ObjCObject;
+    pub type MsgSendToCStr = unsafe extern "C" fn(*mut ObjCObject, *mut ObjCSelector) -> *const c_char;
+
+    extern "C" {
+        // 原始符号：可变参数，必须先声明成无签名形式再按调用点转型（见文件头说明）
+        pub fn objc_msgSend();
+        pub fn objc_getClass(name: *const c_char) -> *mut ObjCObject;
+        pub fn sel_registerName(name: *const c_char) -> *mut ObjCSelector;
+        pub fn objc_autoreleasePoolPush() -> *mut core::ffi::c_void;
+        pub fn objc_autoreleasePoolPop(pool: *mut core::ffi::c_void);
+    }
+
+    pub fn cls(name: &str) -> *mut ObjCObject {
+        let c = CString::new(name).expect("类名不含 NUL");
+        unsafe { objc_getClass(c.as_ptr()) }
+    }
+
+    pub fn sel(name: &str) -> *mut ObjCSelector {
+        let c = CString::new(name).expect("SEL 不含 NUL");
+        unsafe { sel_registerName(c.as_ptr()) }
+    }
+
+    /// 解析 App Group 容器目录；失败返回 Err（签名缺 capability 等）。
+    pub fn group_dir(manager: *mut ObjCObject) -> Result<String, String> {
+        unsafe {
+            let f_with_object: MsgSendToObjectWithObject = transmute(objc_msgSend as *const ());
+            let f_to_cstr: MsgSendToCStr = transmute(objc_msgSend as *const ());
+            let group = {
+                let f: MsgSendToObjectWithCStr = transmute(objc_msgSend as *const ());
+                f(cls("NSString"), sel("stringWithUTF8String:"), CString::new(GROUP_ID).unwrap().as_ptr())
+            };
+            let url = f_with_object(manager, sel("containerURLForSecurityApplicationGroupIdentifier:"), group);
+            if url.is_null() {
+                return Err("App Group 容器不可用：签名未含 App Group capability".into());
+            }
+            let ptr = f_to_cstr(url, sel("path"));
+            if ptr.is_null() {
+                return Err("App Group 容器路径为空".into());
+            }
+            Ok(CStr::from_ptr(ptr).to_string_lossy().into_owned())
+        }
+    }
+}
+
+/// 读取并清空小组件回传的动作队列（一键打卡：extension 写入，主 App 消费一次）。
+/// 文件不存在 = 没有待消费动作，返回 "[]"。
+#[cfg(target_os = "ios")]
+pub fn consume_widget_actions() -> Result<String, String> {
+    use group_io::*;
+    use std::ffi::CStr;
+    use std::mem::transmute;
+
+    const ACTIONS_FILE: &str = "widget-actions.json";
+
+    unsafe {
+        let pool = objc_autoreleasePoolPush();
+        let result = (|| -> Result<String, String> {
+            let f_default_manager: MsgSendToObject = transmute(objc_msgSend as *const ());
+            let manager = f_default_manager(cls("NSFileManager"), sel("defaultManager"));
+            if manager.is_null() {
+                return Err("NSFileManager 不可用".into());
+            }
+            let dir = group_dir(manager)?;
+            let file_path = format!("{}/{}", dir.trim_end_matches('/'), ACTIONS_FILE);
+            match std::fs::read_to_string(&file_path) {
+                Ok(content) => {
+                    // 读走即删：动作只消费一次
+                    let _ = std::fs::remove_file(&file_path);
+                    Ok(content)
+                }
+                Err(_) => Ok("[]".into()),
+            }
+        })();
+        objc_autoreleasePoolPop(pool);
+        result
+    }
+}
+
+#[cfg(not(target_os = "ios"))]
+pub fn consume_widget_actions() -> Result<String, String> {
+    Ok("[]".into())
+}

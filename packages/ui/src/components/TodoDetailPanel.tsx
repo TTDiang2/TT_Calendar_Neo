@@ -604,48 +604,28 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         )}
       </div>
 
-      {/* 底部操作：完成切换（大按钮）+ 删除 + 保存 */}
-      <div className="mt-auto px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 border-t border-black/5 space-y-2 bg-white/40">
+      {/* 底部操作：删除 + 保存（20260921 走查：去掉「标记完成」大按钮——
+          列表/月视图点勾即完成，进详情再放一个完成按钮既多余又易误触） */}
+      <div className="mt-auto px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 border-t border-black/5 flex items-center justify-between bg-white/40">
         <button
           onClick={() => {
-            const nextStatus: Todo['status'] = status === 'completed' ? 'notStarted' : 'completed'
-            setStatus(nextStatus)
-            if (!isPhantom) {
-              // 全量落盘（含切换后的状态）；面板不关闭，后续继续编辑关闭时仍会正常 flush
-              onSave({ ...buildData(), status: nextStatus })
+            // 删除后面板会关闭，必须阻止 cleanup 把这条刚删掉的记录又 flush 回去
+            if (confirm(`删除待办「${todo.title}」？`)) {
+              skipFlushRef.current = true
+              onDelete(todo.id)
             }
           }}
-          disabled={isPhantom}
-          className={clsx(
-            'w-full py-3 rounded-2xl text-[15px] font-semibold transition-colors disabled:opacity-40',
-            status === 'completed'
-              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-              : 'bg-emerald-500 text-white active:bg-emerald-600',
-          )}
+          className="flex items-center gap-1 text-sm text-red-500 active:opacity-60 py-2"
         >
-          {status === 'completed' ? '↩ 恢复为未完成' : '✓ 标记完成'}
+          <Trash2 size={15} /> 删除
         </button>
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => {
-              // 删除后面板会关闭，必须阻止 cleanup 把这条刚删掉的记录又 flush 回去
-              if (confirm(`删除待办「${todo.title}」？`)) {
-                skipFlushRef.current = true
-                onDelete(todo.id)
-              }
-            }}
-            className="flex items-center gap-1 text-sm text-red-500 active:opacity-60 py-2"
-          >
-            <Trash2 size={15} /> 删除
-          </button>
-          <button
-            onClick={save}
-            disabled={!title.trim() || !listId || saving}
-            className="px-6 py-2 text-sm bg-pink-500 text-white rounded-full active:bg-pink-600 disabled:opacity-40"
-          >
-            {saving ? '保存中…' : '保存'}
-          </button>
-        </div>
+        <button
+          onClick={save}
+          disabled={!title.trim() || !listId || saving}
+          className="px-6 py-2 text-sm bg-pink-500 text-white rounded-full active:bg-pink-600 disabled:opacity-40"
+        >
+          {saving ? '保存中…' : '保存'}
+        </button>
       </div>
     </>
   )

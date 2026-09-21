@@ -211,12 +211,60 @@ function now(): string {
 
 // ---------- Backend ----------
 
+/**
+ * 全新库的内置默认图层（20260921 TestFlight 走查：手机端无迁移行，月视图全空）。
+ * 涂色默认启用：重要日期/公共节假日/待办/待办·已完成；充实度染色默认关（20260917）；
+ * 点点默认启用：日程五类。仅在 layer_config 完全为空时整批播种。
+ */
+export const DEFAULT_BUILTIN_LAYERS: {
+  layerId: string
+  displayName: string
+  enabled: 0 | 1
+  color: string
+  sortOrder: number
+  kind: 'color' | 'dot'
+  groupName: string | null
+}[] = [
+  { layerId: 'important', displayName: '重要日期', enabled: 1, color: '#EF5350', sortOrder: 1, kind: 'color', groupName: null },
+  { layerId: 'coloring', displayName: '充实度染色', enabled: 0, color: '#388E3C', sortOrder: 2, kind: 'color', groupName: null },
+  { layerId: 'holiday', displayName: '公共节假日', enabled: 1, color: '#8E24AA', sortOrder: 3, kind: 'color', groupName: null },
+  { layerId: 'todo', displayName: '待办', enabled: 1, color: '#F59E0B', sortOrder: 4, kind: 'color', groupName: null },
+  { layerId: 'todo_done', displayName: '待办·已完成', enabled: 1, color: '#818CF8', sortOrder: 5, kind: 'color', groupName: null },
+  { layerId: 'schedule_work', displayName: '工作', enabled: 1, color: '#3D6BFB', sortOrder: 5, kind: 'dot', groupName: '日程' },
+  { layerId: 'schedule_course', displayName: '课程', enabled: 1, color: '#8E24AA', sortOrder: 6, kind: 'dot', groupName: '日程' },
+  { layerId: 'schedule_sport', displayName: '运动', enabled: 1, color: '#10B981', sortOrder: 7, kind: 'dot', groupName: '日程' },
+  { layerId: 'schedule_play', displayName: '玩耍', enabled: 1, color: '#F59E0B', sortOrder: 8, kind: 'dot', groupName: '日程' },
+  { layerId: 'schedule_other', displayName: '其他', enabled: 1, color: '#64748B', sortOrder: 9, kind: 'dot', groupName: '日程' },
+]
+
 export class SqliteBackend {
   constructor(
     private readonly db: Db,
     private readonly opts: { trackTombstones?: boolean } = {},
   ) {
+    this.bootstrapDefaultLayers()
     this.bootstrapBusySnapshot()
+  }
+
+  /**
+   * 内置图层播种：仅在 layer_config 完全为空时整批插入（幂等、且绝不"补缺"）。
+   * 手机端是全新库（sql.js + IndexedDB），没有老 Python 库迁移带来的 layer_config
+   * 行——不播种的话月视图一张涂色、一颗点点都没有（20260921 TestFlight 实测）。
+   * 「只在空表时播」而非「缺哪补哪」：pull_overwrite 等同步语义下用户/远端删掉的
+   * 行必须保持删除（协议冻结测试盯着这个），补缺会复活已删行。
+   * 默认启用：重要日期 / 公共节假日 / 待办 / 待办·已完成 + 日程五类点点；
+   * 充实度染色按 20260917 决策默认关（行存在、enabled=0，供设置里手动开启）。
+   */
+  private bootstrapDefaultLayers(): void {
+    try {
+      const n = this.db.select({ n: sql<number>`COUNT(*)` }).from(s.layerConfig).get()?.n ?? 0
+      if (n > 0) return
+      this.db.insert(s.layerConfig).values(
+        DEFAULT_BUILTIN_LAYERS.map((l) => ({ ...l, configJson: '{}', updatedAt: null })),
+      ).run()
+    } catch {
+      // 表未就绪等极端初始化顺序：不阻塞构造（与 bootstrapBusySnapshot 同策略）
+    }
   }
 
   /**

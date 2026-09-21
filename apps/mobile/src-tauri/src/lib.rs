@@ -11,12 +11,18 @@ fn export_widget_snapshot(payload: String) -> Result<String, String> {
     widget_bridge::write_shared_snapshot(&payload)
 }
 
+/// 消费小组件回传的动作队列（一键打卡：extension 写入 → 主 App 启动/刷新时落到真库）
+#[tauri::command]
+fn consume_widget_actions() -> Result<String, String> {
+    widget_bridge::consume_widget_actions()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         // 本地通知插件（20260917 任务书 1.2-6：待办到期/重要日期的系统提醒）
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![export_widget_snapshot])
+        .invoke_handler(tauri::generate_handler![export_widget_snapshot, consume_widget_actions])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
