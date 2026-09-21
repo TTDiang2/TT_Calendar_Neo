@@ -115,17 +115,27 @@ TT 日历是一张「会记录你生活」的日历：月历上染色、待办�
    - 主要语言：简体中文；Bundle ID：`com.tt.calendar.mobile`；SKU：`tt-calendar-2026`
    - 用户访问：完全访问
 
-### 3. 给 GitHub 仓库配三个 Secrets（CI 签名 job 用）
+### 3. GitHub 仓库 Secrets（已由 agent 用 `gh secret set` 写入，共 7 项）
 
-仓库 Settings → Secrets and variables → Actions → New repository secret：
+| Secret 名 | 内容 | 用途 |
+|---|---|---|
+| `APPSTORE_KEY_ID` | `PT4T88KGY3` | API 鉴权 / 上传 TestFlight |
+| `APPSTORE_ISSUER_ID` | `2ae2a409-677f-4440-ba2d-04b1f2199d18` | 同上 |
+| `APPSTORE_P8` | .p8 私钥全文 | 同上 |
+| `APPSTORE_P12` | 发布证书 p12 的 base64 | 手动签名（装进 CI 临时 keychain） |
+| `APPSTORE_P12_PASSWORD` | 上述 p12 的密码 | 同上 |
+| `APPSTORE_PROFILE_MAIN` | 主 App 描述文件 base64（含 App Group） | 手动签名 |
+| `APPSTORE_PROFILE_WIDGET` | 小组件描述文件 base64（含 App Group） | 手动签名 |
 
-| Secret 名 | 值 |
-|---|---|
-| `APPSTORE_KEY_ID` | `PT4T88KGY3` |
-| `APPSTORE_ISSUER_ID` | `2ae2a409-677f-4440-ba2d-04b1f2199d18` |
-| `APPSTORE_P8` | `E:/AuthKey_PT4T88KGY3.p8` 的**完整文本内容**（-----BEGIN PRIVATE KEY----- 到 -----END PRIVATE KEY-----） |
+签名链路（**为什么不用云签**）：`xcodebuild -exportArchive` 的自动签名走 Apple 云签，
+需要云签替我们创建 App Store 描述文件，而 API Key 没有该权限（报
+`Cloud signing permission error`，Apple 未开放）。因此改为：
+归档用自动签名（dev 描述文件云签可创建）→ 导出用**手动签名** +
+`provisioningProfiles` 映射（主 App / 小组件各指定一份自建描述文件）。
+发布证书与两份描述文件均由 ASC API 创建（证书私钥仅存于本机与 Secrets）。
 
-配好后到 Actions → iOS build → Run workflow（勾选只在 dispatch 触发的 `appstore` job 会跑）：归档签名 → 导出 ipa → 自动传 TestFlight。
+发布证书/描述文件有效期至 **2027-09-21**；到期前用
+`artifacts/asc/` 流程重新签发（脚本与命令见该目录）。
 
 ### API 调用工具
 
