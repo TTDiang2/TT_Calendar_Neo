@@ -458,9 +458,13 @@ jobs:
           KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
           P8: ${{ secrets.APPSTORE_P8 }}
+          P12: ${{ secrets.APPSTORE_P12 }}
+          P12_PASSWORD: ${{ secrets.APPSTORE_P12_PASSWORD }}
+          PROFILE_MAIN: ${{ secrets.APPSTORE_PROFILE_MAIN }}
+          PROFILE_WIDGET: ${{ secrets.APPSTORE_PROFILE_WIDGET }}
         run: |
           missing=0
-          for v in KEY_ID ISSUER_ID P8; do
+          for v in KEY_ID ISSUER_ID P8 P12 P12_PASSWORD PROFILE_MAIN PROFILE_WIDGET; do
             if [ -z "${!v}" ]; then echo "缺少 Secret: $v（见 job 注释的前置条件）"; missing=1; fi
           done
           exit $missing
@@ -523,6 +527,23 @@ jobs:
           printf '%s\n' "$P8" > "private_keys/AuthKey_${KEY_ID}.p8"
           cp "private_keys/AuthKey_${KEY_ID}.p8" "$HOME/.appstoreconnect/private_keys/"
 
+      - name: 写入签名材料（证书 + 两个描述文件）
+        env:
+          P12_B64: ${{ secrets.APPSTORE_P12 }}
+          MAIN_B64: ${{ secrets.APPSTORE_PROFILE_MAIN }}
+          WIDGET_B64: ${{ secrets.APPSTORE_PROFILE_WIDGET }}
+        run: |
+          set -euo pipefail
+          mkdir -p signing
+          printf '%s' "$P12_B64" | base64 -d > signing/cert.p12
+          printf '%s' "$MAIN_B64" | base64 -d > signing/tt-main.mobileprovision
+          printf '%s' "$WIDGET_B64" | base64 -d > signing/tt-widget.mobileprovision
+          ls -la signing/
+          # 校验解码结果确实是描述文件（CMS 签名头）而不是被截断的文本
+          for f in signing/*.mobileprovision; do
+            head -c 200 "$f" | grep -q "BEGIN CERTIFICATE" || { echo "描述文件解码异常: $f"; exit 1; }
+          done
+
       - name: 安装签名身份与描述文件
         # 分发证书（ASC API 创建，本地私钥打包 p12）与两个 App Store 描述文件
         # （主 App + 小组件，均含 App Group group.com.tt.calendar.mobile）走 Secrets。
@@ -545,65 +566,6 @@ jobs:
           cp signing/*.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/"
           echo "--- 已安装描述文件 ---"
           ls "$HOME/Library/MobileDevice/Provisioning Profiles/"
-
-      - name: 归档签名 .xcarchive（自动签名）
-        working-directory: apps/mobile
-        env:
-          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
-        run: |
-          set -euo pipefail
-          # ── 伪造 tauri options WebSocket 服务（同 device-unsigned，见文件尾注）──
-          pushd "$GITHUB_WORKSPACE/scripts/ci-ios-options-server" >/dev/null
-          cargo build --release 2>&1 | tail -4
-          SRV="$GITHUB_WORKSPACE/scripts/ci-ios-options-server/target/release/ci-ios-options-server"
-          popd >/dev/null
-          "$SRV" &
-          SRV_PID=$!
-          trap 'kill $SRV_PID 2>/dev/null || true' EXIT
-          for i in $(seq 1 60); do
-            [ -f "${TMPDIR:-/tmp}/com.tt.calendar.mobile-server-addr" ] && break
-            sleep 0.5
-          done
-          PROJ=$(find src-tauri/gen/apple -maxdepth 1 -name '*.xcodeproj' | head -1)
-          [ -n "$PROJ" ] || { echo "找不到 .xcodeproj"; exit 1; }
-          SCHEME=$(xcodebuild -project "$PROJ" -list | awk '/Schemes:/{f=1;next} f&&/iOS/{print;exit}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-          [ -n "$SCHEME" ] || { echo "找不到 iOS scheme"; exit 1; }
-          echo "project=$PROJ scheme=$SCHEME"
-          xcodebuild archive \
-            -project "$PROJ" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -archivePath "$GITHUB_WORKSPACE/TTCalendar.xcarchive" \
-            CI=true \
-            npm_config_confirm_modules_purge=false \
-            npm_config_verify_deps_before_run=false \
-            DEVELOPMENT_TEAM=8RRWT62P25 \
-            CODE_SIGN_STYLE=Automatic \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$GITHUB_WORKSPACE/private_keys/AuthKey_${KEY_ID}.p8" \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID" \
-            > /tmp/xcb-archive.log 2>&1 || { tail -120 /tmp/xcb-archive.log; exit 1; }
-          echo "归档完成"; ls "$GITHUB_WORKSPACE/TTCalendar.xcarchive/Products/Applications"
-
-      - name: 写入签名材料（证书 + 两个描述文件）
-        env:
-          P12_B64: ${{ secrets.APPSTORE_P12 }}
-          MAIN_B64: ${{ secrets.APPSTORE_PROFILE_MAIN }}
-          WIDGET_B64: ${{ secrets.APPSTORE_PROFILE_WIDGET }}
-        run: |
-          set -euo pipefail
-          mkdir -p signing
-          printf '%s' "$P12_B64" | base64 -d > signing/cert.p12
-          printf '%s' "$MAIN_B64" | base64 -d > signing/tt-main.mobileprovision
-          printf '%s' "$WIDGET_B64" | base64 -d > signing/tt-widget.mobileprovision
-          ls -la signing/
-          # 校验解码结果确实是描述文件（CMS 签名头）而不是被截断的文本
-          for f in signing/*.mobileprovision; do
-            head -c 200 "$f" | grep -q "BEGIN CERTIFICATE" || { echo "描述文件解码异常: $f"; exit 1; }
-          done
 
       - name: 归档 .xcarchive（自动签名，dev 描述文件由云签创建）
         working-directory: apps/mobile
