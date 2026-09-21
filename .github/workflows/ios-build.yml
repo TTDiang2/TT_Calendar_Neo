@@ -539,10 +539,13 @@ jobs:
           printf '%s' "$MAIN_B64" | base64 -d > signing/tt-main.mobileprovision
           printf '%s' "$WIDGET_B64" | base64 -d > signing/tt-widget.mobileprovision
           ls -la signing/
-          # 校验解码结果确实是描述文件（CMS 签名头）而不是被截断的文本
+          # 真校验：p12 密码可用 + 描述文件是合法 CMS（用 macOS 原生工具，不靠字节猜测）
+          openssl pkcs12 -nocerts -noout -in signing/cert.p12 -passin "pass:$P12_PASSWORD" > /dev/null \
+            || { echo "p12 无效或密码错误"; exit 1; }
           for f in signing/*.mobileprovision; do
-            head -c 200 "$f" | grep -q "BEGIN CERTIFICATE" || { echo "描述文件解码异常: $f"; exit 1; }
+            security cms -D -i "$f" > /dev/null || { echo "描述文件无效: $f"; exit 1; }
           done
+          echo "签名材料校验通过"
 
       - name: 安装签名身份与描述文件
         # 分发证书（ASC API 创建，本地私钥打包 p12）与两个 App Store 描述文件
