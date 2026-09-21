@@ -99,6 +99,9 @@ jobs:
       - name: 注入主屏小组件 target（WidgetKit）
         run: node scripts/patch-add-widget.mjs
 
+      - name: 收敛为 iPhone 专用（iPad 支持未经真机验证，且会强制要 iPad 截图）
+        run: node scripts/patch-ios-device-family.mjs
+
       # tauri ios init 生成工程时放的是 tauri 内置默认图标；官方 tauri ios build
       # 的图标同步被「直接 xcodebuild」路线跳过了，这里手动补上（20260918 任务书 1.4）
       - name: 覆盖应用图标（tauri icon 产物 → AppIcon.appiconset）
@@ -277,6 +280,9 @@ jobs:
 
       - name: 注入主屏小组件 target（WidgetKit）
         run: node scripts/patch-add-widget.mjs
+
+      - name: 收敛为 iPhone 专用（iPad 支持未经真机验证，且会强制要 iPad 截图）
+        run: node scripts/patch-ios-device-family.mjs
 
       # 同模拟器 job：init 生成的默认图标 → 仓库里的正式图标（20260918 任务书 1.4）
       - name: 覆盖应用图标（tauri icon 产物 → AppIcon.appiconset）
@@ -515,6 +521,9 @@ jobs:
 
       - name: 注入主屏小组件 target（WidgetKit）
         run: node scripts/patch-add-widget.mjs
+
+      - name: 收敛为 iPhone 专用（iPad 支持未经真机验证，且会强制要 iPad 截图）
+        run: node scripts/patch-ios-device-family.mjs
 
       - name: 覆盖应用图标
         run: node scripts/patch-ios-icons.mjs
