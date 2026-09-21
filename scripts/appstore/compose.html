@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>App Store 预览图合成</title>
+<style>
+  /* 设计画布 1290×2796（App Store 6.7" 规格）。参数走 URL hash：
+     #img=raw/01-month.png&title=一页看尽&hl=月历&sub=副标题&accent=#EC4899 */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { width: 1290px; scrollbar-width: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  body { width: 1290px; }
+  .canvas {
+    position: relative; width: 1290px; height: 2796px; overflow: hidden;
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: linear-gradient(165deg, #FFF1F5 0%, #FBF0FF 30%, #EEF3FF 65%, #F2FAF5 100%);
+  }
+  .blob { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .5; }
+  .blob.pink  { width: 760px; height: 760px; left: -220px; top: -180px; background: #F9A8D4; }
+  .blob.blue  { width: 700px; height: 700px; right: -240px; top: 620px; background: #A5C8FF; }
+  .blob.green { width: 640px; height: 640px; left: -180px; bottom: -200px; background: #A7E3BD; }
+  .blob.violet{ width: 520px; height: 520px; right: -140px; bottom: 320px; background: #D8B4FE; }
+
+  .copy { position: relative; text-align: center; padding-top: 128px; z-index: 2; }
+  .kicker {
+    display: inline-block; font-size: 38px; font-weight: 700; letter-spacing: 6px;
+    color: #fff; padding: 12px 42px; border-radius: 999px; margin-bottom: 42px;
+  }
+  h1 { font-size: 92px; line-height: 1.28; font-weight: 800; color: #1E293B; letter-spacing: 2px; max-width: 1180px; margin: 0 auto; }
+  h1 .hl { background: linear-gradient(120deg, #EC4899, #8B5CF6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { margin-top: 34px; font-size: 44px; color: #64748B; letter-spacing: 3px; }
+
+  .phone {
+    position: absolute; left: 50%; transform: translateX(-50%); top: 548px; z-index: 2;
+    width: 903px; padding: 17px; background: linear-gradient(180deg, #3A3A3C, #1C1C1E);
+    border-radius: 122px; box-shadow: 0 60px 120px rgba(93, 63, 140, .30), 0 18px 44px rgba(31, 41, 55, .18);
+  }
+  .phone .screen { border-radius: 105px; overflow: hidden; position: relative; background: #FBF1F5; }
+  /* 状态栏留白条：应用内容从留白条下方开始，对应真机安全区 */
+  .phone .strip {
+    height: 122px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 52px; font-size: 44px; font-weight: 700; color: #1E293B;
+    background: linear-gradient(180deg, #FDF3F7, #FBF1F6);
+  }
+  .phone .strip .batt { display: flex; align-items: center; gap: 14px; }
+  .phone .strip .cell { letter-spacing: 2px; font-size: 36px; }
+  .phone .battbox { width: 66px; height: 32px; border: 4px solid #1E293B; border-radius: 10px; position: relative; }
+  .phone .battbox::after { content: ''; position: absolute; inset: 4px 14px 4px 4px; background: #34C759; border-radius: 4px; }
+  .phone .battbox::before { content: ''; position: absolute; right: -12px; top: 8px; width: 5px; height: 12px; background: #1E293B; border-radius: 2px; }
+  .phone img { display: block; width: 869px; height: auto; }
+  .notch {
+    position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
+    width: 236px; height: 62px; background: #1C1C1E; border-radius: 36px; z-index: 3;
+  }
+
+  .chips { position: absolute; bottom: 78px; left: 0; right: 0; display: flex; justify-content: center; gap: 34px; z-index: 2; }
+  .chip {
+    font-size: 38px; font-weight: 600; color: #475569; letter-spacing: 2px;
+    background: rgba(255,255,255,.85); border: 2px solid rgba(236,72,153,.18);
+    padding: 18px 44px; border-radius: 999px; backdrop-filter: blur(6px);
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="blob pink"></div><div class="blob blue"></div>
+  <div class="blob green"></div><div class="blob violet"></div>
+  <div class="copy">
+    <span class="kicker" id="kicker">TT 日历</span>
+    <h1 id="title"></h1>
+    <p class="sub" id="sub"></p>
+  </div>
+  <div class="phone">
+    <div class="screen">
+      <div class="strip">
+        <span>9:41</span>
+        <span class="batt"><span class="cell">●●●●</span><span class="battbox"></span></span>
+      </div>
+      <img id="shot" alt="">
+      <div class="notch"></div>
+    </div>
+  </div>
+  <div class="chips" id="chips"></div>
+</div>
+<script>
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  const q = new URLSearchParams(location.hash.slice(1))
+  document.getElementById('shot').src = q.get('img') ?? ''
+  const parts = (q.get('title') ?? '').split('|')
+  document.getElementById('title').innerHTML =
+    esc(parts[0] ?? '') +
+    '<span class="hl">' + esc(parts[1] ?? '') + '</span>' +
+    esc(parts[2] ?? '')
+  document.getElementById('sub').textContent = q.get('sub') ?? ''
+  document.getElementById('kicker').textContent = q.get('kicker') ?? 'TT 日历'
+  document.getElementById('kicker').style.background = q.get('accent') ?? 'linear-gradient(120deg,#EC4899,#8B5CF6)'
+  const chips = (q.get('chips') ?? '').split(',').filter(Boolean)
+  document.getElementById('chips').innerHTML = chips.map((c) => `<span class="chip">${esc(c)}</span>`).join('')
+</script>
+</body>
+</html>

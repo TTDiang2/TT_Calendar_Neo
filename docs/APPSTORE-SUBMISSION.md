@@ -208,3 +208,43 @@ curl -H "Authorization: Bearer $TOKEN" https://api.appstoreconnect.apple.com/v1/
 | `artifacts/preview/raw/*.png` | 原始应用截图（430×932） |
 | `artifacts/preview/compose.html` + `stitch.mjs` + `serve.mjs` | 截图合成工具链（改文案后可一键重出图） |
 | `apps/web/seed-demo.ts` | 演示数据种子（`node --import tsx apps/web/seed-demo.ts <db>`） |
+
+---
+
+## D. 提审进度（2026-09-21 晚）
+
+### 已完成（全部经 ASC API 落地，可复核）
+| 项 | 内容 |
+|---|---|
+| App 记录 | `6814356398` · TT 日历 · com.tt.calendar.mobile |
+| 版本记录 | **1.0.0**（PREPARE_FOR_SUBMISSION）· 已挂构建 **71**（CFBundleShortVersionString 1.0.0，VALID） |
+| 名称/副标题 | TT 日历 / 月历待办倒数日，坚持看得见 |
+| 描述 / 关键词 / 宣传文本 | 全套中文文案（见 A 节，已写入 ASC） |
+| 支持链接 / 营销链接 | https://github.com/TTDiang2/TT_Calendar_Neo |
+| 隐私政策 URL | docs/PRIVACY.md 的 GitHub 链接 |
+| 分类 | 主：效率（PRODUCTIVITY）· 副：生活（LIFESTYLE） |
+| 年龄分级 | 24 项全部按「无」填报 → 预期 4+ |
+| 版权 | TTDiang2 |
+| 截图 | 6 张 6.7"（1290×2796，**已去 alpha 通道**）→ 全部 COMPLETE |
+| TestFlight | 内测组「内部测试」+ 测试员 ttdiang@outlook.com + 测试信息（zh-Hans） |
+| 出口合规 | ITSAppUsesNonExemptEncryption=NO → ASC 显示 false |
+
+### 提审前还差
+1. **审核联系电话**（`contactPhone` 为 ASC 必填，我没有你的号码）——你在 ASC「App 审核信息」里填一下，或告诉我号码我来填。
+2. **中国大陆 App 备案号**：中国大陆区上架硬性要求（工信部备案，号段带 `-A` 后缀；Apple 会校验号段与工信部记录一致）。办理需要域名 + 国内服务器，首次通常 1 个月以上。**TestFlight 阶段不需要它**；只在正式上架中国区时必需。
+   - 变通：先把销售范围设为「除中国大陆外」可以立即上架全球其它地区；等备案下来再放开中国区。
+3. **真机走查**：TestFlight 装 71 版 → 验证小组件（App Group 链路）。
+
+### 本仓库的发布工具（scripts/appstore/，可复用）
+| 脚本 | 用途 |
+|---|---|
+| `asc.mjs` | 生成 ASC API 的 JWT（`node asc.mjs token`），配合 curl 调用 |
+| `upload-screenshots.mjs` | 批量上传截图（自动建集合、分片 PUT、commit） |
+| `to-rgb.mjs` | 去 PNG alpha 通道（ASC 拒收带 alpha 的截图：`IMAGE_ALPHA_NOT_ALLOWED`） |
+| `stitch.mjs` / `compose.html` | 截图合成（双瓦片拼接绕开浏览器 fullPage 截图 bug） |
+| `fill-version-meta.mjs` | 写入版本页文案（描述/关键词/支持链接） |
+
+用法示例（环境变量：`ASC_KEY_PATH` / `ASC_KEY_ID` / `ASC_ISSUER_ID`）：
+```bash
+node scripts/appstore/upload-screenshots.mjs <版本本地化id> APP_IPHONE_67 图1.png 图2.png …
+```
