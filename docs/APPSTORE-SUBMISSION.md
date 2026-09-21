@@ -248,3 +248,31 @@ curl -H "Authorization: Bearer $TOKEN" https://api.appstoreconnect.apple.com/v1/
 ```bash
 node scripts/appstore/upload-screenshots.mjs <版本本地化id> APP_IPHONE_67 图1.png 图2.png …
 ```
+
+---
+
+## E. 提审完成（2026-09-21 22:11 北京时间）
+
+**已提交审核** · 提交 id `b2e3812b-e6e9-4110-a944-71a328afbdee` · 状态 `WAITING_FOR_REVIEW`
+
+| 项 | 值 |
+|---|---|
+| 版本 | 1.0.0（发布方式 MANUAL：过审后手动点发布） |
+| 构建 | 83（iPhone 专用，手动签名） |
+| 提交时间 | 2026-09-21T14:11:19Z |
+
+### 提审过程中解决的阻塞（复盘）
+1. **缺少 iPad 截图** → 工程默认声明 iPad（`TARGETED_DEVICE_FAMILY="1,2"`），Apple 强制要 12.9" 截图且会在 iPad 实测。v1.0 收敛为 iPhone 专用（`scripts/patch-ios-device-family.mjs`）。
+2. **价格未设置** → ASC API 设免费（`POST /v1/appPriceSchedules`，美国基准 0.00 自动均衡全球）。
+3. **内容权属未声明** → `PATCH /v1/apps/{id}` 设 `DOES_NOT_USE_THIRD_PARTY_CONTENT`。
+4. **App 隐私声明** → **无公开 API**（试遍 `/v1/appDataUsages` 等 6 种形态均 404），只能网页填：ASC → App 隐私 → 不收集数据 → 发布。
+5. **证书配额耗尽（构建连续失败）** → 云签在每台全新 CI 机器上都会新建开发证书，3 张配额吃满后全部构建失败。根治：归档改**手动签名**（自建发布证书 + 描述文件，`scripts/patch-ios-signing.mjs`），零云签依赖。
+
+### 提审辅助工具（scripts/appstore/）
+提审校验错误的排查方式值得复用：`POST /v1/reviewSubmissionItems` 失败时，响应里的
+`errors[0].meta.associatedErrors` 会**逐项列出**缺失内容（截图类型、必填属性、隐私声明等），
+比在网页上逐页找快得多。
+
+### 审核结果出来之后
+- 过审 → ASC 里点「发布」（MANUAL 模式）→ 上架；中国大陆区若被要求备案号，走豁免说明（纯本地应用）
+- 被拒 → 读 Resolution Center 的拒审理由，改完重新提审（构建流程已全部自动化，一轮约 10 分钟）
