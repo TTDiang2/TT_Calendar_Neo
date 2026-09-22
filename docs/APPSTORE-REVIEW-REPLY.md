@@ -1,10 +1,28 @@
 # App Store 审核回复材料（Guideline 2.1）
 
 > 2026-09-21 首次提审被 2.1「Information Needed」挡回——新开发者账号的常规补充材料要求。
-> 第 2-6 项已通过 API 写入 ASC「App 审核信息 → 备注」字段；本文件是同一份文本，
-> 供 **Resolution Center 回复框**直接粘贴。第 1 项（真机录屏）需用户录制后随回复附上。
+> **建议用英文回复**（审核团队按英文处理）。英文版已写入 ASC「App 审核信息 → 备注」字段
+> （3,478 字符，ASC 备注上限 4,000）。第 1 项真机录屏需你录制后随回复附上。
 
-## 一、Resolution Center 回复正文（复制以下全文）
+## 一、Resolution Center 回复正文（英文，复制以下全文）
+
+Guideline 2.1 - Information Needed. A physical-device screen recording (iPhone, latest iOS) is attached to this reply; it begins with launching the app from the Home Screen and shows the typical user flow. This information is also being added to the Notes field of App Review Information, as instructed.
+
+2) Purpose and target audience: TT Calendar is a personal calendar + to-do + countdown app for individual users in mainland China (students, office workers). It unifies schedule, to-dos and anniversaries in one screen: the month view is color-coded by activity and completion, to-dos support daily / weekday / weekly repetition, countdowns track exams and anniversaries, and insights show a contribution-style heat map. It is local-first, with no account, no ads and no tracking.
+
+3) Accessing the main features (no account, login or sample files required): On first launch the app opens the month view with built-in layers ready (Important Dates, Holidays, To-dos, Completed To-dos, plus five schedule categories). The top bar switches Month / Day / Year / Countdown. Tapping a date shows that day's schedule, events and to-dos. The pink "+" at the bottom right creates items (dot/coloring chooser on the calendar, quick-add on the To-do tab, a new countdown on the Countdown tab). The bottom dock "To-do" offers List / Matrix / Gantt / Sticky-note views; tapping the circle on the left completes an item, and completing a repeating to-do automatically generates its next occurrence. The bottom dock "Insights" shows a milestone card, contribution heat map, busy-load forecast and daily completions chart. Home Screen widgets: long-press the Home Screen, Add Widget, choose TT Calendar (today overview, countdown, monthly completion, 13-week heat map, stats, check-ins); on iOS 17+ the check-in widgets support tapping to complete directly on the Home Screen. Notification permission is requested only after the user sets a reminder and is used solely for local notifications.
+
+4) External services: Required - NONE. Optional - GitHub (github.com), used only if the user explicitly configures Data Sync with their own private repository and personal access token (stored on device only); no developer server exists. No ads, analytics, third-party SDKs or AI services. The main app renders a local UI in WKWebView over an on-device SQLite database; widgets use WidgetKit and share data with the app through an App Group. The Local Network permission covers only an optional, off-by-default connection to the user's own desktop data service.
+
+5) Regional differences: none - features are identical in all regions, with no region-specific content. The only network-dependent aspect is the optional GitHub sync, which requires reaching github.com and may be unavailable in some networks; with sync off the app is fully offline and unaffected. The app is a purely local application that does not provide internet information services; its UI language is Simplified Chinese.
+
+6) Regulated industry / protected material: Not applicable - not a regulated industry and no protected third-party material is used (content rights declaration: DOES_NOT_USE_THIRD_PARTY_CONTENT).
+
+Notes on common issues: there is no account system (so no account-deletion flow is needed), no public user-generated content (so no reporting/blocking mechanisms apply), no in-app purchases or paid content, and all App Store screenshots show the actual app in use rather than title art or a splash screen.
+
+---
+
+## 二、中文对照版（供你核对内容，不必提交）
 
 【2.1 审核补充信息 / Additional Information】
 
@@ -43,31 +61,28 @@ TT 日历是一款个人日历 + 待办 + 倒数日应用，目标用户是中�
 
 ---
 
-## 二、真机录屏拍摄清单（第 1 项要求，需你录制）
+## 三、真机录屏拍摄清单（第 1 项要求，需你录制）
 
-要求：**真机**、最新系统、从启动 App 开始、展示典型使用流程。建议 2-4 分钟，按此顺序：
+要求：**真机**、最新系统、从启动 App 开始、展示典型使用流程。建议 2-4 分钟：
 
-| 步骤 | 演示内容 | 目的 |
-|---|---|---|
-| 1 | 从桌面点图标启动 App（**必须包含启动瞬间**） | Apple 明确要求以启动开场 |
-| 2 | 月视图：一次性看到涂色层、点点层、今日信息栏 | 展示核心界面 |
-| 3 | 点某天 → 当日日程/事件/待办 | 展示查看流程 |
-| 4 | 点右下加号 → 新建一条待办（填标题、截止日） | 展示新建流程 |
-| 5 | 点待办左侧圆圈完成 → 若是重复待办，展示「下一期已生成」 | 展示重复待办的核心机制 |
-| 6 | 顶部切「日」「年」，各停 2 秒 | 展示多视图 |
-| 7 | 底部「待办」→ 切换 列表/矩阵/甘特/便签 | 展示四视图 |
-| 8 | 底部「分析」→ 热力图、忙度预测、每日完成 | 展示统计 |
-| 9 | 顶部「倒数」→ 新建一个倒数日 | 展示倒数日 |
-| 10 | 回到桌面 → 长按 → 添加小组件 → 选「TT 日历」→ 展示小组件；iOS 17+ 可点一下打卡 | 展示小组件与交互 |
-| 11 | （可选）设置 → 数据同步，说明这是可选功能、需用户自己的 GitHub 仓库 | 说明外部服务边界 |
+| 步骤 | 演示内容 |
+|---|---|
+| 1 | 从桌面点图标启动 App（**必须包含启动瞬间**） |
+| 2 | 月视图：涂色层、点点层、今日信息栏 |
+| 3 | 点某天 → 当日日程/事件/待办 |
+| 4 | 加号 → 新建待办（标题、截止日） |
+| 5 | 点圆圈完成 → 重复待办展示「下一期已生成」 |
+| 6 | 顶部切「日」「年」 |
+| 7 | 待办页 → 列表/矩阵/甘特/便签 四视图 |
+| 8 | 分析页 → 热力图、忙度预测、每日完成 |
+| 9 | 倒数页 → 新建倒数日 |
+| 10 | 桌面长按 → 添加小组件 → TT 日历（iOS 17+ 可点一下打卡） |
+| 11 | （可选）设置 → 数据同步，说明需用户自己的 GitHub 仓库 |
 
-**不需要录制**（本应用不存在）：账号注册/登录/注销、用户生成内容的举报与屏蔽、付费内容购买。
+**不需要录制**：账号注册/登录/注销、UGC 举报屏蔽、付费购买（本应用均不存在）。
 
-## 三、回复时的操作
+## 四、提交操作
 
-1. ASC → 被拒版本页 → 「**Resolution Center**」→ 回复框粘贴上面第一节全文
-2. 回复框中**附加录屏文件**（或上传后附链接）
-3. 提交回复 → 应用回到审核队列
-
-第 2-6 项已写入审核信息备注，Apple 明确允许「回复里写明 + 备注字段留档」两者其一/兼有，
-所以即使回复框只写录屏说明，材料也已在其系统内。
+1. ASC → 被拒版本页 → 「Reply to App Review」回复框 → 粘贴上面第一节全文
+2. 用回复框的附件功能**附上录屏文件**
+3. 提交 → 应用回到审核队列
