@@ -86,3 +86,19 @@ TT 日历是一款个人日历 + 待办 + 倒数日应用，目标用户是中�
 1. ASC → 被拒版本页 → 「Reply to App Review」回复框 → 粘贴上面第一节全文
 2. 用回复框的附件功能**附上录屏文件**
 3. 提交 → 应用回到审核队列
+
+
+---
+
+## 第二轮：Guideline 2.3.10（截图含非 iOS 状态栏）——回复文本
+
+> 已完成修复：全部截图替换为真机实拍（真实 iOS 状态栏），合成图全部下架。
+> 在 Resolution Center 回复框粘贴以下英文，随后看版本页是否出现「提交审核」按钮：出现就点；不出现则审核员会基于回复直接复查。
+
+Thank you for the review. Regarding Guideline 2.3.10 - Accurate Metadata:
+
+All App Store screenshots have been replaced. The new screenshots are real captures taken on a physical iPhone running the latest iOS - they show the actual app in use with the genuine iOS status bar. The previous images were composites that included a mock status bar; they have been removed entirely and are no longer referenced anywhere in the metadata.
+
+The main features highlighted across the new screenshots: color-coded month calendar with today's agenda, year view, day view, to-do list / matrix / sticky-note views, insights (contribution heat map, busy-load forecast), countdown cards, and the Home Screen widgets (today overview, countdown, completion heat map, one-tap check-in).
+
+If any other part of the metadata needs adjustment, we are happy to fix it right away.
