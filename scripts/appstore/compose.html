@@ -36,17 +36,6 @@
     border-radius: 122px; box-shadow: 0 60px 120px rgba(93, 63, 140, .30), 0 18px 44px rgba(31, 41, 55, .18);
   }
   .phone .screen { border-radius: 105px; overflow: hidden; position: relative; background: #FBF1F5; }
-  /* 状态栏留白条：应用内容从留白条下方开始，对应真机安全区 */
-  .phone .strip {
-    height: 122px; display: flex; align-items: center; justify-content: space-between;
-    padding: 0 52px; font-size: 44px; font-weight: 700; color: #1E293B;
-    background: linear-gradient(180deg, #FDF3F7, #FBF1F6);
-  }
-  .phone .strip .batt { display: flex; align-items: center; gap: 14px; }
-  .phone .strip .cell { letter-spacing: 2px; font-size: 36px; }
-  .phone .battbox { width: 66px; height: 32px; border: 4px solid #1E293B; border-radius: 10px; position: relative; }
-  .phone .battbox::after { content: ''; position: absolute; inset: 4px 14px 4px 4px; background: #34C759; border-radius: 4px; }
-  .phone .battbox::before { content: ''; position: absolute; right: -12px; top: 8px; width: 5px; height: 12px; background: #1E293B; border-radius: 2px; }
   .phone img { display: block; width: 869px; height: auto; }
   .notch {
     position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
@@ -72,12 +61,7 @@
   </div>
   <div class="phone">
     <div class="screen">
-      <div class="strip">
-        <span>9:41</span>
-        <span class="batt"><span class="cell">●●●●</span><span class="battbox"></span></span>
-      </div>
       <img id="shot" alt="">
-      <div class="notch"></div>
     </div>
   </div>
   <div class="chips" id="chips"></div>
