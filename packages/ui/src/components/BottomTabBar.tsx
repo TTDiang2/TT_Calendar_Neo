@@ -14,11 +14,12 @@ import { useEffect, useRef } from 'react'
 import { BarChart3, Calendar, CheckSquare } from 'lucide-react'
 import clsx from 'clsx'
 import type { TopTab } from '../adapt/types'
+import { useT, type TxKey } from '../i18n'
 
-const TABS: { key: TopTab; label: string; icon: React.ReactNode }[] = [
-  { key: 'calendar', label: '日历', icon: <Calendar size={20} /> },
-  { key: 'todo', label: '待办', icon: <CheckSquare size={20} /> },
-  { key: 'stats', label: '分析', icon: <BarChart3 size={20} /> },
+const TABS: { key: TopTab; labelKey: TxKey; icon: React.ReactNode }[] = [
+  { key: 'calendar', labelKey: 'terms.calendar', icon: <Calendar size={20} /> },
+  { key: 'todo', labelKey: 'terms.todo', icon: <CheckSquare size={20} /> },
+  { key: 'stats', labelKey: 'terms.stats', icon: <BarChart3 size={20} /> },
 ]
 
 export interface DockSideAction {
@@ -52,7 +53,8 @@ export function BottomTabBar({
   rightAction?: DockSideAction
   gestureRef?: React.RefObject<DockGestureState>
 }) {
-  const activeIdx = Math.max(0, TABS.findIndex((t) => t.key === active))
+  const t = useT()
+  const activeIdx = Math.max(0, TABS.findIndex((tab) => tab.key === active))
   const pillRef = useRef<HTMLSpanElement | null>(null)
 
   // 跟手模式：rAF 读共享 ref 直改 transform（绕过 React 渲染帧，丝滑且不触发重渲染）；
@@ -92,7 +94,7 @@ export function BottomTabBar({
         suspend && 'pointer-events-none',
       )}
       style={{ bottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
-      aria-label="主导航"
+      aria-label={t('shell.mainNav')}
     >
       <div className="glass-dock rounded-full flex items-center gap-1 pl-1.5 pr-1.5 h-16 max-w-[calc(100vw-1rem)]">
         <DockSideButton action={leftAction} />
@@ -108,15 +110,15 @@ export function BottomTabBar({
               transition: suspend ? 'none' : SPRING_TRANSITION,
             }}
           />
-          {TABS.map((t) => {
-            const on = t.key === active
+          {TABS.map((tab) => {
+            const on = tab.key === active
             return (
               <button
-                key={t.key}
-                onClick={() => onChange(t.key)}
+                key={tab.key}
+                onClick={() => onChange(tab.key)}
                 className="pressable relative z-10 flex flex-col items-center justify-center gap-0.5 flex-1 self-stretch py-1"
                 aria-current={on ? 'page' : undefined}
-                aria-label={t.label}
+                aria-label={t(tab.labelKey)}
               >
                 <span
                   className={clsx(
@@ -124,7 +126,7 @@ export function BottomTabBar({
                     on ? 'text-white' : 'text-gray-500',
                   )}
                 >
-                  {t.icon}
+                  {tab.icon}
                 </span>
                 <span
                   className={clsx(
@@ -132,7 +134,7 @@ export function BottomTabBar({
                     on ? 'text-white font-semibold' : 'text-gray-500',
                   )}
                 >
-                  {t.label}
+                  {t(tab.labelKey)}
                 </span>
               </button>
             )
