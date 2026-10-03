@@ -56,6 +56,6 @@ waitForDataServer().then((ready) => {
     </React.StrictMode>,
   )
   if (!ready) {
-    console.warn('[desktop] 数据服务 30 秒内没就绪，界面可能没数据')
+    console.warn('[desktop] data server not ready in 30s, UI may have no data')
   }
 })

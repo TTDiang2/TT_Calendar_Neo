@@ -7,9 +7,13 @@ import type { Dict } from './zh-CN'
 import { zhCN } from './zh-CN'
 import { en } from './en'
 import { ja } from './ja'
+import { ko } from './ko'
+import { fr } from './fr'
 
 export const DICTS: Partial<Record<string, Dict>> = {
   'zh-CN': zhCN,
   en: en as Dict,
   ja: ja as Dict,
+  fr: fr as Dict,
+  ko: ko as Dict,
 }

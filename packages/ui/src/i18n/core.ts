@@ -142,7 +142,7 @@ const DEV = typeof process !== 'undefined' && (process as { env?: Record<string,
 function warnOnce(key: string, lang: Lang): void {
   if (!DEV || warnedKeys.has(key)) return
   warnedKeys.add(key)
-  console.warn(`[i18n] 缺少文案 key: "${key}" (lang=${lang})，已回落 zh-CN`)
+  console.warn(`[i18n] missing key: "${key}" (lang=${lang}), fell back to zh-CN`)
 }
 
 export type TParams = Record<string, string | number>
@@ -155,7 +155,7 @@ export function interpolate(text: string, params?: TParams): string {
     missing = name
     return whole
   })
-  if (DEV && missing) console.warn(`[i18n] 插值参数缺失: {${missing}} in "${text}"`)
+  if (DEV && missing) console.warn(`[i18n] missing interpolation param: {${missing}} in "${text}"`)
   return out
 }
 

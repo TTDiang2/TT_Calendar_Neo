@@ -6,11 +6,11 @@
  */
 export const countdown = {
   zh: {
-    /** 列表行标题后缀（buildCountdownList 的 showLabel 规则） */
+    /** 列表行标题后缀（buildCountdownList 的 showLabel 规则）；里程碑 zh 与旧版逐字一致「800 天」 */
     suffixThisYear: '今年',
     suffixAnniversary: '{n} 周年',
     suffixLunarAnniversary: '农历周年',
-    suffixMilestone: '第 {n} 天',
+    suffixMilestone: '{n} 天',
     /** 顶部一句话倒数（App 顶栏 countdown 字段） */
     bannerToday: '🎉 今天是「{name}」',
     bannerUpcoming: { other: '距离「{name}」还有 {n} 天' },

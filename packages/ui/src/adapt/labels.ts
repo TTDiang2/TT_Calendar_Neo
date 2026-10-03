@@ -52,15 +52,17 @@ export function countdownDisplay(t: T, item: Pick<CountdownItem, 'name' | 'label
  * 复数由字典承担（en one/other；ru 在 P3 补全四类别）。
  */
 export function countdownBanner(t: T, tPlural: TPlural, items: readonly CountdownItem[]): string {
+  // 与旧 domain buildCountdownText 一致：横幅用含后缀的显示名（「恋爱 3 周年」），
+  // 不是裸 name（智者终审 A：丢后缀违反逐屏红线）
   const upcoming = items.filter((i) => !i.passed)
   if (upcoming.length > 0) {
     const nearest = upcoming[0]
-    if (nearest.is_today) return t('countdown.bannerToday', { name: nearest.name })
-    return tPlural('countdown.bannerUpcoming', nearest.days_left, { name: nearest.name })
+    if (nearest.is_today) return t('countdown.bannerToday', { name: countdownDisplay(t, nearest) })
+    return tPlural('countdown.bannerUpcoming', nearest.days_left, { name: countdownDisplay(t, nearest) })
   }
   if (items.length > 0) {
     const latest = items[items.length - 1]
-    return tPlural('countdown.bannerPassed', -latest.days_left, { name: latest.name })
+    return tPlural('countdown.bannerPassed', -latest.days_left, { name: countdownDisplay(t, latest) })
   }
   return t('countdown.bannerEmpty')
 }

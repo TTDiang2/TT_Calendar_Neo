@@ -240,8 +240,10 @@ enum L10n {
             return "other"
         case "en":
             return n == 1 ? "one" : "other"
-        case "fr", "es":
-            return n <= 1 ? "one" : "other" // es 实际 0/1 → one；fr 0/1 → one
+        case "fr":
+            return n <= 1 ? "one" : "other" // fr 0/1 → one
+        case "es":
+            return n == 1 ? "one" : "other" // es 仅 1 → one（0 是 other，CLDR——智者终审 C 修正）
         case "ru":
             let m10 = n % 10, m100 = n % 100
             if m10 == 1 && m100 != 11 { return "one" }

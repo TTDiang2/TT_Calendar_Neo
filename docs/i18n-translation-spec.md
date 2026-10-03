@@ -42,11 +42,36 @@
 ## 3. 复数与插值（硬性）
 
 - 复数条目（值为 `{ one, other }` 等）按目标语言 CLDR 类别补全：
-  - en: one/other；fr: one/many(≥1e6)/other；es: one/other；ru: one/few/many/other；zh/ja/ko/zh-Hant: other
+  - en: one/other；fr: one/many(≥1e6)/other；es: one/other（**es 仅 n=1 → one，n=0 是 other**）；ru: one/few/many/other；zh/ja/ko/zh-Hant: other
   - 结构测试会遍历 `Intl.PluralRules` 校验，缺类别直接红。
 - **占位符纪律**：`{n}` `{name}` `{done}` `{total}` 等与源文一一对应，不得增删改名的；
   在译文中的位置按目标语言词序自由安排。
 - 禁止拼接式翻译（把一句拆成多个 key）；译文必须是完整自然句。
+
+## 3.5 词表与结构的六条硬约束（智者终审 C2 增补，P3 各批次必须遵守）
+
+1. **跨命名空间词表不统一是故意的，禁止合并**：同一概念在不同命名空间措辞不同
+   （quadrant 双词表、importance 三套：todo.imp「重要·普通·次要」/ todoEditor「高·普通·低」/
+   todo.card「高·中·低」）——每个 key 翻译时**只看它所在 fragment 的 zh 值**，
+   逐 namespace 直译。任何「善意统一措辞」都会导致该语言与原屏漂移。
+2. **农历组合是模板不是自由句**：显示串由 `leapPrefix + month + daySep + day` 代码组装
+   （初一只显月名）。ja：月「1月」…「12月」、日「1日」…「30日」、sep ' '、leap '閏'；
+   ko：月「1월」…、日「1일」…、sep ' '、leap '윤'；fr：月 « Mois lunaire 1 »…、
+   日 « jour 1 »…、sep ', '、leap 'Intercalaire '。月名/日名必须是**独立可拼的短词**，
+   不得带句式成分。
+3. **标点承载位是结构，不是排版装饰**：部分 key 带**前导或尾随标点/空格**
+   （如 `calendar.ariaTodaySuffix` 的前导逗号、`stats.quadrant.point.overdue` 的全角括号、
+   `todoEditor.hint.autosavePrefix/Suffix` 的前后段——两段之间夹着 DOM 高亮节点）。
+   译文必须保留对应的位置语义（前导就前导、尾随就尾随），标点形态按目标语言惯例调整。
+4. **Swift 表与 JS 表同责**：各语言批次交付的 Swift 33-key 译文由主会话统一插入
+   `apps/mobile/widget/TTCalendarWidget.swift`；key 集合必须与 en 表一致
+   （scripts/swift-l10n-check.mjs 门禁）。Swift 侧复数由 `pluralCategory` 决定，
+   es 已修正为仅 n=1 → one。
+5. **zh-Hant 简体字门禁**：繁体批次交付后跑 `grep -P '[们后让说与刚]'` 等简体特征字扫描
+   （主会话执行），命中即返工——结构测试测不出简繁混写。
+6. `common.daysAfter/daysBefore` 与 `fmtRelativeDays` 目前生产零调用（基建保留）：
+   相对天数优先用 `fmtRelativeDays`，字典里这两个 key **不要翻译成带句式的文案**，
+   保持「{n} 天后」式最小形态即可。
 
 ## 4. 各语言细节要求
 
@@ -72,7 +97,7 @@
    （结构测试：key 深度一致 + 复数类别齐全 + 插值参数一致）。
 3. 交付时**自行回译抽查**：随机抽 20 条译文还原成中文，对照原义，偏差的当场修正；
    报告列出这 20 条（key → 译文 → 回译）。
-4. 长度红线：按钮/Tab 类短标签译文不得超过 zh 原文 2 倍长度（ru/de 常见超长，
+4. 长度红线：按钮/Tab 类短标签译文不得超过 zh 原文 2 倍长度（ru 常见超长，
    用省略/缩写压回来，如 ru «Настройки» 可以，长解释句不行——那些不是按钮）。
 
 ## 7. 禁止事项
