@@ -11,6 +11,7 @@ import {
   type SyncResult,
 } from '../adapt/api'
 import type { Layer } from '../adapt/types'
+import { LANGS, LANG_META, chooseLang, activeLang, useLang, useT, type Lang } from '../i18n'
 
 interface Props {
   layers: Layer[]
@@ -18,12 +19,42 @@ interface Props {
   onClose: () => void
 }
 
+/** 语言设置行（20260930 本地化任务书 P2）：endonym 显示 + 即时切换 */
+function LanguageSection() {
+  const t = useT()
+  const current = useLang()
+  return (
+    <section>
+      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('language.settingsLabel')}</h3>
+      <div className="flex flex-wrap gap-2">
+        {LANGS.map((lang: Lang) => (
+          <button
+            key={lang}
+            onClick={() => chooseLang(lang)}
+            aria-pressed={current === lang}
+            className={clsx(
+              'px-3 py-1.5 rounded-lg border text-sm transition',
+              current === lang
+                ? 'border-pink-400 bg-pink-50 text-pink-700 font-medium'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50',
+            )}
+          >
+            {LANG_META[lang].endonym}
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export function SettingsDialog({ layers, onToggleLayer, onClose }: Props) {
+  const t = useT()
   const customLayers = layers.filter((l) => l.layer_id.startsWith('custom_'))
 
   return (
     <Modal title="设置" onClose={onClose} width={720}>
       <div className="flex flex-col gap-5">
+        <LanguageSection />
         <section>
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">自定义图层</h3>
           {customLayers.length === 0 ? (
