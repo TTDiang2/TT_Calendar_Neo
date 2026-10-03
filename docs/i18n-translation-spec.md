@@ -26,14 +26,14 @@
 | key | zh-CN | en | ja | ko | fr | es | ru | zh-Hant |
 |---|---|---|---|---|---|---|---|---|
 | terms.todo | 待办 | To-dos | ToDo | 할 일 | Tâches | Tareas | Задачи | 待辦 |
-| terms.event | 日程 | Event | 予定 | 일정 | Événement | Evento | Событие | 行程 |
-| terms.countdown | 倒数日 | Countdowns | カウントダウン | 디데이 | Comptes à rebours | Cuentras atrás | Обратный отсчёт | 倒數日 |
+| terms.event | 日程 | Event | 予定 | 일정 | Événement | Evento | Событие | 事件 |
+| terms.countdown | 倒数日 | Countdowns | カウントダウン | 카운트다운 | Comptes à rebours | Cuentas atrás | Обратный отсчёт | 倒數日 |
 | terms.layer | 图层 | Layers | レイヤー | 레이어 | Calques | Capas | Слои | 圖層 |
 | terms.stats | 分析 | Analysis | 分析 | 통계 | Analyse | Análisis | Анализ | 分析 |
 | terms.widgets | 小组件 | Widgets | ウィジェット | 위젯 | Widgets | Widgets | Виджеты | 小工具 |
 | terms.quadrant | 四象限 | Quadrants | 4象限 | 4분면 | Quadrants | Cuadrantes | Квадранты | 四象限 |
 | terms.lunar | 农历 | Lunar calendar | 旧暦 | 음력 | Calendrier lunaire | Calendario lunar | Лунный календарь | 農曆 |
-| terms.coloring | 染色 | Coloring | クリップ | 채색 | Coloration | Coloreado | Раскраска | 塗色 |
+| terms.coloring | 染色 | Coloring | クリップ | 채색 | Coloration | Coloreado | Раскраска | 染色 |
 | terms.anniversary | 纪念日 | Anniversary | 記念日 | 기념일 | Anniversaire | Aniversario | Годовщина | 紀念日 |
 | 打卡（shell/widgets 语境） | 打卡 | Check-in | チェックイン | 체크인 | Pointage | Check-in | Отметка | 打卡 |
 
@@ -80,7 +80,7 @@
 - **fr**：UI 空格规则由译文自然携带（法语冒号前窄空格在 UI 标签中省略亦可，但正文 key 保留）。
 - **es**：多用动词原形做按钮；中性拉美/西班牙通用词汇（不用地区俚语）。
 - **ru**：按钮用不定式；注意「N 天后」等与动词配合的格变化已由完整句 key 承担，选对 few/many 形态即可。
-- **zh-Hant**：用台湾常用语（軟體/設定/資料）；「待办→待辦」「日程→行程」；不逐字对转简体。
+- **zh-Hant**：用台湾常用语（軟體/設定/資料）；「待办→待辦」「日程→事件（terms.event）/行程（schedule 语境）」；不逐字对转简体。
 
 ## 5. 不得翻译的内容
 

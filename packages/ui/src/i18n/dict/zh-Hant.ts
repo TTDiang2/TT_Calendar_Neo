@@ -47,7 +47,7 @@ export const zhHant: DeepPartialDict<Dict> = {
     quadrant: '四象限',
     lunar: '農曆',
     solarTerm: '節氣',
-    holiday: '节假日',
+    holiday: '假日',
     coloring: '染色',
     anniversary: '紀念日',
     note: '筆記',
@@ -57,7 +57,7 @@ export const zhHant: DeepPartialDict<Dict> = {
   layers: {
     important: '重要日期',
     coloring: '充實度染色',
-    holiday: '公共节假日',
+    holiday: '公共假日',
     todo: '待辦',
     todoDone: '待辦·已完成',
     scheduleGroup: '行程',

@@ -103,9 +103,9 @@ export const es: DeepPartialDict<Dict> = {
     suffixAnniversary: 'aniversario {n}',
     suffixLunarAnniversary: 'aniversario lunar',
     suffixMilestone: 'Día {n}',
-    bannerToday: '🎉 Hoy es "{name}"',
-    bannerUpcoming: { one: 'Falta 1 día para "{name}"', many: 'Faltan {n} días para "{name}"', other: 'Faltan {n} días para "{name}"' },
-    bannerPassed: { one: '"{name}" fue hace 1 día', many: '"{name}" fue hace {n} días', other: '"{name}" fue hace {n} días' },
+    bannerToday: '🎉 Hoy es «{name}»',
+    bannerUpcoming: { one: 'Falta 1 día para «{name}»', many: 'Faltan {n} días para "{name}"', other: 'Faltan {n} días para «{name}»' },
+    bannerPassed: { one: '«{name}» fue hace 1 día', many: '"{name}" fue hace {n} días', other: '«{name}» fue hace {n} días' },
     bannerEmpty: 'Aún no hay cuentas atrás',
     categoryBirthday: 'Cumpleaños',
     categoryAnniversary: 'Aniversario',
@@ -139,7 +139,7 @@ export const es: DeepPartialDict<Dict> = {
     settingsLabel: 'Idioma',
   },
   lunar: {
-    leapPrefix: 'Bisiesto ',
+    leapPrefix: 'Intercalar ',
     month: {
       m1: 'Mes lunar 1', m2: 'Mes lunar 2', m3: 'Mes lunar 3', m4: 'Mes lunar 4', m5: 'Mes lunar 5', m6: 'Mes lunar 6',
       m7: 'Mes lunar 7', m8: 'Mes lunar 8', m9: 'Mes lunar 9', m10: 'Mes lunar 10', m11: 'Mes lunar 11', m12: 'Mes lunar 12',
@@ -462,9 +462,9 @@ export const es: DeepPartialDict<Dict> = {
   widgetsView: {
     subtitle: 'Tarjetas de información dentro de la App',
     guideTitle: 'Esta página son tarjetas de información de la App',
-    guideIosSteps: '¿Quiere ponerlas en la pantalla de inicio del iPhone? Mantén pulsado un espacio vacío → «+» arriba a la izquierda → busca «TT 日历» → elige el tamaño (iOS 14+).',
+    guideIosSteps: '¿Las quieres en la pantalla de inicio del iPhone? Mantén pulsado un espacio vacío → «+» arriba a la izquierda → busca «TT Calendar» → elige el tamaño (iOS 14+).',
     guideIosData: 'Los datos de los widgets se escriben al abrir la App.',
-    guideOtherSteps: 'La versión iPhone también tiene widgets del sistema (mantén pulsada la pantalla de inicio → «+» → busca «TT 日历»).',
+    guideOtherSteps: 'La versión iPhone también tiene widgets del sistema (mantén pulsada la pantalla de inicio → «+» → busca «TT Calendar»).',
     guideOtherCards: 'Las tarjetas de esta página funcionan en las tres plataformas.',
     emptyHint: 'Aún no hay widgets; toca «Editar» arriba a la derecha para añadir',
     pickerTitle: 'Añadir widgets',
