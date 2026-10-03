@@ -4,6 +4,8 @@ import clsx from 'clsx'
 import type { Day, Layer } from '../adapt/types'
 import { COLORING_COLORS, getBusyColors, parseDate, pickContrastColor, todayStr } from '../adapt/data'
 import { getTodoBusyConfig } from '../adapt/api'
+import { holidayName } from '../adapt/labels'
+import { useT, useTPlural } from '../i18n'
 import { collectDayVisuals } from './dayVisuals'
 
 interface Props {
@@ -21,6 +23,9 @@ interface Props {
 }
 
 export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, onClick, onDoubleClick, onContextMenu, onDragStart, onDragEnter, onDrop, maxLabels = 3 }: Props) {
+  // hooks 全部前置（react-hooks/rules-of-hooks）
+  const t = useT()
+  const tPlural = useTPlural()
   const { d } = parseDate(day.date)
   const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
 
@@ -117,11 +122,11 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
           {d}
         </span>
         {day.holiday?.is_workday_made_up && (
-          <span className="text-[9px] bg-amber-500 text-white px-1 rounded leading-tight">班</span>
+          <span className="text-[9px] bg-amber-500 text-white px-1 rounded leading-tight">{t('calendar.makeUpWorkday')}</span>
         )}
         {day.holiday?.name && (
           <span className="text-[9px] bg-purple-500 text-white px-1 rounded leading-tight truncate max-w-[40px]">
-            {day.holiday.name}
+            {holidayName(t, day.holiday.name)}
           </span>
         )}
       </div>
@@ -172,7 +177,7 @@ export const DayCell = memo(function DayCell({ day, layers, selected, dragOver, 
                   {first.start_time ? `${first.start_time} ${first.title}` : first.title}
                 </span>
                 {sorted.length > 1 && (
-                  <span className="text-[10px] hidden md:block" style={{ color: labelColor }}>+{sorted.length - 1} 项日程</span>
+                  <span className="text-[10px] hidden md:block" style={{ color: labelColor }}>{tPlural('calendar.scheduleMore', sorted.length - 1)}</span>
                 )}
               </>
             )

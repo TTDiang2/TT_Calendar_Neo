@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { CalendarClock, Check, ClipboardList, ListTodo } from 'lucide-react'
 import type { Day, Layer, MonthData, Todo } from '../adapt/types'
-import { COLORING_COLORS, getBusyColors, parseDate, pickContrastColor, todayStr } from '../adapt/data'
+import { COLORING_COLORS, getBusyColors, parseDate, parseDateStr, pickContrastColor, todayStr } from '../adapt/data'
 import { getTodoBusyConfig, updateTodo, type TodoBusyConfig } from '../adapt/api'
-import { lunarText } from '../adapt/labels'
-import { useLang, useT } from '../i18n'
+import { holidayName, lunarText } from '../adapt/labels'
+import { layerLabel } from '../adapt/layerLabel'
+import { fmtDate, fmtWeekday, useLang, useT, useTPlural } from '../i18n'
 import { useIsMobile } from '../hooks/useMedia'
 import { DayCell } from './DayCell'
 import { collectDayVisuals } from './dayVisuals'
@@ -24,9 +25,6 @@ interface Props {
   onDrop: (date: string) => void
 }
 
-const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-const WEEKDAYS_SHORT = ['一', '二', '三', '四', '五', '六', '日']
-
 export function MonthGrid(props: Props) {
   const isMobile = useIsMobile()
   return isMobile ? <MobileMonthGrid {...props} /> : <DesktopMonthGrid {...props} />
@@ -42,6 +40,7 @@ function MobileMonthGrid({
   onSelect,
   onOpenDetail,
 }: Props) {
+  const lang = useLang()
   const today = todayStr()
   const qc = useQueryClient()
   // 忙度配色整个网格只查一次配置（桌面 DayCell 是每格一查，量级不同）
@@ -67,9 +66,10 @@ function MobileMonthGrid({
     <div className="flex-1 flex flex-col min-h-0 gap-1.5">
       <div className="flex flex-col min-h-0 glass-card rounded-3xl p-2 pt-1 flex-shrink-0">
         <div className="grid grid-cols-7 mb-0.5 flex-shrink-0">
-          {WEEKDAYS_SHORT.map((w, i) => (
+          {/* 星期窄表头：Intl 产出（锚点 2023-01-02 是周一，i 偏移即得周一开头顺序），禁手写数组（规范 §3） */}
+          {Array.from({ length: 7 }, (_, i) => fmtWeekday(lang, new Date(2023, 0, 2 + i), 'narrow')).map((w, i) => (
             <div
-              key={w}
+              key={i}
               className={`text-center text-[11px] font-medium py-1 ${i >= 5 ? 'text-weekend' : 'text-gray-500'}`}
             >
               {w}
@@ -123,6 +123,7 @@ function MobileDayCell({
   selected: boolean
   onClick: (date: string) => void
 }) {
+  const t = useT()
   const { d } = parseDate(day.date)
   const today = todayStr()
 
@@ -155,7 +156,7 @@ function MobileDayCell({
     <button
       onClick={() => onClick(day.date)}
       className="relative flex flex-col items-center justify-center py-1 rounded-2xl active:bg-pink-50/70 transition-colors min-h-[44px]"
-      aria-label={`${day.date}${isToday ? '，今天' : ''}${selected ? '，已选中' : ''}`}
+      aria-label={`${day.date}${isToday ? t('calendar.ariaTodaySuffix') : ''}${selected ? t('calendar.ariaSelectedSuffix') : ''}`}
     >
       {/* 点点：左上角一枚枚小色点，密集排布（有涂色的日子自动让位给右上班角） */}
       {(shownDots.length > 0 || extraDots > 0) && (
@@ -189,7 +190,7 @@ function MobileDayCell({
           {d}
         </span>
         {day.holiday?.is_workday_made_up && (
-          <span className="absolute -top-0.5 -right-1.5 text-[8px] leading-none bg-amber-500 text-white px-1 py-px rounded-full z-20">班</span>
+          <span className="absolute -top-0.5 -right-1.5 text-[8px] leading-none bg-amber-500 text-white px-1 py-px rounded-full z-20">{t('calendar.makeUpWorkday')}</span>
         )}
       </span>
     </button>
@@ -198,6 +199,7 @@ function MobileDayCell({
 
 /* 桌面：原有月视图（格子大、可承载事件标题与拖拽） */
 function DesktopMonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleClick, onContextMenu, onDragStart, onDrop }: Props) {
+  const lang = useLang()
   const [dragOver, setDragOver] = useState<string | null>(null)
   const today = todayStr()
 
@@ -209,9 +211,10 @@ function DesktopMonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleC
       {/* 桌面保持铺满无卡片（玻璃卡片语言仅用于 <md，本组件在手机分支已被 MobileMonthGrid 接管） */}
       <div className="flex flex-col min-h-0 md:contents">
         <div className="grid grid-cols-7 gap-1 mb-2 md:mb-1 flex-shrink-0">
-          {WEEKDAYS.map((w, i) => (
+          {/* 星期表头：Intl 产出（锚点 2023-01-02 是周一，i 偏移即得周一开头顺序），禁手写数组（规范 §3） */}
+          {Array.from({ length: 7 }, (_, i) => fmtWeekday(lang, new Date(2023, 0, 2 + i), 'short')).map((w, i) => (
             <div
-              key={w}
+              key={i}
               className={`text-center text-[11px] md:text-xs font-medium py-1 ${i >= 5 ? 'text-weekend' : 'text-gray-500'}`}
             >
               {w}
@@ -256,8 +259,6 @@ function DesktopMonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleC
   )
 }
 
-const WEEK_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-
 /**
  * 手机月视图下方常驻的信息栏卡：默认显示今天，点选其它日期后原地切换为那天
  * （20260917 任务书 1.1-2）。日程 / 事件 / 待办一屏扫完；
@@ -282,10 +283,12 @@ function TodayAgenda({
   onOpenDetail?: (date: string) => void
   onToggleTodo?: (todo: Todo, done: boolean) => void
 }) {
-  const { y, m, d } = parseDate(day.date)
   const tAgenda = useT()
+  const tPluralAgenda = useTPlural()
   const langAgenda = useLang()
-  const weekday = WEEK_NAMES[new Date(y, m - 1, d).getDay()]
+  const date = parseDateStr(day.date)
+  // 星期/日期一律 Intl 产出（规范 §3），各语言形态由 locale 决定
+  const weekday = fmtWeekday(langAgenda, date, 'short')
   const lunarStr = lunarText(tAgenda, langAgenda, day.lunar)
 
   const layerById = useMemo(() => new Map(layers.map((l) => [l.layer_id, l])), [layers])
@@ -317,30 +320,30 @@ function TodayAgenda({
       <header className="px-3 py-2 border-b border-black/5 flex items-center justify-between gap-2 bg-white/40 flex-shrink-0 rounded-t-2xl">
         <div className="flex items-center gap-2 min-w-0">
           {isToday ? (
-            <span className="text-xs font-semibold text-gray-400 flex-shrink-0">今日</span>
+            <span className="text-xs font-semibold text-gray-400 flex-shrink-0">{tAgenda('calendar.agendaToday')}</span>
           ) : (
-            <span className="text-[11px] font-semibold text-pink-500 bg-pink-50 rounded-full px-2 py-0.5 flex-shrink-0">已选</span>
+            <span className="text-[11px] font-semibold text-pink-500 bg-pink-50 rounded-full px-2 py-0.5 flex-shrink-0">{tAgenda('calendar.agendaSelected')}</span>
           )}
-          <span className="text-sm font-bold text-gray-800 flex-shrink-0">{m}月{d}日</span>
+          <span className="text-sm font-bold text-gray-800 flex-shrink-0">{fmtDate(langAgenda, date, { month: 'long', day: 'numeric' })}</span>
           <span className="text-[11px] text-gray-400 truncate">{weekday}</span>
           {lunarStr && <span className="text-[11px] text-gray-400 truncate">{lunarStr}</span>}
         </div>
         {day.holiday?.name && (
           <span className="text-[11px] bg-purple-500 text-white px-1.5 py-0.5 rounded whitespace-nowrap flex-shrink-0">
-            {day.holiday.name}
+            {holidayName(tAgenda, day.holiday.name)}
           </span>
         )}
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-2">
         {schedules.length === 0 && events.length === 0 && openTodos.length === 0 && doneCount === 0 ? (
-          <p className="text-xs text-gray-300 text-center py-6">{isToday ? '今天还没有安排，点上方日期格子可快速添加' : '这天还没有安排'}</p>
+          <p className="text-xs text-gray-300 text-center py-6">{isToday ? tAgenda('calendar.emptyAgendaToday') : tAgenda('calendar.emptyDay')}</p>
         ) : (
           <div className="flex flex-col gap-1.5">
             {schedules.length > 0 && (
               <div className="space-y-0.5">
                 <p className="flex items-center gap-1 text-[11px] font-medium text-gray-400 px-0.5 mb-0.5">
-                  <CalendarClock size={12} /> 日程
+                  <CalendarClock size={12} /> {tAgenda('calendar.sectionSchedule')}
                 </p>
                 {schedules.map((it) => (
                   <div
@@ -364,7 +367,7 @@ function TodayAgenda({
             {events.length > 0 && (
               <div className="space-y-0.5">
                 <p className="flex items-center gap-1 text-[11px] font-medium text-gray-400 px-0.5 mb-0.5">
-                  <ClipboardList size={12} /> 事件
+                  <ClipboardList size={12} /> {tAgenda('calendar.sectionEvents')}
                 </p>
                 {events.map((ev) => (
                   <div
@@ -376,7 +379,7 @@ function TodayAgenda({
                     <span className="text-xs text-gray-800 truncate flex-1">{ev.title}</span>
                     {(() => {
                       const l = layerById.get(ev.layer_id)
-                      return l ? <span className="text-[10px] text-gray-400 flex-shrink-0">{l.display_name}</span> : null
+                      return l ? <span className="text-[10px] text-gray-400 flex-shrink-0">{layerLabel(tAgenda, l.layer_id, l.display_name)}</span> : null
                     })()}
                   </div>
                 ))}
@@ -386,14 +389,14 @@ function TodayAgenda({
             {(openTodos.length > 0 || doneCount > 0) && (
               <div className="space-y-0.5">
                 <p className="flex items-center justify-between gap-1 text-[11px] font-medium text-gray-400 px-0.5 mb-0.5">
-                  <span className="flex items-center gap-1"><ListTodo size={12} /> 待办</span>
-                  {doneCount > 0 && <span className="text-[10px] font-normal text-gray-400">已完成 {doneCount}</span>}
+                  <span className="flex items-center gap-1"><ListTodo size={12} /> {tAgenda('terms.todo')}</span>
+                  {doneCount > 0 && <span className="text-[10px] font-normal text-gray-400">{tPluralAgenda('calendar.agendaDoneCount', doneCount)}</span>}
                 </p>
                 {openTodos.slice(0, 6).map((t) => (
                   <AgendaTodoRow key={t.id} todo={t} onToggle={onToggleTodo} onOpen={onOpenDetail ? () => onOpenDetail(day.date) : undefined} />
                 ))}
                 {openTodos.length > 6 && (
-                  <p className="text-[10px] text-gray-300 text-center pt-0.5">还有 {openTodos.length - 6} 条未完成待办</p>
+                  <p className="text-[10px] text-gray-300 text-center pt-0.5">{tPluralAgenda('calendar.agendaMoreTodos', openTodos.length - 6)}</p>
                 )}
               </div>
             )}
@@ -405,6 +408,7 @@ function TodayAgenda({
 }
 
 function AgendaTodoRow({ todo, onToggle, onOpen }: { todo: Todo; onToggle?: (todo: Todo, done: boolean) => void; onOpen?: () => void }) {
+  const t = useT()
   const overdue = todo.due_date && todo.due_date < todayStr()
   const done = todo.status === 'completed'
   return (
@@ -415,7 +419,7 @@ function AgendaTodoRow({ todo, onToggle, onOpen }: { todo: Todo; onToggle?: (tod
       className={clsx('flex items-center gap-2 rounded-md border border-gray-100 bg-white px-2 py-1.5', onOpen && 'active:bg-gray-100 cursor-pointer transition-colors')}
     >
       <button
-        aria-label={done ? '标记为未完成' : '标记为已完成'}
+        aria-label={done ? t('calendar.markUndone') : t('calendar.markDone')}
         onClick={onToggle ? (e) => { e.stopPropagation(); onToggle(todo, !done) } : undefined}
         className={clsx(
           'w-3.5 h-3.5 rounded-full flex-shrink-0 flex items-center justify-center border active:scale-90 transition-transform',
@@ -431,7 +435,7 @@ function AgendaTodoRow({ todo, onToggle, onOpen }: { todo: Todo; onToggle?: (tod
       <span className="text-xs text-gray-800 truncate flex-1">{todo.title}</span>
       {todo.due_date && (
         <span className={clsx('text-[10px] flex-shrink-0', overdue ? 'text-red-500 font-medium' : 'text-gray-400')}>
-          {overdue ? '已过期' : todo.due_date.slice(5)}
+          {overdue ? t('calendar.todoOverdue') : todo.due_date.slice(5)}
         </span>
       )}
     </div>

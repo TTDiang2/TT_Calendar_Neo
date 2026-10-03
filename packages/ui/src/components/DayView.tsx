@@ -3,10 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { CalendarClock, Check, ClipboardList, ListTodo, Plus } from 'lucide-react'
 import type { Layer, MonthData, Todo } from '../adapt/types'
-import { COLORING_COLORS, getBusyColors, parseDate, todayStr } from '../adapt/data'
+import { COLORING_COLORS, getBusyColors, parseDate, parseDateStr, todayStr } from '../adapt/data'
 import { getTodoBusyConfig } from '../adapt/api'
-import { lunarText } from '../adapt/labels'
-import { useLang, useT } from '../i18n'
+import { holidayName, lunarText } from '../adapt/labels'
+import { layerLabel } from '../adapt/layerLabel'
+import { fmtDate, fmtMonthName, fmtWeekday, useLang, useT } from '../i18n'
 import { useIsMobile } from '../hooks/useMedia'
 
 interface Props {
@@ -16,8 +17,6 @@ interface Props {
   onSelect: (date: string) => void
   onDoubleClick: (date: string) => void
 }
-
-const WEEK_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 /** 20260917 任务书 1.1-6：日视图手机端苹果化。与 MonthGrid 同一拆分模式——
     手机走 MobileDayView（iOS 内嵌分组列表），桌面走 DesktopDayView（逐字原版，零变化红线）。 */
@@ -41,10 +40,12 @@ function MobileDayView({ monthData, layers, onSelect, onDoubleClick }: Props) {
   const openTodos = useMemo(() => (day?.todos ?? []).filter((t) => t.status !== 'completed'), [day])
   const doneTodos = useMemo(() => (day?.todos ?? []).filter((t) => t.status === 'completed'), [day])
 
-  if (!day) return <div className="flex-1 flex items-center justify-center text-gray-400">无数据</div>
+  if (!day) return <div className="flex-1 flex items-center justify-center text-gray-400">{t('calendar.noData')}</div>
 
-  const { y, m, d } = parseDate(day.date)
-  const weekday = WEEK_NAMES[new Date(y, m - 1, d).getDay()]
+  const { d } = parseDate(day.date)
+  const date = parseDateStr(day.date)
+  // 星期/年月一律 Intl 产出（规范 §3），各语言形态由 locale 决定
+  const weekday = fmtWeekday(lang, date, 'short')
   const lunarStr = lunarText(t, lang, day.lunar)
   const layerById = new Map(layers.map((l) => [l.layer_id, l]))
 
@@ -82,21 +83,21 @@ function MobileDayView({ monthData, layers, onSelect, onDoubleClick }: Props) {
           )}
           style={!day.is_today && barColor ? { background: barColor } : undefined}
         >
-          <span className="text-[10px] leading-none opacity-90 font-medium">{m}月</span>
+          <span className="text-[10px] leading-none opacity-90 font-medium">{fmtMonthName(lang, date, 'short')}</span>
           <span className="text-[26px] font-bold leading-tight tracking-tight">{d}</span>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-lg font-bold text-gray-900 tracking-tight">
               {weekday}
-              {day.is_today && <span className="text-rose-500"> · 今天</span>}
+              {day.is_today && <span className="text-rose-500">{t('calendar.todaySuffix')}</span>}
             </span>
             {day.holiday?.name && (
-              <span className="text-[11px] bg-purple-500 text-white px-2 py-0.5 rounded-full font-medium">{day.holiday.name}</span>
+              <span className="text-[11px] bg-purple-500 text-white px-2 py-0.5 rounded-full font-medium">{holidayName(t, day.holiday.name)}</span>
             )}
           </div>
           <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-0.5 flex-wrap">
-            <span>{y}年{day.is_weekend ? ' · 周末' : ''}</span>
+            <span>{fmtDate(lang, date, { year: 'numeric' })}{day.is_weekend ? t('calendar.weekendSuffix') : ''}</span>
             {lunarStr && <span className="text-gray-300">|</span>}
             {lunarStr && <span>{lunarStr}</span>}
           </div>
@@ -107,18 +108,18 @@ function MobileDayView({ monthData, layers, onSelect, onDoubleClick }: Props) {
       <div className="glass-card rounded-3xl flex-1 min-h-0 overflow-y-auto">
         {isEmpty ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 py-10">
-            <p className="text-sm text-gray-400">这天还没有安排</p>
+            <p className="text-sm text-gray-400">{t('calendar.emptyDay')}</p>
             <button
               onClick={() => onDoubleClick(day.date)}
               className="flex items-center gap-1.5 px-4 py-2 text-sm bg-pink-500 text-white rounded-full shadow-sm active:bg-pink-600"
             >
-              <Plus size={15} /> 添加事件
+              <Plus size={15} /> {t('calendar.addEvent')}
             </button>
           </div>
         ) : (
           <div className="p-3 flex flex-col gap-4">
             {schedules.length > 0 && (
-              <MSection icon={<CalendarClock size={14} />} title="日程" count={schedules.length}>
+              <MSection icon={<CalendarClock size={14} />} title={t('calendar.sectionSchedule')} count={schedules.length}>
                 {schedules.map((it, idx) => (
                   <div
                     key={it.id ?? `${it.title}-${it.start_time}`}
@@ -145,7 +146,7 @@ function MobileDayView({ monthData, layers, onSelect, onDoubleClick }: Props) {
             )}
 
             {visibleEvents.length > 0 && (
-              <MSection icon={<ClipboardList size={14} />} title="事件" count={visibleEvents.length}>
+              <MSection icon={<ClipboardList size={14} />} title={t('calendar.sectionEvents')} count={visibleEvents.length}>
                 {visibleEvents.map((ev, idx) => {
                   const l = layerById.get(ev.layer_id)
                   return (
@@ -161,7 +162,7 @@ function MobileDayView({ monthData, layers, onSelect, onDoubleClick }: Props) {
                       <span className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: ev.color ?? l?.color ?? '#9ca3af' }} />
                       <div className="flex-1 min-w-0">
                         <p className="text-[15px] font-medium text-gray-800">{ev.title}</p>
-                        {l && <p className="text-[11px] text-gray-400 mt-0.5">{l.display_name}</p>}
+                        {l && <p className="text-[11px] text-gray-400 mt-0.5">{layerLabel(t, l.layer_id, l.display_name)}</p>}
                         {ev.description && <p className="text-xs text-gray-500 mt-1 leading-snug">{ev.description}</p>}
                       </div>
                     </div>
@@ -171,7 +172,7 @@ function MobileDayView({ monthData, layers, onSelect, onDoubleClick }: Props) {
             )}
 
             {(openTodos.length > 0 || doneTodos.length > 0) && (
-              <MSection icon={<ListTodo size={14} />} title="待办" count={openTodos.length + doneTodos.length}>
+              <MSection icon={<ListTodo size={14} />} title={t('terms.todo')} count={openTodos.length + doneTodos.length}>
                 <div className="bg-white rounded-2xl overflow-hidden">
                   {openTodos.map((t, i) => <MTodoLine key={t.id} todo={t} divider={i > 0 || doneTodos.length > 0} />)}
                   {doneTodos.map((t, i) => <MTodoLine key={t.id} todo={t} done divider={i > 0 || openTodos.length > 0} />)}
@@ -199,6 +200,7 @@ function MSection({ icon, title, count, children }: { icon: ReactNode; title: st
 }
 
 function MTodoLine({ todo, done, divider }: { todo: Todo; done?: boolean; divider?: boolean }) {
+  const t = useT()
   const overdue = !done && todo.due_date != null && todo.due_date < todayStr()
   return (
     <div className={clsx('flex items-center gap-3 px-3.5 py-2.5', divider && 'border-t border-black/5')}>
@@ -217,7 +219,7 @@ function MTodoLine({ todo, done, divider }: { todo: Todo; done?: boolean; divide
       <p className={clsx('text-[15px] flex-1 min-w-0 truncate', done ? 'text-gray-400 line-through' : 'text-gray-800')}>{todo.title}</p>
       {!done && todo.due_date && (
         <span className={clsx('text-[11px] flex-shrink-0 font-medium', overdue ? 'text-red-500' : 'text-gray-400')}>
-          {overdue ? '已过期' : `截止 ${todo.due_date.slice(5)}`}
+          {overdue ? t('calendar.todoOverdue') : t('calendar.todoDue', { date: todo.due_date.slice(5) })}
         </span>
       )}
     </div>
@@ -238,10 +240,12 @@ function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSele
   const openTodos = useMemo(() => (day?.todos ?? []).filter((t) => t.status !== 'completed'), [day])
   const doneTodos = useMemo(() => (day?.todos ?? []).filter((t) => t.status === 'completed'), [day])
 
-  if (!day) return <div className="flex-1 flex items-center justify-center text-gray-400">无数据</div>
+  if (!day) return <div className="flex-1 flex items-center justify-center text-gray-400">{t('calendar.noData')}</div>
 
-  const { y, m, d } = parseDate(day.date)
-  const weekday = WEEK_NAMES[new Date(y, m - 1, d).getDay()]
+  const { d } = parseDate(day.date)
+  const date = parseDateStr(day.date)
+  // 星期/年月一律 Intl 产出（规范 §3），各语言形态由 locale 决定
+  const weekday = fmtWeekday(lang, date, 'short')
   const lunarStr = lunarText(t, lang, day.lunar)
   const layerById = new Map(layers.map((l) => [l.layer_id, l]))
   const today = todayStr()
@@ -283,18 +287,18 @@ function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSele
           )}
           style={!day.is_today && barColor ? { backgroundColor: barColor } : undefined}
         >
-          <span className="text-[9px] leading-none opacity-90">{m}月</span>
+          <span className="text-[9px] leading-none opacity-90">{fmtMonthName(lang, date, 'short')}</span>
           <span className="text-xl font-bold leading-tight">{d}</span>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-base md:text-lg font-bold text-gray-800">{y}年{day.is_today ? ' · 今天' : ''}</span>
+            <span className="text-base md:text-lg font-bold text-gray-800">{fmtDate(lang, date, { year: 'numeric' })}{day.is_today ? t('calendar.todaySuffix') : ''}</span>
             {day.holiday?.name && (
-              <span className="text-[11px] bg-purple-500 text-white px-1.5 py-0.5 rounded">{day.holiday.name}</span>
+              <span className="text-[11px] bg-purple-500 text-white px-1.5 py-0.5 rounded">{holidayName(t, day.holiday.name)}</span>
             )}
           </div>
           <div className="flex items-center gap-1.5 text-[11px] md:text-xs text-gray-400 mt-0.5 flex-wrap">
-            <span>{weekday}{day.is_weekend ? ' · 周末' : ''}</span>
+            <span>{weekday}{day.is_weekend ? t('calendar.weekendSuffix') : ''}</span>
             {lunarStr && <span className="text-gray-300">|</span>}
             {lunarStr && <span>{lunarStr}</span>}
           </div>
@@ -303,7 +307,7 @@ function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSele
           onClick={(e) => { e.stopPropagation(); onDoubleClick(day.date) }}
           className="flex items-center gap-1 px-3 md:px-3 py-1.5 text-xs md:text-sm bg-pink-500 text-white rounded-full md:rounded-lg hover:bg-pink-600 active:bg-pink-600 flex-shrink-0"
         >
-          <Plus size={14} /> 新建
+          <Plus size={14} /> {t('calendar.create')}
         </button>
       </div>
 
@@ -311,18 +315,18 @@ function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSele
       <div className="glass-card rounded-3xl md:rounded-xl md:bg-white md:border md:border-gray-200 md:shadow-none flex-1 min-h-0 overflow-y-auto">
         {isEmpty ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 py-10">
-            <p className="text-sm text-gray-400">这天还没有安排</p>
+            <p className="text-sm text-gray-400">{t('calendar.emptyDay')}</p>
             <button
               onClick={() => onDoubleClick(day.date)}
               className="flex items-center gap-1.5 px-4 py-2 text-sm bg-pink-500 text-white rounded-full shadow-sm hover:bg-pink-600 active:bg-pink-600"
             >
-              <Plus size={15} /> 添加事件
+              <Plus size={15} /> {t('calendar.addEvent')}
             </button>
           </div>
         ) : (
           <div className="p-3 md:p-4 flex flex-col gap-3">
             {schedules.length > 0 && (
-              <Section icon={<CalendarClock size={14} />} title="日程" count={schedules.length}>
+              <Section icon={<CalendarClock size={14} />} title={t('calendar.sectionSchedule')} count={schedules.length}>
                 {schedules.map((it) => (
                   <div
                     key={it.id ?? `${it.title}-${it.start_time}`}
@@ -344,7 +348,7 @@ function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSele
             )}
 
             {visibleEvents.length > 0 && (
-              <Section icon={<ClipboardList size={14} />} title="事件" count={visibleEvents.length}>
+              <Section icon={<ClipboardList size={14} />} title={t('calendar.sectionEvents')} count={visibleEvents.length}>
                 {visibleEvents.map((ev) => {
                   const l = layerById.get(ev.layer_id)
                   return (
@@ -355,7 +359,7 @@ function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSele
                       <span className="w-2 h-2 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: ev.color ?? l?.color ?? '#9ca3af' }} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-800">{ev.title}</p>
-                        {l && <p className="text-[11px] text-gray-400">{l.display_name}</p>}
+                        {l && <p className="text-[11px] text-gray-400">{layerLabel(t, l.layer_id, l.display_name)}</p>}
                         {ev.description && <p className="text-xs text-gray-500 mt-1 leading-snug">{ev.description}</p>}
                       </div>
                     </div>
@@ -365,7 +369,7 @@ function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSele
             )}
 
             {(openTodos.length > 0 || doneTodos.length > 0) && (
-              <Section icon={<ListTodo size={14} />} title="待办" count={openTodos.length + doneTodos.length}>
+              <Section icon={<ListTodo size={14} />} title={t('terms.todo')} count={openTodos.length + doneTodos.length}>
                 {openTodos.map((t) => <TodoLine key={t.id} todo={t} />)}
                 {doneTodos.map((t) => <TodoLine key={t.id} todo={t} done />)}
               </Section>
@@ -391,6 +395,7 @@ function Section({ icon, title, count, children }: { icon: ReactNode; title: str
 }
 
 function TodoLine({ todo, done }: { todo: Todo; done?: boolean }) {
+  const t = useT()
   const overdue = !done && todo.due_date != null && todo.due_date < todayStr()
   return (
     <div className="flex items-center gap-2.5 rounded-lg border border-gray-200 px-2.5 py-2">
@@ -403,7 +408,7 @@ function TodoLine({ todo, done }: { todo: Todo; done?: boolean }) {
       <p className={clsx('text-sm flex-1 min-w-0 truncate', done ? 'text-gray-400 line-through' : 'text-gray-800')}>{todo.title}</p>
       {!done && todo.due_date && (
         <span className={clsx('text-[11px] flex-shrink-0', overdue ? 'text-red-500 font-medium' : 'text-gray-400')}>
-          {overdue ? '已过期' : `截止 ${todo.due_date.slice(5)}`}
+          {overdue ? t('calendar.todoOverdue') : t('calendar.todoDue', { date: todo.due_date.slice(5) })}
         </span>
       )}
     </div>
