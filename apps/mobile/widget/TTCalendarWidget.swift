@@ -227,7 +227,7 @@ enum L10n {
             "today": "Hoy",
             "daysLeft_one": "1 día",
             "daysLeft_other": "{n} días",
-            "intentDone": ""{title}" completada ✓",
+            "intentDone": "\"{title}\" completada ✓",
         ],
         "zh-Hant": [
             "todayOverview": "今日摘要",
