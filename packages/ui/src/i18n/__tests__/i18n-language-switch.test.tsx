@@ -30,8 +30,8 @@ describe('I18nProvider 语言切换', () => {
     act(() => chooseLang('zh-CN'))
     expect(screen.getByText('确认')).toBeTruthy()
     act(() => chooseLang('ja'))
-    // ja 字典 P3 才产出 → 回落 zh-CN（fallback 链行为）
-    expect(screen.getByText('确认')).toBeTruthy()
+    // P3 ja 批次已产出 ja 字典 → 不再回落，直接显示 ja 译文
+    expect(screen.getByText('確認')).toBeTruthy()
   })
 
   it('chooseLang 持久化到 localStorage', () => {
