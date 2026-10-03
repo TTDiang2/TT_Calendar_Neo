@@ -4,9 +4,10 @@ import { AlarmClock, CalendarClock, Infinity as InfinityIcon, Plus, Repeat, Spar
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { getCountdownList, createCountdown, updateCountdown, deleteCountdown } from '../adapt/api'
-import { countdownDisplay } from '../adapt/labels'
-import { useT } from '../i18n'
+import { countdownCategoryLabel, countdownDisplay } from '../adapt/labels'
+import { useT, useTPlural } from '../i18n'
 import type { CountdownItem } from '../adapt/types'
+import { CountdownCategory } from '@tt-calendar/contracts'
 import { animSheetUp } from '../anim'
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -15,6 +16,15 @@ const CATEGORY_COLORS: Record<string, string> = {
   节日: '#a78bfa',
   重要事件: '#60a5fa',
 }
+
+// 固定分类的持久化枚举值：contracts 的 zod 枚举即数据库存储值，
+// options 顺序 = [生日, 纪念日, 节日, 重要事件, 其他]。显示名一律经
+// countdownCategoryLabel 按语言映射；这里只取前四个（「其他」仅作保存兜底值）。
+const FIXED_CATEGORIES: readonly string[] = CountdownCategory.options.slice(0, 4)
+/** 表单默认/重置分类（枚举第 1 项 = 生日） */
+const DEFAULT_CATEGORY: string = CountdownCategory.options[0]
+/** 自定义分类输入为空时的保存兜底值（枚举末项 = 其他） */
+const FALLBACK_CATEGORY: string = CountdownCategory.options[4]
 
 export interface CountdownViewHandle {
   /** 打开新建倒数日抽屉（App 统一新建 FAB 在倒数模式下的入口，20260921 走查） */
@@ -53,7 +63,7 @@ export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownV
 
   const categories = useMemo(() => {
     const set = new Set(items.map((i) => i.category))
-    return ['生日', '纪念日', '节日', '重要事件', ...Array.from(set).filter((c) => !['生日', '纪念日', '节日', '重要事件'].includes(c))]
+    return [...FIXED_CATEGORIES, ...Array.from(set).filter((c) => !FIXED_CATEGORIES.includes(c))]
   }, [items])
 
   const filtered = selectedCategory ? items.filter((i) => i.category === selectedCategory) : items
@@ -70,7 +80,7 @@ export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownV
     >
       <span className="flex items-center gap-1.5 truncate">
         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CATEGORY_COLORS[c] ?? '#9ca3af' }} />
-        {c}
+        {countdownCategoryLabel(t, c)}
       </span>
       <span className="text-xs text-gray-400">{count}</span>
     </button>
@@ -87,7 +97,7 @@ export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownV
             selectedCategory === null ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
           )}
         >
-          <span className="flex items-center gap-1.5"><AlarmClock size={14} /> 全部</span>
+          <span className="flex items-center gap-1.5"><AlarmClock size={14} /> {t('common.all')}</span>
           <span className="text-xs text-gray-400">{items.length}</span>
         </button>
         {categories.map((c) => catBtn(c, items.filter((i) => i.category === c).length))}
@@ -95,7 +105,7 @@ export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownV
           onClick={() => { setSelectedCategory(null); setSelectedId('NEW') }}
           className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-400 hover:text-gray-600 mt-1"
         >
-          <Plus size={14} /> 新建倒数日
+          <Plus size={14} /> {t('widgetsView.newCountdown')}
         </button>
       </div>
 
@@ -110,7 +120,7 @@ export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownV
               selectedCategory === null ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-gray-600 border-gray-200',
             )}
           >
-            全部 <span className="text-[10px] opacity-70">{items.length}</span>
+            {t('common.all')} <span className="text-[10px] opacity-70">{items.length}</span>
           </button>
           {categories.map((c) => (
             <button
@@ -122,7 +132,7 @@ export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownV
               )}
             >
               <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: CATEGORY_COLORS[c] ?? '#9ca3af' }} />
-              {c}
+              {countdownCategoryLabel(t, c)}
               <span className="text-[10px] opacity-70">{items.filter((i) => i.category === c).length}</span>
             </button>
           ))}
@@ -131,24 +141,28 @@ export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownV
         <div className="flex items-center justify-between mb-3 flex-shrink-0">
           <h2 className="text-sm md:text-base font-semibold text-gray-800 flex items-center gap-1.5 min-w-0">
             <CalendarClock size={15} className="flex-shrink-0" />
-            <span className="truncate">倒数日{selectedCategory ? ` · ${selectedCategory}` : ''}</span>
+            <span className="truncate">
+              {selectedCategory
+                ? t('widgetsView.headerCategory', { category: countdownCategoryLabel(t, selectedCategory) })
+                : t('terms.countdown')}
+            </span>
           </h2>
           {/* 手机走右下角 FAB（新建逻辑统一，20260921 走查）；桌面保留行内按钮 */}
           <button
             onClick={() => { setSelectedCategory(null); setSelectedId('NEW') }}
             className="hidden md:flex items-center gap-1 px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 flex-shrink-0"
           >
-            <Plus size={14} /> 新建
+            <Plus size={14} /> {t('widgetsView.new')}
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
-            <p className="text-sm text-gray-400">加载中…</p>
+            <p className="text-sm text-gray-400">{t('common.loading')}</p>
           ) : filtered.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-gray-300 gap-2">
               <AlarmClock size={40} />
-              <p className="text-sm">暂无倒数日，点右下角 + 新建</p>
+              <p className="text-sm">{t('widgetsView.emptyCountdown')}</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
@@ -176,7 +190,7 @@ export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownV
           setSelectedId(null)
         }}
         onDelete={(id) => {
-          if (confirm('删除该倒数日？')) {
+          if (confirm(t('widgetsView.confirmDelete'))) {
             deleteMut.mutate(id)
             setSelectedId(null)
           }
@@ -195,7 +209,7 @@ export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownV
             setCreateOpen(false)
           }}
           onDelete={(id) => {
-            if (confirm('删除该倒数日？')) {
+            if (confirm(t('widgetsView.confirmDelete'))) {
               deleteMut.mutate(id)
               setSelectedId(null)
             }
@@ -241,14 +255,15 @@ function CountdownEditSheet({ item, onClose, onSave, onDelete }: {
 
 function CountdownCard({ item, selected, onSelect }: { item: CountdownItem; selected: boolean; onSelect: () => void }) {
   const tCard = useT()
+  const tCardPlural = useTPlural()
   const catColor = CATEGORY_COLORS[item.category] ?? '#9ca3af'
   const text = item.is_today
-    ? '🎉 就是今天'
+    ? tCard('widgetsView.cardToday')
     : item.passed
       ? item.never_expire
-        ? '已过 · 永久纪念'
-        : `已过 ${-item.days_left} 天`
-      : `还有 ${item.days_left} 天`
+        ? tCard('widgetsView.cardPassedForever')
+        : tCardPlural('widgetsView.cardPassedDays', -item.days_left)
+      : tCardPlural('widgetsView.cardDaysLeft', item.days_left)
 
   return (
     <div
@@ -261,16 +276,18 @@ function CountdownCard({ item, selected, onSelect }: { item: CountdownItem; sele
     >
       <div className="flex items-center gap-1.5">
         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: catColor }} />
-        <span className="text-[10px] text-gray-400 px-1.5 py-0.5 rounded bg-gray-50">{item.category}</span>
+        <span className="text-[10px] text-gray-400 px-1.5 py-0.5 rounded bg-gray-50">{countdownCategoryLabel(tCard, item.category)}</span>
         <div className="ml-auto flex gap-1">
             {item.repeat_yearly && (
-              <span title={item.repeat_type === 'lunar' ? '按农历每年重置' : '每年重置'}>
+              <span title={item.repeat_type === 'lunar' ? tCard('widgetsView.titleRepeatLunar') : tCard('widgetsView.titleRepeatYearly')}>
                 <Repeat size={12} className={item.repeat_type === 'lunar' ? 'text-red-400' : 'text-gray-400'} />
               </span>
             )}
-            {item.repeat_type === 'lunar' && <span title="农历重复" className="text-[10px] text-red-400">农历</span>}
-          {item.milestone_rule && <span title="自动计算里程碑"><Sparkles size={12} className="text-amber-400" /></span>}
-          {item.never_expire && <span title="永不过期"><InfinityIcon size={12} className="text-gray-400" /></span>}
+            {item.repeat_type === 'lunar' && (
+              <span title={tCard('widgetsView.titleLunarRepeat')} className="text-[10px] text-red-400">{tCard('terms.lunar')}</span>
+            )}
+          {item.milestone_rule && <span title={tCard('widgetsView.titleMilestone')}><Sparkles size={12} className="text-amber-400" /></span>}
+          {item.never_expire && <span title={tCard('widgetsView.titleNeverExpire')}><InfinityIcon size={12} className="text-gray-400" /></span>}
         </div>
       </div>
       <p className="text-sm font-medium text-gray-800 break-words leading-snug">{countdownDisplay(tCard, item)}</p>
@@ -302,8 +319,9 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
   onDelete: (id: number) => void
   variant?: 'panel' | 'sheet'
 }) {
+  const t = useT()
   const [name, setName] = useState('')
-  const [category, setCategory] = useState('生日')
+  const [category, setCategory] = useState(DEFAULT_CATEGORY)
   const [customCategory, setCustomCategory] = useState(false)
   const [baseDate, setBaseDate] = useState('')
   const [repeatYearly, setRepeatYearly] = useState(false)
@@ -316,7 +334,7 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
     if (item) {
       setName(item.name)
       setCategory(item.category)
-      setCustomCategory(!['生日', '纪念日', '节日', '重要事件'].includes(item.category))
+      setCustomCategory(!FIXED_CATEGORIES.includes(item.category))
       setBaseDate(item.base_date)
       setRepeatYearly(item.repeat_yearly)
       setRepeatType(item.repeat_type === 'lunar' ? 'lunar' : 'solar')
@@ -325,7 +343,7 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
       setNotes(item.notes ?? '')
     } else {
       setName('')
-      setCategory('生日')
+      setCategory(DEFAULT_CATEGORY)
       setCustomCategory(false)
       setBaseDate('')
       setRepeatYearly(false)
@@ -346,7 +364,7 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
     } else {
       return (
         <aside className="hidden lg:block w-72 bg-white border-l border-gray-200 p-4 flex-shrink-0">
-          <p className="text-sm text-gray-400">点击卡片查看 / 编辑</p>
+          <p className="text-sm text-gray-400">{t('widgetsView.panelEmptyHint')}</p>
         </aside>
       )
     }
@@ -367,44 +385,44 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
         </div>
       )}
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-        <p className="text-xs text-gray-400 uppercase tracking-wide">{isNew ? '新建倒数日' : '倒数日设置'}</p>
-        <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 text-lg leading-none" title="关闭">×</button>
+        <p className="text-xs text-gray-400 uppercase tracking-wide">{isNew ? t('widgetsView.newCountdown') : t('widgetsView.settingsTitle')}</p>
+        <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 text-lg leading-none" title={t('common.close')}>×</button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         <label className="text-xs text-gray-500 block">
-          <span className="block mb-1">名称</span>
+          <span className="block mb-1">{t('widgetsView.fieldName')}</span>
           <input
             className="tt-input"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="如：生日 / 结婚纪念日"
+            placeholder={t('widgetsView.namePlaceholder')}
           />
         </label>
 
         <label className="text-xs text-gray-500 block">
-          <span className="block mb-1">分类</span>
+          <span className="block mb-1">{t('widgetsView.fieldCategory')}</span>
           {customCategory ? (
             <div className="flex gap-1">
               <input
                 className="tt-input flex-1"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                placeholder="输入自定义分类名"
+                placeholder={t('widgetsView.customCategoryPlaceholder')}
                 autoFocus
               />
               <button
                 type="button"
-                onClick={() => { setCustomCategory(false); setCategory('生日') }}
+                onClick={() => { setCustomCategory(false); setCategory(DEFAULT_CATEGORY) }}
                 className="px-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md"
               >
-                返回
+                {t('common.back')}
               </button>
             </div>
           ) : (
             <select
               className="tt-input"
-              value={['生日', '纪念日', '节日', '重要事件'].includes(category) ? category : '__custom__'}
+              value={FIXED_CATEGORIES.includes(category) ? category : '__custom__'}
               onChange={(e) => {
                 if (e.target.value === '__custom__') {
                   setCustomCategory(true)
@@ -414,64 +432,63 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
                 }
               }}
             >
-              <option value="生日">生日</option>
-              <option value="纪念日">纪念日</option>
-              <option value="节日">节日</option>
-              <option value="重要事件">重要事件</option>
-              <option value="__custom__">+ 自定义…</option>
+              {FIXED_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{countdownCategoryLabel(t, c)}</option>
+              ))}
+              <option value="__custom__">{t('widgetsView.customCategoryOption')}</option>
             </select>
           )}
         </label>
 
         <label className="text-xs text-gray-500 block">
-          <span className="block mb-1">{repeatYearly || milestoneRule ? '基准日期' : '日期'}</span>
+          <span className="block mb-1">{repeatYearly || milestoneRule ? t('widgetsView.fieldBaseDate') : t('widgetsView.fieldDate')}</span>
           <input type="date" className="tt-input" value={baseDate} onChange={(e) => setBaseDate(e.target.value)} />
         </label>
 
         <label className="flex items-center justify-between text-xs text-gray-600 cursor-pointer">
-          <span className="flex items-center gap-1.5"><Repeat size={13} /> 每年重置（生日/节日）</span>
+          <span className="flex items-center gap-1.5"><Repeat size={13} /> {t('widgetsView.repeatYearlyLabel')}</span>
           <input type="checkbox" className="accent-pink-500" checked={repeatYearly} onChange={(e) => setRepeatYearly(e.target.checked)} />
         </label>
 
         {repeatYearly && (
           <label className="text-xs text-gray-500 block ml-1">
-            <span className="block mb-1">重复规则</span>
+            <span className="block mb-1">{t('widgetsView.repeatRule')}</span>
             <div className="flex gap-3">
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="radio" name="repeat-type" className="accent-pink-500" checked={repeatType === 'solar'} onChange={() => setRepeatType('solar')} />
-                按公历（每年同月日）
+                {t('widgetsView.repeatSolar')}
               </label>
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="radio" name="repeat-type" className="accent-pink-500" checked={repeatType === 'lunar'} onChange={() => setRepeatType('lunar')} />
-                按农历（春节/七夕等）
+                {t('widgetsView.repeatLunar')}
               </label>
             </div>
           </label>
         )}
 
         <label className="text-xs text-gray-500 block">
-          <span className="block mb-1">自动计算纪念日（逗号分隔天数）</span>
+          <span className="block mb-1">{t('widgetsView.milestoneLabel')}</span>
           <input
             className="tt-input"
             value={milestoneRule}
             onChange={(e) => setMilestoneRule(e.target.value)}
             placeholder="100,365,520,1000,3650"
           />
-          <span className="block mt-1 text-[10px] text-gray-400">从基准日期起自动生成百天/周年等特殊日子，显示最近的下一个。</span>
+          <span className="block mt-1 text-[10px] text-gray-400">{t('widgetsView.milestoneHint')}</span>
         </label>
 
         <label className="flex items-center justify-between text-xs text-gray-600 cursor-pointer">
-          <span className="flex items-center gap-1.5"><InfinityIcon size={13} /> 过期后不显示「已过」</span>
+          <span className="flex items-center gap-1.5"><InfinityIcon size={13} /> {t('widgetsView.neverExpireLabel')}</span>
           <input type="checkbox" className="accent-pink-500" checked={neverExpire} onChange={(e) => setNeverExpire(e.target.checked)} />
         </label>
 
         <label className="text-xs text-gray-500 block">
-          <span className="block mb-1">备注</span>
+          <span className="block mb-1">{t('widgetsView.fieldNotes')}</span>
           <textarea
             className="tt-input resize-y min-h-[60px]"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="可选"
+            placeholder={t('widgetsView.notesPlaceholder')}
           />
         </label>
       </div>
@@ -486,14 +503,14 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
                 onClick={() => onDelete(item.id)}
                 className="w-full text-sm text-red-500 py-1.5"
               >
-                删除该倒数日
+                {t('widgetsView.deleteThis')}
               </button>
             )}
             <button
               disabled={!name.trim() || !baseDate}
               onClick={() => onSave({
                 name: name.trim(),
-                category: category.trim() || '其他',
+                category: category.trim() || FALLBACK_CATEGORY,
                 base_date: baseDate,
                 repeat_yearly: repeatYearly,
                 repeat_type: repeatType,
@@ -506,7 +523,7 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
                 (!name.trim() || !baseDate) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-pink-500 text-white active:bg-pink-600',
               )}
             >
-              {item ? '保存' : '创建'}
+              {item ? t('common.save') : t('widgetsView.create')}
             </button>
           </>
         ) : (
@@ -516,14 +533,14 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
                 onClick={() => onDelete(item.id)}
                 className="flex items-center gap-1 text-sm text-red-500 hover:text-red-600"
               >
-                删除
+                {t('common.delete')}
               </button>
             ) : <span />}
             <button
               disabled={!name.trim() || !baseDate}
               onClick={() => onSave({
                 name: name.trim(),
-                category: category.trim() || '其他',
+                category: category.trim() || FALLBACK_CATEGORY,
                 base_date: baseDate,
                 repeat_yearly: repeatYearly,
                 repeat_type: repeatType,
@@ -536,7 +553,7 @@ function CountdownDetailPanel({ item, onClose, onSave, onDelete, variant = 'pane
                 (!name.trim() || !baseDate) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-pink-500 text-white hover:bg-pink-600',
               )}
             >
-              {item ? '保存' : '创建'}
+              {item ? t('common.save') : t('widgetsView.create')}
             </button>
           </>
         )}

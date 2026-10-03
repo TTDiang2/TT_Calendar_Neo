@@ -20,26 +20,29 @@ import {
   StatsWidget,
   TodoWidget,
 } from './widgets/cards'
+import { useT } from '../i18n'
+import type { TxKey } from '../i18n'
 import { animSheetUp, animStaggerChildren } from '../anim'
 
 interface WidgetMeta {
   id: string
-  title: string
-  desc: string
+  /** 标题/说明存 i18n key，渲染时经 t() 解析（注册表是模块级常量，不能直接调 hook） */
+  titleKey: TxKey
+  descKey: TxKey
   /** 相对标准格子的跨行数（网格 auto-rows 定高，跨行 = 大号小组件） */
   rows: 1 | 2
   Comp: (p: { editing?: boolean; onRemove?: () => void }) => React.ReactNode
 }
 
 const REGISTRY: WidgetMeta[] = [
-  { id: 'todo', title: '待办', desc: '今天与逾期的待办，可直接勾选完成', rows: 1, Comp: TodoWidget },
-  { id: 'miniCalendar', title: '日历', desc: '迷你月历，今天高亮、事件打点', rows: 2, Comp: MiniCalendarWidget },
-  { id: 'clock', title: '时钟', desc: '实时时钟与农历', rows: 1, Comp: ClockWidget },
-  { id: 'countdown', title: '倒数日', desc: '最近的三个倒数日', rows: 1, Comp: CountdownWidget },
-  { id: 'coloring', title: '涂色', desc: '本月充实度热力图，可翻月', rows: 2, Comp: ColoringWidget },
-  { id: 'dots', title: '点点', desc: '今天的事件点点列表', rows: 1, Comp: DotsWidget },
-  { id: 'busy', title: '忙度预报', desc: '未来 7 天忙度预测', rows: 1, Comp: BusyWidget },
-  { id: 'stats', title: '完成概览', desc: '待办完成率一览', rows: 1, Comp: StatsWidget },
+  { id: 'todo', titleKey: 'terms.todo', descKey: 'widgetsView.todoDesc', rows: 1, Comp: TodoWidget },
+  { id: 'miniCalendar', titleKey: 'terms.calendar', descKey: 'widgetsView.miniCalendarDesc', rows: 2, Comp: MiniCalendarWidget },
+  { id: 'clock', titleKey: 'widgetsView.clockTitle', descKey: 'widgetsView.clockDesc', rows: 1, Comp: ClockWidget },
+  { id: 'countdown', titleKey: 'terms.countdown', descKey: 'widgetsView.countdownDesc', rows: 1, Comp: CountdownWidget },
+  { id: 'coloring', titleKey: 'widgetsView.coloringTitle', descKey: 'widgetsView.coloringDesc', rows: 2, Comp: ColoringWidget },
+  { id: 'dots', titleKey: 'widgetsView.dotsTitle', descKey: 'widgetsView.dotsDesc', rows: 1, Comp: DotsWidget },
+  { id: 'busy', titleKey: 'widgetsView.busyTitle', descKey: 'widgetsView.busyDesc', rows: 1, Comp: BusyWidget },
+  { id: 'stats', titleKey: 'widgetsView.statsTitle', descKey: 'widgetsView.statsDesc', rows: 1, Comp: StatsWidget },
 ]
 
 /** 是否运行在 iOS（Tauri 容器内 + UA 为 iPhone/iPad/iPod）。
@@ -65,6 +68,7 @@ function loadEnabled(): string[] {
 }
 
 export function WidgetsView() {
+  const t = useT()
   const [enabled, setEnabled] = useState<string[]>(loadEnabled)
   const [editing, setEditing] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -98,16 +102,16 @@ export function WidgetsView() {
       {/* 页头 */}
       <div className="sticky top-0 z-10 bg-white/45 backdrop-blur-xl px-3 md:px-5 pt-3 pb-2 flex items-center gap-2">
         <h2 className="text-base font-semibold text-gray-800 flex items-center gap-1.5">
-          <Sparkles size={16} className="text-pink-500" /> 小组件
+          <Sparkles size={16} className="text-pink-500" /> {t('terms.widgets')}
         </h2>
-        <span className="text-[11px] text-gray-400 hidden sm:inline">App 内的信息卡片</span>
+        <span className="text-[11px] text-gray-400 hidden sm:inline">{t('widgetsView.subtitle')}</span>
         <div className="ml-auto flex items-center gap-2">
           {editing && (
             <button
               onClick={() => setPickerOpen(true)}
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-pink-500 rounded-full hover:bg-pink-600 active:scale-95 transition"
             >
-              <Plus size={13} /> 添加
+              <Plus size={13} /> {t('common.add')}
             </button>
           )}
           <button
@@ -117,7 +121,7 @@ export function WidgetsView() {
               editing ? 'text-white bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-100',
             )}
           >
-            {editing ? '完成' : '编辑'}
+            {editing ? t('common.done') : t('common.edit')}
           </button>
         </div>
       </div>
@@ -126,11 +130,19 @@ export function WidgetsView() {
           上次的误解就发生在这里，故把两条路径写明。 */}
       <div className="px-3 md:px-5 pt-1 pb-2 max-w-6xl w-full mx-auto">
         <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-3 text-[12px] text-sky-900 leading-relaxed">
-          <p className="font-medium mb-0.5">本页是 App 内的信息卡片</p>
+          <p className="font-medium mb-0.5">{t('widgetsView.guideTitle')}</p>
           <p className="text-sky-800/80">
-            {isIOS()
-              ? '想放到 iPhone 主屏幕？长按主屏幕空白处 → 左上角「+」→ 搜索「TT 日历」→ 选尺寸添加（iOS 14+）。小组件显示的数据由 App 打开时同步写入。'
-              : 'iPhone 版另配有系统「主屏小组件」（长按主屏幕 → 左上角「+」→ 搜「TT 日历」添加）。本页卡片在三端通用。'}
+            {isIOS() ? (
+              <>
+                {t('widgetsView.guideIosSteps')}
+                {t('widgetsView.guideIosData')}
+              </>
+            ) : (
+              <>
+                {t('widgetsView.guideOtherSteps')}
+                {t('widgetsView.guideOtherCards')}
+              </>
+            )}
           </p>
         </div>
       </div>
@@ -152,7 +164,7 @@ export function WidgetsView() {
         {metas.length === 0 && (
           <div className="col-span-full flex flex-col items-center justify-center text-gray-400 gap-2 py-16">
             <LayoutGrid size={28} />
-            <p className="text-sm">还没有小组件，点右上角「编辑」添加</p>
+            <p className="text-sm">{t('widgetsView.emptyHint')}</p>
           </div>
         )}
       </div>
@@ -166,13 +178,13 @@ export function WidgetsView() {
             className="relative glass-sheet rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[70vh] flex flex-col"
           >
             <div className="flex items-center justify-between px-5 pt-4 pb-2">
-              <h3 className="text-sm font-semibold text-gray-800">添加小组件</h3>
+              <h3 className="text-sm font-semibold text-gray-800">{t('widgetsView.pickerTitle')}</h3>
               <button onClick={() => setPickerOpen(false)} className="p-1.5 rounded-full text-gray-400 hover:bg-gray-100 transition">
                 <X size={16} />
               </button>
             </div>
             <div className="overflow-y-auto px-5 pb-5 flex flex-col gap-2">
-              {available.length === 0 && <p className="text-sm text-gray-400 text-center py-6">全部小组件都已添加</p>}
+              {available.length === 0 && <p className="text-sm text-gray-400 text-center py-6">{t('widgetsView.pickerEmpty')}</p>}
               {available.map((w) => (
                 <button
                   key={w.id}
@@ -186,8 +198,8 @@ export function WidgetsView() {
                     <Plus size={16} className="text-pink-500" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium text-gray-800">{w.title}</span>
-                    <span className="block text-xs text-gray-400 truncate">{w.desc}</span>
+                    <span className="block text-sm font-medium text-gray-800">{t(w.titleKey)}</span>
+                    <span className="block text-xs text-gray-400 truncate">{t(w.descKey)}</span>
                   </span>
                 </button>
               ))}

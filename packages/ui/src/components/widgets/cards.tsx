@@ -22,7 +22,8 @@ import {
 } from '../../adapt/data'
 import { animCountUp } from '../../anim'
 import { lunarText } from '../../adapt/labels'
-import { useLang, useT } from '../../i18n'
+import { layerLabel } from '../../adapt/layerLabel'
+import { fmtDate, fmtWeekday, useLang, useT, useTPlural } from '../../i18n'
 
 // ---------- 共享数据钩子（同 key 复用 react-query 缓存，多卡片同源零开销） ----------
 
@@ -58,6 +59,7 @@ interface CardProps {
 }
 
 export function WidgetCard({ title, icon, tone = 'light', className, editing, onRemove, children }: CardProps) {
+  const t = useT()
   return (
     <div
       className={clsx(
@@ -76,7 +78,7 @@ export function WidgetCard({ title, icon, tone = 'light', className, editing, on
             <button
               onClick={onRemove}
               className="ml-auto w-5 h-5 rounded-full bg-red-500/90 text-white flex items-center justify-center hover:bg-red-500 transition flex-shrink-0"
-              title="移除小组件"
+              title={t('widgetsView.removeWidget')}
             >
               <X size={12} />
             </button>
@@ -92,6 +94,8 @@ export function WidgetCard({ title, icon, tone = 'light', className, editing, on
 
 export function TodoWidget({ editing, onRemove }: { editing?: boolean; onRemove?: () => void }) {
   const qc = useQueryClient()
+  const t = useT()
+  const tPlural = useTPlural()
   const { data: todos } = useQuery({
     queryKey: ['todos', null, 'incomplete', 'due_importance'],
     queryFn: () => getTodos({ status: 'notStarted', sort: 'due_importance' }),
@@ -127,19 +131,19 @@ export function TodoWidget({ editing, onRemove }: { editing?: boolean; onRemove?
   const restCount = dueToday.length - list.length
 
   return (
-    <WidgetCard title="待办" icon={<CheckSquare size={13} />} tone="pink" editing={editing} onRemove={onRemove}>
+    <WidgetCard title={t('terms.todo')} icon={<CheckSquare size={13} />} tone="pink" editing={editing} onRemove={onRemove}>
       {list.length === 0 ? (
-        <p className="text-sm text-gray-400 py-4 text-center">今天没有待办，好好休息 ☕</p>
+        <p className="text-sm text-gray-400 py-4 text-center">{t('widgetsView.todoEmpty')}</p>
       ) : (
         <div className="flex flex-col gap-2 h-full overflow-hidden">
-          {list.map((t) => {
-            const done = doneIds.has(t.id)
+          {list.map((todo) => {
+            const done = doneIds.has(todo.id)
             return (
-              <label key={t.id} className="flex items-center gap-2 min-w-0 cursor-pointer group">
+              <label key={todo.id} className="flex items-center gap-2 min-w-0 cursor-pointer group">
                 <input
                   type="checkbox"
                   checked={done}
-                  onChange={() => markDone(t.id)}
+                  onChange={() => markDone(todo.id)}
                   className="peer sr-only"
                 />
                 <span className={clsx(
@@ -148,14 +152,14 @@ export function TodoWidget({ editing, onRemove }: { editing?: boolean; onRemove?
                 )}>
                   {done && <CheckSquare size={9} className="text-white" />}
                 </span>
-                <span className={clsx('text-xs truncate', done && 'line-through opacity-50')}>{t.title}</span>
-                {t.due_date && t.due_date < today && (
-                  <span className="text-[9px] text-red-400 flex-shrink-0">逾期</span>
+                <span className={clsx('text-xs truncate', done && 'line-through opacity-50')}>{todo.title}</span>
+                {todo.due_date && todo.due_date < today && (
+                  <span className="text-[9px] text-red-400 flex-shrink-0">{t('widgetsView.todoOverdue')}</span>
                 )}
               </label>
             )
           })}
-          {restCount > 0 && <p className="text-[10px] text-gray-400 mt-auto">今天还有 {restCount} 项…</p>}
+          {restCount > 0 && <p className="text-[10px] text-gray-400 mt-auto">{tPlural('widgetsView.todoMore', restCount)}</p>}
         </div>
       )}
     </WidgetCard>
@@ -165,6 +169,8 @@ export function TodoWidget({ editing, onRemove }: { editing?: boolean; onRemove?
 // ---------- 2. 日历小组件：迷你月历 + 事件点 ----------
 
 export function MiniCalendarWidget({ editing, onRemove }: { editing?: boolean; onRemove?: () => void }) {
+  const t = useT()
+  const lang = useLang()
   const [monthKey, setMonthKey] = useState(currentMonthKey)
   const { data } = useMonth(monthKey)
   const today = todayStr()
@@ -172,18 +178,20 @@ export function MiniCalendarWidget({ editing, onRemove }: { editing?: boolean; o
   const { y, m } = parseDate(monthKey + '-01')
 
   return (
-    <WidgetCard title="日历" icon={<CalendarDays size={13} />} tone="dark" editing={editing} onRemove={onRemove}>
+    <WidgetCard title={t('terms.calendar')} icon={<CalendarDays size={13} />} tone="dark" editing={editing} onRemove={onRemove}>
       <div className="flex items-baseline gap-2 mb-1.5">
         <span className="text-3xl font-semibold tabular-nums">{Number(today.slice(8, 10))}</span>
-        <span className="text-xs opacity-70">{y} 年 {m} 月</span>
+        {/* 年月抬头走 Intl（「2026年10月 / October 2026」各语言自动，§3） */}
+        <span className="text-xs opacity-70">{fmtDate(lang, new Date(y, m - 1, 1), { year: 'numeric', month: 'long' })}</span>
         <span className="ml-auto flex gap-1">
           <button onClick={() => setMonthKey(shiftMonthKey(monthKey, -1))} className="w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-xs leading-none transition">‹</button>
           <button onClick={() => setMonthKey(shiftMonthKey(monthKey, 1))} className="w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-xs leading-none transition">›</button>
         </span>
       </div>
       <div className="grid grid-cols-7 gap-y-0.5 text-center">
-        {['一', '二', '三', '四', '五', '六', '日'].map((w) => (
-          <span key={w} className="text-[9px] opacity-50">{w}</span>
+        {/* 周一开头的一周窄名（与 MonthGrid 同一锚点：2023-01-02 是周一），禁止手写星期字典 */}
+        {Array.from({ length: 7 }, (_, i) => fmtWeekday(lang, new Date(2023, 0, 2 + i), 'narrow')).map((w, i) => (
+          <span key={i} className="text-[9px] opacity-50">{w}</span>
         ))}
         {days.map((d) => {
           const dayNum = Number(d.date.slice(8, 10))
@@ -221,10 +229,10 @@ export function ColoringWidget({ editing, onRemove }: { editing?: boolean; onRem
   const lang = useLang()
 
   return (
-    <WidgetCard title="涂色" icon={<Palette size={13} />} tone="light" editing={editing} onRemove={onRemove}>
+    <WidgetCard title={t('widgetsView.coloringTitle')} icon={<Palette size={13} />} tone="light" editing={editing} onRemove={onRemove}>
       <div className="flex items-baseline gap-1.5 mb-1.5">
         <span className="text-2xl font-semibold text-emerald-600 tabular-nums">{colored}</span>
-        <span className="text-[10px] text-gray-400">{m} 月已涂天数</span>
+        <span className="text-[10px] text-gray-400">{t('widgetsView.coloredDays', { m })}</span>
         <span className="ml-auto flex gap-1">
           <button onClick={() => setMonthKey(shiftMonthKey(monthKey, -1))} className="w-5 h-5 rounded-full bg-gray-100 hover:bg-gray-200 text-xs leading-none transition">‹</button>
           <button onClick={() => setMonthKey(shiftMonthKey(monthKey, 1))} className="w-5 h-5 rounded-full bg-gray-100 hover:bg-gray-200 text-xs leading-none transition">›</button>
@@ -255,6 +263,7 @@ export function ColoringWidget({ editing, onRemove }: { editing?: boolean; onRem
 // ---------- 4. 点点小组件：今天的事件点点 ----------
 
 export function DotsWidget({ editing, onRemove }: { editing?: boolean; onRemove?: () => void }) {
+  const t = useT()
   const { data } = useMonth(currentMonthKey())
   const today = todayStr()
   const day = data && 'days' in data ? data.days.find((d) => d.date === today) : null
@@ -265,16 +274,17 @@ export function DotsWidget({ editing, onRemove }: { editing?: boolean; onRemove?
     for (const [layerId, evs] of Object.entries(day.events_by_layer)) {
       const layer = layers.find((l) => l.layer_id === layerId)
       for (const ev of evs) {
-        out.push({ title: ev.title, color: layer?.color ?? ev.color ?? '#cbd5e1', layer: layer?.display_name ?? '' })
+        // 图层名一律走 layerLabel（内置 ID 显示译文，用户改名原样，§5）
+        out.push({ title: ev.title, color: layer?.color ?? ev.color ?? '#cbd5e1', layer: layerLabel(t, layerId, layer?.display_name) })
       }
     }
     return out.slice(0, 6)
-  }, [day, layers])
+  }, [day, layers, t])
 
   return (
-    <WidgetCard title="点点 · 今天" icon={<Circle size={13} />} tone="sky" editing={editing} onRemove={onRemove}>
+    <WidgetCard title={t('widgetsView.dotsTodayTitle')} icon={<Circle size={13} />} tone="sky" editing={editing} onRemove={onRemove}>
       {!day || entries.length === 0 ? (
-        <p className="text-sm text-gray-400 py-4 text-center">今天没有事件点点</p>
+        <p className="text-sm text-gray-400 py-4 text-center">{t('widgetsView.dotsEmpty')}</p>
       ) : (
         <div className="flex flex-col gap-1.5 overflow-hidden h-full">
           {entries.map((e, i) => (
@@ -293,6 +303,7 @@ export function DotsWidget({ editing, onRemove }: { editing?: boolean; onRemove?
 // ---------- 5. 倒数日小组件 ----------
 
 export function CountdownWidget({ editing, onRemove }: { editing?: boolean; onRemove?: () => void }) {
+  const t = useT()
   const { data } = useQuery({
     queryKey: ['countdownList'],
     queryFn: getCountdownList,
@@ -304,9 +315,9 @@ export function CountdownWidget({ editing, onRemove }: { editing?: boolean; onRe
   )
 
   return (
-    <WidgetCard title="倒数日" icon={<Flame size={13} />} tone="amber" editing={editing} onRemove={onRemove}>
+    <WidgetCard title={t('terms.countdown')} icon={<Flame size={13} />} tone="amber" editing={editing} onRemove={onRemove}>
       {list.length === 0 ? (
-        <p className="text-sm text-gray-400 py-4 text-center">还没有倒数日</p>
+        <p className="text-sm text-gray-400 py-4 text-center">{t('widgetsView.countdownEmpty')}</p>
       ) : (
         <div className="flex flex-col gap-2.5 h-full justify-around">
           {list.map((c) => (
@@ -315,7 +326,7 @@ export function CountdownWidget({ editing, onRemove }: { editing?: boolean; onRe
                 className="text-lg font-semibold tabular-nums flex-shrink-0 w-12 text-right"
                 style={{ color: c.color ?? '#ea580c' }}
               >
-                {c.is_today ? '今天' : c.days_left}
+                {c.is_today ? t('common.today') : c.days_left}
               </span>
               <span className="text-xs truncate">{c.name}</span>
             </div>
@@ -329,6 +340,8 @@ export function CountdownWidget({ editing, onRemove }: { editing?: boolean; onRe
 // ---------- 6. 忙度小组件：未来 7 天预测 ----------
 
 export function BusyWidget({ editing, onRemove }: { editing?: boolean; onRemove?: () => void }) {
+  const t = useT()
+  const lang = useLang()
   // 取当月与下月两份数据：25 号之后「未来 7 天」要能跨月
   const thisMonth = currentMonthKey()
   const nextMonth = shiftMonthKey(thisMonth, 1)
@@ -339,10 +352,9 @@ export function BusyWidget({ editing, onRemove }: { editing?: boolean; onRemove?
     const all = [...(cur && 'days' in cur ? cur.days : []), ...(nxt && 'days' in nxt ? nxt.days : [])]
     return all.filter((d) => d.date >= today).slice(0, 7)
   }, [cur, nxt, today])
-  const WD = ['日', '一', '二', '三', '四', '五', '六']
 
   return (
-    <WidgetCard title="忙度预报" icon={<Gauge size={13} />} tone="light" editing={editing} onRemove={onRemove}>
+    <WidgetCard title={t('widgetsView.busyTitle')} icon={<Gauge size={13} />} tone="light" editing={editing} onRemove={onRemove}>
       <div className="flex items-end justify-between gap-1 h-full pt-1">
         {week.map((d) => {
           const level = d.predict_level
@@ -355,15 +367,15 @@ export function BusyWidget({ editing, onRemove }: { editing?: boolean; onRemove?
                   height: `${18 + (level ?? 0) * 11}px`,
                   background: level != null ? TODO_BUSY_PREDICT_COLORS[level] : '#f3f4f6',
                 }}
-                title={`${d.date}：忙度 ${level ?? '—'}`}
+                title={t('widgetsView.busyLevelTitle', { date: d.date, level: level ?? '—' })}
               />
               <span className={clsx('text-[9px]', d.date === today ? 'text-pink-500 font-semibold' : 'text-gray-400')}>
-                {d.date === today ? '今' : WD[dt.getDay()]}
+                {d.date === today ? t('widgetsView.busyToday') : fmtWeekday(lang, dt, 'narrow')}
               </span>
             </div>
           )
         })}
-        {week.length === 0 && <p className="text-sm text-gray-400 w-full text-center py-4">暂无预报</p>}
+        {week.length === 0 && <p className="text-sm text-gray-400 w-full text-center py-4">{t('widgetsView.busyEmpty')}</p>}
       </div>
     </WidgetCard>
   )
@@ -374,17 +386,17 @@ export function BusyWidget({ editing, onRemove }: { editing?: boolean; onRemove?
 export function ClockWidget({ editing, onRemove }: { editing?: boolean; onRemove?: () => void }) {
   const [now, setNow] = useState(() => new Date())
   const { data } = useMonth(currentMonthKey())
+  // tLunar/langLunar 命名避开下方 useEffect 里的定时器变量（已改名 intervalId）
   const tLunar = useT()
   const langLunar = useLang()
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(t)
+    const intervalId = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(intervalId)
   }, [])
   const today = todayStr()
   const lunar = data && 'days' in data ? lunarText(tLunar, langLunar, data.days.find((d) => d.date === today)?.lunar) : ''
   const hh = String(now.getHours()).padStart(2, '0')
   const mm = String(now.getMinutes()).padStart(2, '0')
-  const WD = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
   return (
     <WidgetCard tone="dark" editing={editing} onRemove={onRemove}>
@@ -393,10 +405,11 @@ export function ClockWidget({ editing, onRemove }: { editing?: boolean; onRemove
         <p className="text-4xl font-light tabular-nums tracking-wide">
           {hh}<span className="animate-pulse opacity-60">:</span>{mm}
         </p>
+        {/* 月日/星期走 Intl（月日形态「10月3日 / October 3」、星期 short「周六」，§3） */}
         <p className="text-[11px] opacity-70">
-          {now.getMonth() + 1} 月 {now.getDate()} 日 {WD[now.getDay()]}
+          {fmtDate(langLunar, now, { month: 'long', day: 'numeric' })} {fmtWeekday(langLunar, now, 'short')}
         </p>
-        {lunar && <p className="text-[10px] opacity-50">农历 {lunar}</p>}
+        {lunar && <p className="text-[10px] opacity-50">{tLunar('widgetsView.clockLunar', { text: lunar })}</p>}
       </div>
     </WidgetCard>
   )
@@ -405,6 +418,7 @@ export function ClockWidget({ editing, onRemove }: { editing?: boolean; onRemove
 // ---------- 8. 完成概览小组件 ----------
 
 export function StatsWidget({ editing, onRemove }: { editing?: boolean; onRemove?: () => void }) {
+  const t = useT()
   const { data } = useQuery({
     queryKey: ['todoStats', null],
     queryFn: () => getTodoStats(undefined),
@@ -414,15 +428,15 @@ export function StatsWidget({ editing, onRemove }: { editing?: boolean; onRemove
   const rate = data && data.total > 0 ? data.completed / data.total : 0
 
   return (
-    <WidgetCard title="完成概览" icon={<CheckSquare size={13} />} tone="pink" editing={editing} onRemove={onRemove}>
+    <WidgetCard title={t('widgetsView.statsTitle')} icon={<CheckSquare size={13} />} tone="pink" editing={editing} onRemove={onRemove}>
       <div className="flex items-center gap-3 h-full py-1">
         <div className="text-center">
           <p ref={numRef.ref} className="text-3xl font-semibold text-emerald-600 tabular-nums">0</p>
-          <p className="text-[10px] text-gray-400 mt-0.5">已完成</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">{t('widgetsView.statsCompleted')}</p>
         </div>
         <div className="flex-1 flex flex-col gap-1.5 min-w-0">
           <div className="flex justify-between text-[11px] text-gray-500">
-            <span>待处理 {data?.incomplete ?? '—'}</span>
+            <span>{t('widgetsView.statsPending', { n: data?.incomplete ?? '—' })}</span>
             <span className="tabular-nums">{Math.round(rate * 100)}%</span>
           </div>
           <div className="h-2 bg-pink-100 rounded-full overflow-hidden">
