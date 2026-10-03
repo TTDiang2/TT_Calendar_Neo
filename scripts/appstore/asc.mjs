@@ -2,12 +2,11 @@
 // 用法：node asc.mjs <method> <path> [jsonBodyFile]
 // 环境变量：ASC_KEY_PATH / ASC_KEY_ID / ASC_ISSUER_ID
 import { readFileSync } from 'node:fs'
-import { createSign, createHmac } from 'node:crypto'
+import { createSign } from 'node:crypto'
 
 const KEY_PATH = process.env.ASC_KEY_PATH
 const KEY_ID = process.env.ASC_KEY_ID
 const ISSUER = process.env.ASC_ISSUER_ID
-const HOST = 'https://api.appstoreconnect.apple.com'
 
 const b64url = (buf) => Buffer.from(buf).toString('base64url')
 
