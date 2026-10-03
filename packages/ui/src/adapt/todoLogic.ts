@@ -1,4 +1,5 @@
 import type { Todo } from './types'
+import type { TxKey } from '../i18n/keys'
 
 export type UrgencyLevel = 'urgent' | 'soon' | 'later'
 
@@ -69,14 +70,19 @@ export function ganttRange(t: Todo, today = todayStr()): GanttRange {
   return { start, end: end ?? start, overdue, completed }
 }
 
-export const IMPORTANCE_LABELS: Record<string, string> = {
-  high: '高', normal: '中', low: '低',
+/**
+ * 旧 UI 词表（zh 沿用 adapt 旧词表：高·中·低 / 困难·中等·简单 / 等他人）的
+ * 字典 key 映射，与 B3 卡片级词表 todo.card.* 同源同措辞。显示方经 t() 解析
+ * （i18n 后 UI 文案不再以中文串出参；非 React 场景按规范 §0 经参数传 t）。
+ */
+export const IMPORTANCE_LABELS: Record<string, TxKey> = {
+  high: 'todo.card.importance.high', normal: 'todo.card.importance.normal', low: 'todo.card.importance.low',
 }
 
-export const COMPLEXITY_LABELS: Record<string, string> = {
-  hard: '困难', medium: '中等', simple: '简单',
+export const COMPLEXITY_LABELS: Record<string, TxKey> = {
+  hard: 'todo.card.complexity.hard', medium: 'todo.card.complexity.medium', simple: 'todo.card.complexity.simple',
 }
 
-export const STATUS_LABELS: Record<string, string> = {
-  notStarted: '未开始', inProgress: '进行中', waitingOnOthers: '等他人', deferred: '已推迟', completed: '已完成',
+export const STATUS_LABELS: Record<string, TxKey> = {
+  notStarted: 'todo.card.status.notStarted', inProgress: 'todo.card.status.inProgress', waitingOnOthers: 'todo.card.status.waitingOnOthers', deferred: 'todo.card.status.deferred', completed: 'todo.card.status.completed',
 }

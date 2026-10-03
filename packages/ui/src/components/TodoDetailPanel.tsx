@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Trash2, X } from 'lucide-react'
 import clsx from 'clsx'
 import type { Todo, TodoList } from '../adapt/types'
+import { useT, type TxKey, type I18n } from '../i18n'
 import { NotesEditorModal } from './NotesEditorModal'
 import { animDrawerIn } from '../anim'
 import { useIsWideScreen } from '../hooks/useMedia'
@@ -19,43 +20,49 @@ export interface TodoDetailPanelRef {
   openNotes: () => void
 }
 
-const IMPORTANCE_OPTIONS: { key: string; label: string }[] = [
-  { key: 'high', label: '高' },
-  { key: 'normal', label: '普通' },
-  { key: 'low', label: '低' },
-]
-
-const STATUS_OPTIONS: { key: string; label: string }[] = [
-  { key: 'notStarted', label: '未开始' },
-  { key: 'inProgress', label: '进行中' },
-  { key: 'completed', label: '已完成' },
-  { key: 'waitingOnOthers', label: '等待他人' },
-  { key: 'deferred', label: '已推迟' },
-]
-
-const COMPLEXITY_OPTIONS: { key: string; label: string }[] = [
-  { key: 'simple', label: '简单' },
-  { key: 'medium', label: '中等' },
-  { key: 'hard', label: '复杂' },
-]
+// 档位 → 字典 key 映射（对象插入顺序 = 下拉选项顺序）：
+// 重要性沿用本面板旧词表 高·普通·低（todoEditor.importance.*，与列表行/卡片级词表
+// 并存，见 fragment 文件头 TODO-REVIEW）；状态/复杂度与 B3 列表行词表逐字一致，
+// 直接复用 todo.status.* / todo.complexity.*。
+const IMPORTANCE_KEYS: Record<string, TxKey> = {
+  high: 'todoEditor.importance.high',
+  normal: 'todoEditor.importance.normal',
+  low: 'todoEditor.importance.low',
+}
+const STATUS_KEYS: Record<string, TxKey> = {
+  notStarted: 'todo.status.notStarted',
+  inProgress: 'todo.status.inProgress',
+  completed: 'todo.status.completed',
+  waitingOnOthers: 'todo.status.waitingOnOthers',
+  deferred: 'todo.status.deferred',
+}
+const COMPLEXITY_KEYS: Record<string, TxKey> = {
+  simple: 'todo.complexity.simple',
+  medium: 'todo.complexity.medium',
+  hard: 'todo.complexity.hard',
+}
 
 // 重复（老端 20260921 todo.repeat）：完成后端内自动生成下一期；'' = 不重复。
 // 未知枚举值（老端新档位先行）也列进选项，避免打开面板保存时被静默清掉。
-const REPEAT_OPTIONS: { key: string; label: string }[] = [
-  { key: '', label: '不重复' },
-  { key: 'daily', label: '每天' },
-  { key: 'weekdays', label: '每工作日' },
-  { key: 'weekly', label: '每周' },
-]
+const REPEAT_KEYS: Record<string, TxKey> = {
+  '': 'todoEditor.repeat.none',
+  daily: 'todoEditor.repeat.daily',
+  weekdays: 'todoEditor.repeat.weekdays',
+  weekly: 'todoEditor.repeat.weekly',
+}
+const REPEAT_ORDER: string[] = ['', 'daily', 'weekdays', 'weekly']
 
-function repeatLabel(v: string): string {
-  return REPEAT_OPTIONS.find((o) => o.key === v)?.label ?? v
+/** 档位值 → 显示文案：命中字典 key 走译文，未知枚举原样显示（t 经参数传入，规范 §0） */
+function optionLabel(keys: Record<string, TxKey>, v: string, t: I18n['t']): string {
+  const key = keys[v]
+  return key ? t(key) : v
 }
 
 export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function TodoDetailPanel(
   { todo, lists, onClose, onSave, onDelete },
   ref,
 ) {
+  const t = useT()
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [importance, setImportance] = useState<Todo['importance']>('normal')
@@ -219,7 +226,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
     if (!isDesktop) return null
     return (
       <aside className="w-72 bg-white border-l border-gray-200 p-4 flex-shrink-0">
-        <p className="text-sm text-gray-400">点击待办查看详情</p>
+        <p className="text-sm text-gray-400">{t('todoEditor.emptyPanel')}</p>
       </aside>
     )
   }
@@ -227,9 +234,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
   const tags = tagsText.split(/[,，]/).map((t) => t.trim()).filter(Boolean)
 
   // 当前值是未知档位（老端新枚举先行）时补进选项，避免一打开面板保存就被静默清掉
-  const repeatOptions = REPEAT_OPTIONS.some((o) => o.key === repeat)
-    ? REPEAT_OPTIONS
-    : [...REPEAT_OPTIONS, { key: repeat, label: repeatLabel(repeat) }]
+  const repeatOptions = REPEAT_ORDER.includes(repeat) ? REPEAT_ORDER : [...REPEAT_ORDER, repeat]
 
   // 构造完整保存数据（与 useEffect 自动保存的字段一一对应）
   const buildData = (): Todo => ({
@@ -262,8 +267,8 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
   // 表单体（桌面右栏 / 手机抽屉共用同一份 JSX）
   const header = (
     <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-      <p className="text-xs text-gray-400 uppercase tracking-wide">{todo.id === '' || todo.id === '__NEW__' ? '新建待办' : '待办详情'}</p>
-      <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 flex-shrink-0 ml-2" title="关闭">
+      <p className="text-xs text-gray-400 uppercase tracking-wide">{todo.id === '' || todo.id === '__NEW__' ? t('todoEditor.title.new') : t('todoEditor.title.detail')}</p>
+      <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 flex-shrink-0 ml-2" title={t('todoEditor.action.close')}>
         <X size={16} />
       </button>
     </div>
@@ -277,7 +282,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         className="w-full text-base font-medium border-0 border-b border-transparent hover:border-gray-200 focus:border-pink-400 focus:outline-none py-1 resize-none break-words whitespace-pre-wrap"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="标题"
+        placeholder={t('todoEditor.field.title')}
       />
 
       <textarea
@@ -285,13 +290,13 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         value={body}
         onChange={(e) => setBody(e.target.value)}
         onDoubleClick={() => setNotesModalOpen(true)}
-        title="双击放大编辑"
-        placeholder="备注（可选）"
+        title={t('todoEditor.hint.dblClickEdit')}
+        placeholder={t('todoEditor.placeholder.bodyOptional')}
       />
 
       <div className="grid grid-cols-2 gap-2">
         <label className="text-xs text-gray-500">
-          <span className="block mb-1">列表</span>
+          <span className="block mb-1">{t('todoEditor.field.list')}</span>
           <select className="tt-input" value={listId} onChange={(e) => setListId(e.target.value)}>
             {lists.map((l) => (
               <option key={l.id} value={l.id}>{l.display_name}</option>
@@ -299,10 +304,10 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
           </select>
         </label>
         <label className="text-xs text-gray-500">
-          <span className="block mb-1">重要性</span>
+          <span className="block mb-1">{t('todoEditor.field.importance')}</span>
           <select className="tt-input" value={importance} onChange={(e) => setImportance(e.target.value as Todo['importance'])}>
-            {IMPORTANCE_OPTIONS.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
+            {Object.entries(IMPORTANCE_KEYS).map(([k, key]) => (
+              <option key={k} value={k}>{t(key)}</option>
             ))}
           </select>
         </label>
@@ -310,25 +315,25 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
 
       <div className="grid grid-cols-2 gap-2">
         <label className={clsx('text-xs text-gray-500', dueExpanded && 'col-span-2', plannedExpanded && 'hidden')}>
-          <span className="block mb-1">截止日期</span>
+          <span className="block mb-1">{t('todoEditor.field.dueDate')}</span>
           <DueDateQuickPicker value={dueDate} onChange={setDueDate} expanded={dueExpanded} setExpanded={setDueExpanded} />
         </label>
         <label className={clsx('text-xs text-gray-500', plannedExpanded && 'col-span-2', dueExpanded && 'hidden')}>
-          <span className="block mb-1">计划日期</span>
+          <span className="block mb-1">{t('todoEditor.field.plannedDate')}</span>
           <DueDateQuickPicker value={plannedDate} onChange={setPlannedDate} expanded={plannedExpanded} setExpanded={setPlannedExpanded} />
         </label>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         <label className="text-xs text-gray-500">
-          <span className="block mb-1">开始日</span>
+          <span className="block mb-1">{t('todoEditor.field.startDate')}</span>
           <input type="date" className="tt-input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </label>
         <label className="text-xs text-gray-500">
-          <span className="block mb-1">复杂度</span>
+          <span className="block mb-1">{t('todoEditor.field.complexity')}</span>
           <select className="tt-input" value={complexity} onChange={(e) => setComplexity(e.target.value as Todo['complexity'])}>
-            {COMPLEXITY_OPTIONS.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
+            {Object.entries(COMPLEXITY_KEYS).map(([k, key]) => (
+              <option key={k} value={k}>{t(key)}</option>
             ))}
           </select>
         </label>
@@ -336,18 +341,18 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
 
       <div className="grid grid-cols-2 gap-2">
         <label className="text-xs text-gray-500">
-          <span className="block mb-1">状态</span>
+          <span className="block mb-1">{t('todoEditor.field.status')}</span>
           <select className="tt-input" value={status} onChange={(e) => setStatus(e.target.value as Todo['status'])}>
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
+            {Object.entries(STATUS_KEYS).map(([k, key]) => (
+              <option key={k} value={k}>{t(key)}</option>
             ))}
           </select>
         </label>
         <label className="text-xs text-gray-500">
-          <span className="block mb-1">重复</span>
+          <span className="block mb-1">{t('todoEditor.field.repeat')}</span>
           <select className="tt-input" value={repeat} onChange={(e) => setRepeat(e.target.value)}>
-            {repeatOptions.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
+            {repeatOptions.map((k) => (
+              <option key={k} value={k}>{optionLabel(REPEAT_KEYS, k, t)}</option>
             ))}
           </select>
         </label>
@@ -355,7 +360,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
 
       {/* 闹钟（1.3-5）：到点由系统通知提醒；留空 = 不设闹钟 */}
       <label className="text-xs text-gray-500 block">
-        <span className="block mb-1">闹钟（到点弹系统通知，留空不设）</span>
+        <span className="block mb-1">{t('todoEditor.field.alarm')}</span>
         <div className="flex gap-1">
           <input
             type="datetime-local"
@@ -369,19 +374,19 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
               onClick={() => setAlarmAt('')}
               className="px-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md"
             >
-              清除
+              {t('todoEditor.action.clear')}
             </button>
           )}
         </div>
       </label>
 
       <label className="text-xs text-gray-500 block">
-        <span className="block mb-1">标签（逗号分隔，自定义）</span>
+        <span className="block mb-1">{t('todoEditor.field.tags')}</span>
         <input
           className="tt-input"
           value={tagsText}
           onChange={(e) => setTagsText(e.target.value)}
-          placeholder="工作, 学习, 家庭…"
+          placeholder={t('todoEditor.placeholder.tags')}
         />
         {tags.length > 0 && (
           <span className="flex flex-wrap gap-1 mt-1.5">
@@ -400,25 +405,27 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         <button
           onClick={() => {
             // 删除后面板会关闭，必须阻止 cleanup 把这条刚删掉的记录又 flush 回去
-            if (confirm(`删除待办「${todo.title}」？`)) {
+            if (confirm(t('todoEditor.deleteConfirm', { title: todo.title }))) {
               skipFlushRef.current = true
               onDelete(todo.id)
             }
           }}
           className="flex items-center gap-1 text-sm text-red-500 hover:text-red-600 whitespace-nowrap"
         >
-          <Trash2 size={14} /> 删除
+          <Trash2 size={14} /> {t('todoEditor.action.delete')}
         </button>
         <button
           onClick={save}
           disabled={!title.trim() || !listId || saving}
           className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40 whitespace-nowrap"
         >
-          {saving ? '保存中…' : '保存'}
+          {saving ? t('todoEditor.action.saving') : t('todoEditor.action.save')}
         </button>
       </div>
       <p className="text-[11px] text-gray-400 text-right leading-none whitespace-nowrap">
-        切换页面自动保存 · <span className="font-medium text-gray-500">Ctrl+Enter</span> 直接保存
+        {t('todoEditor.hint.autosavePrefix')}
+        <span className="font-medium text-gray-500">Ctrl+Enter</span>
+        {t('todoEditor.hint.autosaveSuffix')}
       </p>
     </div>
   )
@@ -427,7 +434,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
     <NotesEditorModal
       open={notesModalOpen}
       initialValue={body}
-      title={title || '备注'}
+      title={title || t('todoEditor.field.body')}
       onClose={(next) => {
         setBody(next)
         setNotesModalOpen(false)
@@ -472,7 +479,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
             onClick={() => setEditing(null)}
             className="text-xs text-pink-600 font-medium px-1 py-1 flex-shrink-0 active:opacity-60"
           >
-            完成
+            {t('todoEditor.action.done')}
           </button>
         </div>
       ) : (
@@ -510,7 +517,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
           className="px-4 pt-4 pb-2 text-left w-full active:bg-black/[0.03] transition-colors"
         >
           <p className={clsx('text-lg font-semibold leading-snug break-words', title ? 'text-gray-900' : 'text-gray-300')}>
-            {title || (isPhantom ? '点这里输入标题…' : '无标题（点按编辑）')}
+            {title || (isPhantom ? t('todoEditor.mobile.titlePlaceholder') : t('todoEditor.mobile.noTitle'))}
           </p>
         </button>
       )}
@@ -520,59 +527,59 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         onClick={() => setNotesModalOpen(true)}
         className="mx-4 mb-3 px-3 py-2.5 rounded-xl bg-white/80 border border-black/5 text-left active:bg-black/[0.04] transition-colors"
       >
-        <p className="text-[11px] text-gray-400 mb-0.5">备注</p>
+        <p className="text-[11px] text-gray-400 mb-0.5">{t('todoEditor.field.body')}</p>
         <p className={clsx('text-sm leading-snug break-words whitespace-pre-wrap line-clamp-3', body ? 'text-gray-700' : 'text-gray-300')}>
-          {body || '点开写点备注…'}
+          {body || t('todoEditor.mobile.bodyEmpty')}
         </p>
       </button>
 
       {/* 元信息：通栏行式（label 左 value 右），点行编辑单字段 */}
       <div className="rounded-2xl bg-white/60 border border-black/5 mx-4 mb-3 overflow-hidden">
-        {metaRow('list', '清单', listName, (
+        {metaRow('list', t('todoEditor.mobile.list'), listName, (
           <select className="tt-input" value={listId} onChange={(e) => setListId(e.target.value)}>
             {lists.map((l) => (
               <option key={l.id} value={l.id}>{l.display_name}</option>
             ))}
           </select>
         ))}
-        {metaRow('importance', '重要性', IMPORTANCE_OPTIONS.find((o) => o.key === importance)?.label ?? importance, (
+        {metaRow('importance', t('todoEditor.field.importance'), optionLabel(IMPORTANCE_KEYS, importance, t), (
           <select className="tt-input" value={importance} onChange={(e) => setImportance(e.target.value as Todo['importance'])}>
-            {IMPORTANCE_OPTIONS.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
+            {Object.entries(IMPORTANCE_KEYS).map(([k, key]) => (
+              <option key={k} value={k}>{t(key)}</option>
             ))}
           </select>
         ))}
-        {metaRow('status', '状态', STATUS_OPTIONS.find((o) => o.key === status)?.label ?? status, (
+        {metaRow('status', t('todoEditor.field.status'), optionLabel(STATUS_KEYS, status, t), (
           <select className="tt-input" value={status} onChange={(e) => setStatus(e.target.value as Todo['status'])}>
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
+            {Object.entries(STATUS_KEYS).map(([k, key]) => (
+              <option key={k} value={k}>{t(key)}</option>
             ))}
           </select>
         ))}
-        {metaRow('due', '截止', dueDate || '无', (
+        {metaRow('due', t('todoEditor.mobile.due'), dueDate || t('todoEditor.none'), (
           <DueDateQuickPicker value={dueDate} onChange={setDueDate} />
         ))}
-        {metaRow('planned', '计划', plannedDate || '无', (
+        {metaRow('planned', t('todoEditor.mobile.planned'), plannedDate || t('todoEditor.none'), (
           <DueDateQuickPicker value={plannedDate} onChange={setPlannedDate} />
         ))}
-        {metaRow('start', '开始日', startDate || '无', (
+        {metaRow('start', t('todoEditor.field.startDate'), startDate || t('todoEditor.none'), (
           <input type="date" className="tt-input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         ))}
-        {metaRow('complexity', '复杂度', COMPLEXITY_OPTIONS.find((o) => o.key === complexity)?.label ?? complexity, (
+        {metaRow('complexity', t('todoEditor.field.complexity'), optionLabel(COMPLEXITY_KEYS, complexity, t), (
           <select className="tt-input" value={complexity} onChange={(e) => setComplexity(e.target.value as Todo['complexity'])}>
-            {COMPLEXITY_OPTIONS.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
+            {Object.entries(COMPLEXITY_KEYS).map(([k, key]) => (
+              <option key={k} value={k}>{t(key)}</option>
             ))}
           </select>
         ))}
-        {metaRow('repeat', '重复', repeat ? repeatLabel(repeat) : '不重复', (
+        {metaRow('repeat', t('todoEditor.field.repeat'), optionLabel(REPEAT_KEYS, repeat, t), (
           <select className="tt-input" value={repeat} onChange={(e) => setRepeat(e.target.value)}>
-            {repeatOptions.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
+            {repeatOptions.map((k) => (
+              <option key={k} value={k}>{optionLabel(REPEAT_KEYS, k, t)}</option>
             ))}
           </select>
         ))}
-        {metaRow('alarm', '闹钟', alarmAt ? alarmAt.replace('T', ' ') : '无', (
+        {metaRow('alarm', t('todoEditor.mobile.alarm'), alarmAt ? alarmAt.replace('T', ' ') : t('todoEditor.none'), (
           <div className="flex gap-1">
             <input
               type="datetime-local"
@@ -584,22 +591,22 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
               <button
                 type="button"
                 onClick={() => setAlarmAt('')}
-                className="px-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md flex-shrink-0"
-              >
-                清除
-              </button>
+              className="px-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md flex-shrink-0"
+            >
+              {t('todoEditor.action.clear')}
+            </button>
             )}
           </div>
         ))}
         {metaRow(
           'tags',
-          '标签',
-          tags.length ? tags.join('、') : '无',
+          t('todoEditor.mobile.tags'),
+          tags.length ? tags.join(t('todoEditor.tagSep')) : t('todoEditor.none'),
           <input
             className="tt-input"
             value={tagsText}
             onChange={(e) => setTagsText(e.target.value)}
-            placeholder="工作, 学习…"
+            placeholder={t('todoEditor.placeholder.tagsShort')}
           />,
         )}
       </div>
@@ -610,21 +617,21 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
         <button
           onClick={() => {
             // 删除后面板会关闭，必须阻止 cleanup 把这条刚删掉的记录又 flush 回去
-            if (confirm(`删除待办「${todo.title}」？`)) {
+            if (confirm(t('todoEditor.deleteConfirm', { title: todo.title }))) {
               skipFlushRef.current = true
               onDelete(todo.id)
             }
           }}
           className="flex items-center gap-1 text-sm text-red-500 active:opacity-60 py-2"
         >
-          <Trash2 size={15} /> 删除
+          <Trash2 size={15} /> {t('todoEditor.action.delete')}
         </button>
         <button
           onClick={save}
           disabled={!title.trim() || !listId || saving}
           className="px-6 py-2 text-sm bg-pink-500 text-white rounded-full active:bg-pink-600 disabled:opacity-40"
         >
-          {saving ? '保存中…' : '保存'}
+          {saving ? t('todoEditor.action.saving') : t('todoEditor.action.save')}
         </button>
       </div>
     </>
@@ -681,6 +688,7 @@ export function DueDateQuickPicker({
   const [internalExpanded, setInternalExpanded] = useState(false)
   const expanded = expandedProp ?? internalExpanded
   const setExpanded = setExpandedProp ?? setInternalExpanded
+  const t = useT()
   const today = fmtDate(new Date())
   const tomorrow = fmtDate(new Date(Date.now() + 86400000))
   const monday = fmtDate(nextMonday())
@@ -694,19 +702,19 @@ export function DueDateQuickPicker({
           onClick={() => setExpanded(false)}
           className="px-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md"
         >
-          返回
+          {t('todoEditor.due.back')}
         </button>
       </div>
     )
   }
 
   const presets = [
-    { key: 'today', label: '今天', val: today },
-    { key: 'tomorrow', label: '明天', val: tomorrow },
-    { key: 'monday', label: '下周一', val: monday },
+    { key: 'today', label: t('todoEditor.due.today'), val: today },
+    { key: 'tomorrow', label: t('todoEditor.due.tomorrow'), val: tomorrow },
+    { key: 'monday', label: t('todoEditor.due.nextMonday'), val: monday },
   ]
   const matched = presets.find((p) => p.val === value)
-  const label = value ? (matched ? matched.label : value.slice(5)) : '无'
+  const label = value ? (matched ? matched.label : value.slice(5)) : t('todoEditor.none')
 
   return (
     <select
@@ -720,12 +728,12 @@ export function DueDateQuickPicker({
         }
       }}
     >
-      {!matched && value && <option value={value}>{value}（自定义）</option>}
-      <option value="__none__">无</option>
-      <option value="today">今天（{today.slice(5)}）</option>
-      <option value="tomorrow">明天（{tomorrow.slice(5)}）</option>
-      <option value="monday">下周一（{monday.slice(5)}）</option>
-      <option value="__custom__">选择日期…</option>
+      {!matched && value && <option value={value}>{t('todoEditor.due.customValue', { value })}</option>}
+      <option value="__none__">{t('todoEditor.none')}</option>
+      <option value="today">{t('todoEditor.due.todayWithDate', { date: today.slice(5) })}</option>
+      <option value="tomorrow">{t('todoEditor.due.tomorrowWithDate', { date: tomorrow.slice(5) })}</option>
+      <option value="monday">{t('todoEditor.due.nextMondayWithDate', { date: monday.slice(5) })}</option>
+      <option value="__custom__">{t('todoEditor.due.pickDate')}</option>
     </select>
   )
 }
