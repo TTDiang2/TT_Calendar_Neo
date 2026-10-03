@@ -2,7 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider, QueryErrorResetBoundary } from '@tanstack/react-query'
 import '@tt-calendar/ui/index.css'
-import { App, setBackend, createHttpBackend, makeI18n, activeLang } from '@tt-calendar/ui'
+import { App, setBackend, createHttpBackend, makeI18n, activeLang, onLangChange } from '@tt-calendar/ui'
 import { ErrorBoundary } from '@tt-calendar/ui/components/ErrorBoundary'
 import { createLocalBackend } from './local/backend'
 import { bootLog, bootLogSettle } from './boot-log'
@@ -205,6 +205,8 @@ async function bootInner(): Promise<void> {
     startWidgetRefresh()
     // 系统提醒调度（20260917 任务书 1.2-6）：到期待办 / 重要日期的 iOS 本地通知
     startReminders()
+    // 语言切换 → 旧通知（旧语言文案）全量重排为新语言（reminders 的 cancelAll 策略）
+    onLangChange(() => nudgeReminders())
   }
   root.innerHTML = ''
   bootLog('root cleared; React render start')

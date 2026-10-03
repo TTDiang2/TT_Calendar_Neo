@@ -18,6 +18,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { CountdownItem, MonthData } from '@tt-calendar/contracts'
 import { getBackend } from '@tt-calendar/ui'
 import { todayStr } from '@tt-calendar/ui/adapt/data'
+import { activeLang } from '@tt-calendar/ui'
 import { addDays } from '@tt-calendar/domain'
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000
@@ -25,6 +26,8 @@ let timer: ReturnType<typeof setInterval> | null = null
 
 interface WidgetSnapshot {
   generatedAt: string
+  /** 主 App 当前语言（BCP-47）：Swift 侧 L10n 据此选文案表（20260930 i18n） */
+  lang: string
   today: string
   todos: { title: string; overdue: boolean }[]
   events: { title: string; time: string }[]
@@ -100,6 +103,7 @@ async function buildSnapshot(): Promise<WidgetSnapshot> {
 
   return {
     generatedAt: new Date().toISOString(),
+    lang: activeLang(),
     today,
     todos: todos
       .filter((t) => t.status !== 'completed')
