@@ -259,7 +259,8 @@ export function setBackend(b: BackendAdapter): void {
 
 export function getBackend(): BackendAdapter {
   if (!backend) {
-    throw new Error('UI 后端未注入：app 启动时需先调用 setBackend() 装配 BackendAdapter')
+    // 开发者内部错误（不会作为文案展示给最终用户），按规范 §2.10 用英文
+    throw new Error('UI backend not injected: call setBackend() with a BackendAdapter during app startup')
   }
   return backend
 }

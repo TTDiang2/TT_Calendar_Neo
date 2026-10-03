@@ -9,6 +9,7 @@
  * 的 vite dev 代理 /api，因此 apiBase 传相对前缀 '/api' 即可同源访问、免 CORS。
  */
 
+import { activeLang, makeI18n } from '../i18n'
 import type { BackendAdapter } from './api'
 import type {
   CalEvent,
@@ -58,7 +59,8 @@ export function createHttpBackend(apiBase = '/api'): BackendAdapter {
   return {
     // ----- 视图聚合 -----
     async getView(mode, anchor) {
-      if (mode === 'countdown') throw new Error('countdown 视图不走 getView')
+      // 开发者内部错误（getView 不受理 countdown，调用方已守卫），按规范 §2.10 用英文
+      if (mode === 'countdown') throw new Error('countdown view does not go through getView')
       if (mode === 'year') {
         const y = Number(anchor.split('-')[0])
         return get<YearData>(`/view/year/${y}`)
@@ -265,7 +267,8 @@ export function createHttpBackend(apiBase = '/api'): BackendAdapter {
       }
       if (!r.ok) {
         const d = await r.json().catch(() => null)
-        throw new Error(d?.detail ?? `同步失败（${r.status}）`)
+        // 兜底错误消息会冒泡到 UI 错误提示（如关闭前同步对话框）→ 按当前语言组装
+        throw new Error(d?.detail ?? makeI18n(activeLang()).t('app.syncFailed', { status: r.status }))
       }
       return r.json()
     },

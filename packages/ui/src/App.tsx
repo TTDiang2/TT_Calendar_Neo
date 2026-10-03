@@ -21,6 +21,10 @@ import { WidgetsView } from './components/WidgetsView'
 import { BottomTabBar, type DockGestureState } from './components/BottomTabBar'
 import { animDrawerIn, animEnter, animSheetUp, animSlideDirection, animSpringBack } from './anim'
 import { useSwipeTabs } from './hooks/useSwipeNav'
+import { useT, useLang, fmtDate, fmtMonthName } from './i18n'
+import type { TxKey } from './i18n'
+// 协议常量（非文案）：旧 sidecar 并发同步报错的消息子串，见 fragments/app.ts 头部 TODO-REVIEW
+import { SYNC_IN_PROGRESS_MARK } from './i18n/dict/fragments/app'
 import {
   EventEditor,
   ScheduleEditor,
@@ -94,6 +98,15 @@ function RightDetailDrawer(props: {
   )
 }
 
+/** 移动端日历头部模式胶囊 → 文案 key（月/日/年复用 topbar.mode.*；倒数日用短标「倒数」） */
+const MODE_LABEL: Record<ViewMode, TxKey> = {
+  month: 'topbar.mode.month',
+  week: 'topbar.mode.week',
+  day: 'topbar.mode.day',
+  year: 'topbar.mode.year',
+  countdown: 'app.modeShort.countdown',
+}
+
 /**
  * 手机日历页内联头部（20260917 任务书 1.1-3：Top Bar 整体移除后，日期导航与
  * 视图切换的移动端新家——不再是横贯 App 的玻璃条，而是日历内容自己的大标题行）。
@@ -113,23 +126,19 @@ function MobileCalendarBar({
   onNext: () => void
   onToday: () => void
 }) {
-  const MODES: { key: ViewMode; label: string }[] = [
-    { key: 'month', label: '月' },
-    { key: 'day', label: '日' },
-    { key: 'year', label: '年' },
-    { key: 'countdown', label: '倒数' },
-  ]
+  const t = useT()
+  const MODES: ViewMode[] = ['month', 'day', 'year', 'countdown']
   return (
     <div className="md:hidden flex items-center justify-between gap-1 px-1 pt-0.5 pb-1.5 flex-shrink-0 min-w-0">
       <div className="flex items-center gap-0 min-w-0">
         {mode !== 'countdown' && (
-          <button onClick={onPrev} className="p-1.5 -ml-1 rounded-full text-gray-500 active:bg-black/5 transition-colors" aria-label="上一页">
+          <button onClick={onPrev} className="p-1.5 -ml-1 rounded-full text-gray-500 active:bg-black/5 transition-colors" aria-label={t('app.prevPage')}>
             <ChevronLeft size={20} />
           </button>
         )}
         <h1 className="text-[19px] font-bold text-gray-900 truncate px-0.5">{title}</h1>
         {mode !== 'countdown' && (
-          <button onClick={onNext} className="p-1.5 rounded-full text-gray-500 active:bg-black/5 transition-colors" aria-label="下一页">
+          <button onClick={onNext} className="p-1.5 rounded-full text-gray-500 active:bg-black/5 transition-colors" aria-label={t('app.nextPage')}>
             <ChevronRight size={20} />
           </button>
         )}
@@ -138,14 +147,14 @@ function MobileCalendarBar({
         <div className="inline-flex rounded-full border border-black/5 bg-white/60 p-0.5">
           {MODES.map((m) => (
             <button
-              key={m.key}
-              onClick={() => onModeChange(m.key)}
+              key={m}
+              onClick={() => onModeChange(m)}
               className={clsx(
                 'px-2.5 py-1 text-xs rounded-full transition whitespace-nowrap',
-                mode === m.key ? 'bg-white text-gray-900 shadow-sm font-semibold' : 'text-gray-500 active:text-gray-700',
+                mode === m ? 'bg-white text-gray-900 shadow-sm font-semibold' : 'text-gray-500 active:text-gray-700',
               )}
             >
-              {m.label}
+              {t(MODE_LABEL[m])}
             </button>
           ))}
         </div>
@@ -154,7 +163,7 @@ function MobileCalendarBar({
             onClick={onToday}
             className="px-2.5 py-1 text-xs font-semibold text-pink-600 bg-pink-50 rounded-full active:bg-pink-100 transition-colors flex-shrink-0"
           >
-            今天
+            {t('common.today')}
           </button>
         )}
       </div>
@@ -167,12 +176,17 @@ function MobileCalendarBar({
  * 只有两个符合产品哲学的入口——加点点 / 涂色。
  */
 function CalendarAddSheet(props: { date: string; onDot: () => void; onColor: () => void; onClose: () => void }) {
+  const t = useT()
+  const lang = useLang()
   const sheetRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     // 底部 sheet 一律上滑入场（20260918 任务书 1.2-5：此前误用 animDrawerIn
     // 的右缘滑入，FAB 点开像「从右往左弹抽屉」，与统一新建的心智相悖）
     animSheetUp(sheetRef.current)
   }, [])
+  // 抽屉标题的日期串走 Intl（规范 §3：日期格式串不进字典、不手拼）
+  const [y, mm, dd] = props.date.split('-').map(Number)
+  const dateLabel = fmtDate(lang, new Date(y, mm - 1, dd), { month: 'long', day: 'numeric' })
   return (
     <div className="fixed inset-0 z-50 flex items-end">
       <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={props.onClose} />
@@ -183,20 +197,15 @@ function CalendarAddSheet(props: { date: string; onDot: () => void; onColor: () 
         <div className="flex justify-center mb-3">
           <div className="w-10 h-1 rounded-full bg-gray-300" />
         </div>
-        <p className="text-center text-xs text-gray-400 mb-3">
-          {(() => {
-            const [mm, dd] = props.date.slice(5).split('-')
-            return `添加到 ${Number(mm)} 月 ${Number(dd)} 日`
-          })()}
-        </p>
+        <p className="text-center text-xs text-gray-400 mb-3">{t('app.addToDate', { date: dateLabel })}</p>
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={props.onDot}
             className="flex flex-col items-center gap-2 py-5 rounded-2xl bg-white/80 border border-black/5 shadow-sm active:bg-pink-50 active:scale-[0.98] transition"
           >
             <span className="w-11 h-11 rounded-full bg-pink-100 text-pink-500 flex items-center justify-center text-lg font-bold">·</span>
-            <span className="text-sm font-medium text-gray-800">加点点</span>
-            <span className="text-[11px] text-gray-400">事件 · 日程 · 备忘</span>
+            <span className="text-sm font-medium text-gray-800">{t('app.addDot')}</span>
+            <span className="text-[11px] text-gray-400">{t('app.addDotHint')}</span>
           </button>
           <button
             onClick={props.onColor}
@@ -205,15 +214,15 @@ function CalendarAddSheet(props: { date: string; onDot: () => void; onColor: () 
             <span className="w-11 h-11 rounded-full bg-amber-100 text-amber-500 flex items-center justify-center">
               <Palette size={20} />
             </span>
-            <span className="text-sm font-medium text-gray-800">涂色</span>
-            <span className="text-[11px] text-gray-400">打卡 · 完成度 · 重要日期</span>
+            <span className="text-sm font-medium text-gray-800">{t('app.addColor')}</span>
+            <span className="text-[11px] text-gray-400">{t('app.addColorHint')}</span>
           </button>
         </div>
         <button
           onClick={props.onClose}
           className="w-full mt-3 py-2.5 text-sm text-gray-500 rounded-xl active:bg-black/5 transition-colors"
         >
-          取消
+          {t('common.cancel')}
         </button>
       </div>
     </div>
@@ -221,6 +230,8 @@ function CalendarAddSheet(props: { date: string; onDot: () => void; onColor: () 
 }
 
 export default function App() {
+  const t = useT()
+  const lang = useLang()
   // 初始锚点 = 当前月（不能硬编码：三端冷启动都会落在写死的月份上，
   // 真机验收时极易被误读成「数据没保存/白屏没修好」）。注意 monthKey
   // 全程使用未补零格式（如 2026-9），与 shiftMonthKey/goToday 一致
@@ -419,7 +430,7 @@ export default function App() {
             await w.destroy()
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e)
-            if (msg.includes('正在进行')) {
+            if (msg.includes(SYNC_IN_PROGRESS_MARK)) {
               await w.destroy()
               return
             }
@@ -627,11 +638,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [dialog, ctxMenu, selectedDate, openEvent, mode, dayAnchor])
 
+  // 桌面 TopBar 标题：日期串一律 Intl 组装（规范 §3），zh 为「2026年」「2026年10月」
   const title = useMemo(() => {
     if (!monthData) return '—'
-    if (mode === 'year' && 'year' in monthData && !('days' in monthData)) return `${monthData.year} 年`
-    return `${monthData.year} 年 ${('month' in monthData ? monthData.month : '')} 月`
-  }, [mode, monthData])
+    if (mode === 'year' && 'year' in monthData && !('days' in monthData)) {
+      return fmtDate(lang, new Date(monthData.year, 0, 1), { year: 'numeric' })
+    }
+    if ('month' in monthData) {
+      return fmtDate(lang, new Date(monthData.year, monthData.month - 1, 1), { year: 'numeric', month: 'long' })
+    }
+    return fmtDate(lang, new Date(monthData.year, 0, 1), { year: 'numeric' })
+  }, [mode, monthData, lang])
 
   const selectedDay = useMemo(() => {
     if (!selectedDate || !monthData || mode === 'year') return null
@@ -653,17 +670,22 @@ export default function App() {
     setTopTab('todo')
   }, [])
 
-  // 手机内联头部的短标题（大标题行，Top Bar 移除后日历页的月份锚点）
+  // 手机内联头部的短标题（大标题行，Top Bar 移除后日历页的月份锚点）。
+  // 日期串一律 Intl 组装（规范 §3）：年 =「2026年」，周/日 =「9月18日」，月 =「9月」
   const shortTitle = useMemo(() => {
-    if (mode === 'countdown') return '倒数日'
+    if (mode === 'countdown') return t('terms.countdown')
     if (!monthData) return '…'
-    if (mode === 'year' && 'year' in monthData && !('days' in monthData)) return `${monthData.year}年`
-    if (mode === 'week' || mode === 'day') {
-      const d = dayAnchor.slice(5).split('-')
-      return `${Number(d[0])}月${Number(d[1])}日`
+    if (mode === 'year' && 'year' in monthData && !('days' in monthData)) {
+      return fmtDate(lang, new Date(monthData.year, 0, 1), { year: 'numeric' })
     }
-    return monthData && 'month' in monthData ? `${monthData.month}月` : '…'
-  }, [mode, monthData, dayAnchor])
+    if (mode === 'week' || mode === 'day') {
+      const [y, m, d] = dayAnchor.split('-').map(Number)
+      return fmtDate(lang, new Date(y, m - 1, d), { month: 'long', day: 'numeric' })
+    }
+    return 'month' in monthData
+      ? fmtMonthName(lang, new Date(monthData.year, monthData.month - 1, 1), 'long')
+      : '…'
+  }, [mode, monthData, dayAnchor, lang, t])
 
   const monthData2 = mode === 'year' || !monthData || !('days' in monthData) ? null : monthData
 
@@ -676,11 +698,11 @@ export default function App() {
             {exitSync.state === 'syncing' ? (
               <>
                 <div className="mx-auto mb-3 w-6 h-6 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm text-gray-700">正在同步，同步完成后会自动退出……</p>
+                <p className="text-sm text-gray-700">{t('app.syncExiting')}</p>
               </>
             ) : (
               <>
-                <p className="text-sm text-red-600 font-medium mb-1">关闭前同步失败</p>
+                <p className="text-sm text-red-600 font-medium mb-1">{t('app.syncOnCloseFailed')}</p>
                 <p className="text-xs text-gray-500 mb-4 break-all max-h-24 overflow-y-auto">{exitSync.error}</p>
                 <div className="flex justify-center gap-2">
                   <button
@@ -696,7 +718,7 @@ export default function App() {
                     }}
                     className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600"
                   >
-                    重试同步
+                    {t('app.retrySync')}
                   </button>
                   <button
                     onClick={async () => {
@@ -705,13 +727,13 @@ export default function App() {
                     }}
                     className="px-4 py-1.5 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
                   >
-                    强制退出
+                    {t('app.forceQuit')}
                   </button>
                   <button
                     onClick={() => setExitSync(null)}
                     className="px-4 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg"
                   >
-                    取消关闭
+                    {t('app.cancelClose')}
                   </button>
                 </div>
               </>
@@ -724,7 +746,7 @@ export default function App() {
           MobileCalendarBar 与待办页工具行接管。桌面（md+）保持原 Top Bar（桌面零变化红线）。 */}
       <div className="hidden md:block">
         <TopBar
-          title={isLoading ? '加载中…' : title}
+          title={isLoading ? t('common.loading') : title}
           topTab={topTab}
           mode={mode}
           todoView={effectiveTodoView}
@@ -806,7 +828,7 @@ export default function App() {
             <Sidebar
               layers={layers}
               onToggle={toggleLayerFn}
-              countdown={countdownData?.text ?? '…'}
+              countdown={countdownData ?? '…'}
             />
             <main className="flex-1 flex flex-col p-2 md:p-4 min-w-0">
               {isMobile && (
@@ -820,7 +842,7 @@ export default function App() {
                 />
               )}
               {isLoading || !monthData ? (
-                <div className="flex-1 flex items-center justify-center text-gray-400">加载中…</div>
+                <div className="flex-1 flex items-center justify-center text-gray-400">{t('common.loading')}</div>
               ) : mode === 'year' ? (
                 <YearView
                   yearData={monthData as YearData}
@@ -905,7 +927,7 @@ export default function App() {
         onClose={() => setMobileLayersOpen(false)}
         layers={layers}
         onToggle={toggleLayerFn}
-        countdown={countdownData?.text ?? '…'}
+        countdown={countdownData ?? '…'}
         onOpenSearch={() => {
           setMobileLayersOpen(false)
           setDialog({ kind: 'search' })
@@ -925,27 +947,27 @@ export default function App() {
         gestureRef={dockGesture}
         leftAction={
           topTab === 'calendar' ? (
-            { icon: <Layers size={20} />, label: '图层（左侧边栏）', onPress: () => setMobileLayersOpen(true) }
+            { icon: <Layers size={20} />, label: t('app.dock.layers'), onPress: () => setMobileLayersOpen(true) }
           ) : topTab === 'todo' ? (
-            { icon: <FolderOpen size={20} />, label: '待办清单（左侧边栏）', onPress: () => setTodoListsOpen(true) }
+            { icon: <FolderOpen size={20} />, label: t('app.dock.todoLists'), onPress: () => setTodoListsOpen(true) }
           ) : topTab === 'stats' ? (
-            { icon: <SlidersHorizontal size={20} />, label: '统计范围（左侧边栏）', onPress: () => setStatsScopeOpen(true) }
+            { icon: <SlidersHorizontal size={20} />, label: t('app.dock.statsScope'), onPress: () => setStatsScopeOpen(true) }
           ) : undefined
         }
         rightAction={
           topTab === 'calendar' ? (
             {
               icon: <CalendarDays size={20} />,
-              label: '当日详情（右侧边栏）',
+              label: t('app.dock.dayDetail'),
               onPress: () => {
                 if (mode !== 'year') setRightDrawerOpen(true)
               },
             }
           ) : topTab === 'todo' ? (
             /* 20260917 任务书 1.2-3：dock 右按钮改为待办统计（右抽屉不再承担新建/编辑） */
-            { icon: <Trophy size={20} />, label: '待办统计（右侧边栏）', onPress: () => todoViewRef.current?.openStats() }
+            { icon: <Trophy size={20} />, label: t('app.dock.todoStats'), onPress: () => todoViewRef.current?.openStats() }
           ) : topTab === 'stats' ? (
-            { icon: <Trophy size={20} />, label: '里程碑（右侧边栏）', onPress: () => setStatsMilestonesOpen(true) }
+            { icon: <Trophy size={20} />, label: t('app.dock.milestones'), onPress: () => setStatsMilestonesOpen(true) }
           ) : undefined
         }
       />
@@ -964,7 +986,7 @@ export default function App() {
           }}
           className="md:hidden fixed right-4 z-30 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 text-white shadow-xl shadow-pink-500/40 flex items-center justify-center active:scale-90 transition-transform"
           style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom, 0px))' }}
-          aria-label="新建"
+          aria-label={t('app.fabNew')}
         >
           <Plus size={26} />
         </button>
