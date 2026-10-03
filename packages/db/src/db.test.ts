@@ -234,7 +234,7 @@ describe('SqliteBackend 基本读写（内存库）', () => {
     expect(backend.getCountdownList()).toHaveLength(1)
     backend.updateCountdown(c.id, { name: '我生日' })
     expect(backend.getCountdownList()[0]!.name).toBe('我生日')
-    expect(typeof backend.getCountdownText().text).toBe('string')
+    expect(backend.getCountdownList()[0]!.label === null || typeof backend.getCountdownList()[0]!.label === 'object').toBe(true)
     expect(backend.deleteCountdown(c.id).ok).toBe(true)
   })
 

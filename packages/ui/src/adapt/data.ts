@@ -9,17 +9,31 @@ export const COLOR_PRESETS = [
   '#A16207', '#92400E', '#64748B', '#475569',
 ]
 
-// 分级图层可选的 5 档调色板（8 套，每套从浅到深递进）
+// 分级图层可选的 5 档调色板（8 套，每套从浅到深递进）。
+// key 是 UI 内部标识（ASCII，不持久化——config.palette 存色值数组）；
+// 显示名经 i18n 字典 palette.* 映射（palette.green 等）。
 export const GRADED_PALETTES = {
-  绿: ['#f0fdf4', '#bbf7d0', '#4ade80', '#16a34a', '#14532d'],
-  蓝: ['#eff6ff', '#bfdbfe', '#60a5fa', '#2563eb', '#1e3a8a'],
-  橙: ['#fff7ed', '#fed7aa', '#fb923c', '#ea580c', '#7c2d12'],
-  紫: ['#faf5ff', '#e9d5ff', '#c084fc', '#9333ea', '#581c87'],
-  红: ['#fef2f2', '#fecaca', '#f87171', '#dc2626', '#7f1d1d'],
-  青: ['#ecfeff', '#a5f3fc', '#22d3ee', '#0891b2', '#164e63'],
-  靛: ['#eef2ff', '#c7d2fe', '#818cf8', '#4f46e5', '#312e81'],
-  灰: ['#f8fafc', '#e2e8f0', '#94a3b8', '#475569', '#1e293b'],
+  green: ['#f0fdf4', '#bbf7d0', '#4ade80', '#16a34a', '#14532d'],
+  blue: ['#eff6ff', '#bfdbfe', '#60a5fa', '#2563eb', '#1e3a8a'],
+  orange: ['#fff7ed', '#fed7aa', '#fb923c', '#ea580c', '#7c2d12'],
+  purple: ['#faf5ff', '#e9d5ff', '#c084fc', '#9333ea', '#581c87'],
+  red: ['#fef2f2', '#fecaca', '#f87171', '#dc2626', '#7f1d1d'],
+  cyan: ['#ecfeff', '#a5f3fc', '#22d3ee', '#0891b2', '#164e63'],
+  indigo: ['#eef2ff', '#c7d2fe', '#818cf8', '#4f46e5', '#312e81'],
+  gray: ['#f8fafc', '#e2e8f0', '#94a3b8', '#475569', '#1e293b'],
 }
+
+/** 调色板 key → 字典 key（显示名，Sidebar 新建图层对话框用） */
+export const GRADED_PALETTE_LABEL_KEYS = {
+  green: 'palette.green',
+  blue: 'palette.blue',
+  orange: 'palette.orange',
+  purple: 'palette.purple',
+  red: 'palette.red',
+  cyan: 'palette.cyan',
+  indigo: 'palette.indigo',
+  gray: 'palette.gray',
+} as const
 
 // 待办忙度双调色板：predict = 未来（琥珀），done = 过去（GitHub 贡献图绿系——
 // 20260917 任务书 1.2-5：已完成默认色阶改绿，与热力图/打卡心智统一；

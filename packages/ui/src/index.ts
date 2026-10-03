@@ -11,3 +11,31 @@ export { setBackend, getBackend } from './adapt/api'
 export type { BackendAdapter } from './adapt/api'
 export { createHttpBackend } from './adapt/http'
 export { useViewData, useLayers, useCountdown } from './hooks/useApi'
+
+// ── i18n（20260930 本地化任务书）：语言选择/切换的公共 API ──────────────────────
+export {
+  I18nProvider,
+  useT,
+  useTPlural,
+  useLang,
+  useI18n,
+  makeI18n,
+  resolveLang,
+  isCJK,
+  LANGS,
+  LANG_META,
+  activeLang,
+  chooseLang,
+  getChosenLang,
+  hasChosenLang,
+  onLangChange,
+  systemLang,
+  fmtDate,
+  fmtWeekday,
+  fmtMonthName,
+  fmtNumber,
+  fmtRelativeDays,
+} from './i18n'
+export { layerLabel, isBuiltinLayer } from './adapt/layerLabel'
+export { countdownDisplay, countdownBanner, countdownCategoryLabel, holidayName } from './adapt/labels'
+export type { Lang, TxKey, PluralKey, I18n as I18nInstance } from './i18n'

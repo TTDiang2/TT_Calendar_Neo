@@ -159,8 +159,7 @@ export interface BackendAdapter {
   // 搜索
   searchEvents(q: string): Promise<CalEvent[]>
 
-  // 倒数日
-  getCountdown(): Promise<{ text: string }>
+  // 倒数日（顶部一句话倒数已上移 UI 层按语言组装，见 hooks/useApi.ts useCountdown）
   getCountdownList(): Promise<CountdownItem[]>
   createCountdown(data: CountdownInput): Promise<CountdownItem>
   updateCountdown(id: number, data: CountdownInput): Promise<CountdownItem>
@@ -308,7 +307,6 @@ export const moveDay = (src: string, dst: string) => getBackend().moveDay(src, d
 
 export const searchEvents = (q: string) => getBackend().searchEvents(q)
 
-export const getCountdown = () => getBackend().getCountdown()
 export const getCountdownList = () => getBackend().getCountdownList()
 export const createCountdown = (data: CountdownInput) => getBackend().createCountdown(data)
 export const updateCountdown = (id: number, data: CountdownInput) => getBackend().updateCountdown(id, data)

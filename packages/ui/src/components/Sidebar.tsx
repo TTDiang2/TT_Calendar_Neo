@@ -4,8 +4,9 @@ import clsx from 'clsx'
 import { ChevronDown, ChevronRight, Plus, Search, Settings } from 'lucide-react'
 import type { Layer } from '../adapt/types'
 import { createLayer, getSubscriptions } from '../adapt/api'
-import { COLOR_PRESETS, GRADED_PALETTES } from '../adapt/data'
+import { COLOR_PRESETS, GRADED_PALETTES, GRADED_PALETTE_LABEL_KEYS } from '../adapt/data'
 import { subscriptionLayerFilter } from '../adapt/subscription'
+import { useT } from '../i18n'
 import { animDrawerIn } from '../anim'
 import { Modal, Field } from './ui/Modal'
 
@@ -251,11 +252,12 @@ function LayerRow({ layer, onToggle, roomy = false }: { layer: Layer; onToggle: 
 
 function CreateLayerDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const qc = useQueryClient()
+  const t = useT()
   const [kind, setKind] = useState<'color' | 'dot'>('color')
   const [mode, setMode] = useState<'solid' | 'graded' | 'tag'>('solid')
   const [name, setName] = useState('')
   const [color, setColor] = useState<string | null>(COLOR_PRESETS[0])
-  const [paletteName, setPaletteName] = useState<keyof typeof GRADED_PALETTES>('绿')
+  const [paletteName, setPaletteName] = useState<keyof typeof GRADED_PALETTES>('green')
   const [tag, setTag] = useState('')
   const [group, setGroup] = useState('')
 
@@ -369,7 +371,8 @@ function CreateLayerDialog({ onClose, onCreated }: { onClose: () => void; onCrea
                         paletteName === pk ? 'border-pink-400 bg-pink-50 text-pink-700' : 'border-gray-200 text-gray-600',
                       )}
                     >
-                      {pk}
+                      {/* 调色板 key 是 ASCII 标识，显示名走字典（i18n 任务书：key 不持久化） */}
+                      {t(GRADED_PALETTE_LABEL_KEYS[pk])}
                     </button>
                   ))}
                 </div>

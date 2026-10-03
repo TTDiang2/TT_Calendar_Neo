@@ -8,7 +8,8 @@
  *  - 两者都配：周年 + 里程碑都算，取距离今天最近的那个（同距离时周年优先）
  */
 
-import type { CountdownItem, DateStr, RepeatType } from '@tt-calendar/contracts'
+import type { CountdownItem, CountdownLabel, DateStr, RepeatType } from '@tt-calendar/contracts'
+import { COUNTDOWN_CATEGORY_ANNIVERSARY } from '@tt-calendar/contracts'
 import { addDays, diffDays, todayStr } from './date'
 import { nextLunarOccurrence } from './lunar'
 
@@ -27,7 +28,7 @@ export interface CountdownLike {
 
 export interface NextOccurrence {
   next_date: DateStr
-  next_label: string
+  label: CountdownLabel | null
   passed: boolean
 }
 
@@ -45,14 +46,14 @@ export function nextOccurrence(
   today: DateStr = todayStr(),
 ): NextOccurrence {
   const base = cd.base_date
-  const candidates: { date: DateStr; label: string }[] = []
+  const candidates: { date: DateStr; label: CountdownLabel }[] = []
 
   if (cd.repeat_yearly) {
     if (cd.repeat_type === 'lunar') {
       const yearly = nextLunarOccurrence(base, today)
       if (yearly) {
         const sameYear = yearly.slice(0, 4) === today.slice(0, 4)
-        candidates.push({ date: yearly, label: sameYear ? '今年' : '农历周年' })
+        candidates.push({ date: yearly, label: sameYear ? { kind: 'thisYear' } : { kind: 'lunarAnniversary' } })
       }
     } else {
       // 逐年后推，直到 >= today（最多试 40 年，防止死循环）
@@ -63,7 +64,7 @@ export function nextOccurrence(
         const yearly = candidate ?? fallbackFeb29(base, y)
         if (yearly >= today) {
           const n = y - Number(base.slice(0, 4))
-          candidates.push({ date: yearly, label: n ? `${n} 周年` : '今年' })
+          candidates.push({ date: yearly, label: n ? { kind: 'solarAnniversary', years: n } : { kind: 'thisYear' } })
           break
         }
       }
@@ -76,12 +77,12 @@ export function nextOccurrence(
       if (!/^\d+$/.test(token)) continue
       const days = Number(token)
       const target = addDays(base, days)
-      if (target >= today) candidates.push({ date: target, label: `${days} 天` })
+      if (target >= today) candidates.push({ date: target, label: { kind: 'milestone', days } })
     }
   }
 
   if (candidates.length === 0) {
-    return { next_date: base, next_label: '', passed: base < today }
+    return { next_date: base, label: null, passed: base < today }
   }
 
   // 距离今天最近的那个；Python 的 min 在同距离时取先出现的（周年优先于里程碑）
@@ -94,7 +95,7 @@ export function nextOccurrence(
       bestGap = gap
     }
   }
-  return { next_date: best.date, next_label: best.label, passed: false }
+  return { next_date: best.date, label: best.label, passed: false }
 }
 
 function replaceYear(date: DateStr, year: number): DateStr | null {
@@ -126,10 +127,10 @@ export function buildCountdownList(
   today: DateStr = todayStr(),
 ): CountdownItem[] {
   const out: CountdownItem[] = rows.map((cd) => {
-    const { next_date, next_label, passed } = nextOccurrence(cd, today)
+    const { next_date, label, passed } = nextOccurrence(cd, today)
     const daysLeft = diffDays(today, next_date)
-    const showLabel =
-      !!next_label && (cd.category === '纪念日' || !!cd.milestone_rule)
+    // 标签规则（Python 原逻辑）：只有「纪念日」类或配了里程碑的才显示标签
+    const showLabel = !!label && (cd.category === COUNTDOWN_CATEGORY_ANNIVERSARY || !!cd.milestone_rule)
     return {
       id: cd.id,
       name: cd.name,
@@ -142,8 +143,7 @@ export function buildCountdownList(
       notes: cd.notes,
       color: cd.color,
       next_date,
-      next_label: showLabel ? next_label : '',
-      display: showLabel ? `${cd.name} ${next_label}`.trim() : cd.name,
+      label: showLabel ? label : null,
       days_left: daysLeft,
       is_today: daysLeft === 0,
       passed,
@@ -155,19 +155,4 @@ export function buildCountdownList(
     return Math.abs(a.days_left) - Math.abs(b.days_left)
   })
   return out
-}
-
-/** 顶部栏的一句话倒数（移植自 aggregator.build_countdown） */
-export function buildCountdownText(items: readonly CountdownItem[]): string {
-  const upcoming = items.filter((i) => !i.passed)
-  if (upcoming.length > 0) {
-    const nearest = upcoming[0]
-    if (nearest.is_today) return `🎉 今天是「${nearest.display}」`
-    return `距离「${nearest.display}」还有 ${nearest.days_left} 天`
-  }
-  if (items.length > 0) {
-    const latest = items[items.length - 1]
-    return `「${latest.display}」已过 ${-latest.days_left} 天`
-  }
-  return '暂无倒数日'
 }

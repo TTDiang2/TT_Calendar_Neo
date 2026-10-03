@@ -146,9 +146,6 @@ export function createHttpBackend(apiBase = '/api'): BackendAdapter {
     },
 
     // ----- 倒数日 -----
-    async getCountdown() {
-      return get<{ text: string }>('/countdown')
-    },
     async getCountdownList() {
       return get<CountdownItem[]>('/countdown/list')
     },

@@ -21,6 +21,8 @@ import {
   todayStr,
 } from '../../adapt/data'
 import { animCountUp } from '../../anim'
+import { lunarText } from '../../adapt/labels'
+import { useLang, useT } from '../../i18n'
 
 // ---------- 共享数据钩子（同 key 复用 react-query 缓存，多卡片同源零开销） ----------
 
@@ -215,6 +217,8 @@ export function ColoringWidget({ editing, onRemove }: { editing?: boolean; onRem
   const days = data && 'days' in data ? data.days : []
   const { m } = parseDate(monthKey + '-01')
   const colored = days.filter((d) => d.coloring_level != null).length
+  const t = useT()
+  const lang = useLang()
 
   return (
     <WidgetCard title="涂色" icon={<Palette size={13} />} tone="light" editing={editing} onRemove={onRemove}>
@@ -229,10 +233,11 @@ export function ColoringWidget({ editing, onRemove }: { editing?: boolean; onRem
       <div className="grid grid-cols-7 gap-1">
         {days.map((d) => {
           const level = d.coloring_level
+          const lunarStr = lunarText(t, lang, d.lunar)
           return (
             <span
               key={d.date}
-              title={`${d.date}${d.lunar ? ` ${d.lunar}` : ''}`}
+              title={`${d.date}${lunarStr ? ` ${lunarStr}` : ''}`}
               className={clsx(
                 'aspect-square rounded-[4px]',
                 level == null && (d.is_other_month ? 'bg-transparent' : 'bg-gray-100'),
@@ -369,12 +374,14 @@ export function BusyWidget({ editing, onRemove }: { editing?: boolean; onRemove?
 export function ClockWidget({ editing, onRemove }: { editing?: boolean; onRemove?: () => void }) {
   const [now, setNow] = useState(() => new Date())
   const { data } = useMonth(currentMonthKey())
+  const tLunar = useT()
+  const langLunar = useLang()
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
   const today = todayStr()
-  const lunar = data && 'days' in data ? (data.days.find((d) => d.date === today)?.lunar ?? '') : ''
+  const lunar = data && 'days' in data ? lunarText(tLunar, langLunar, data.days.find((d) => d.date === today)?.lunar) : ''
   const hh = String(now.getHours()).padStart(2, '0')
   const mm = String(now.getMinutes()).padStart(2, '0')
   const WD = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']

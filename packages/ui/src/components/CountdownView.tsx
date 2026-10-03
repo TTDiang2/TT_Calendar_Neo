@@ -4,6 +4,8 @@ import { AlarmClock, CalendarClock, Infinity as InfinityIcon, Plus, Repeat, Spar
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { getCountdownList, createCountdown, updateCountdown, deleteCountdown } from '../adapt/api'
+import { countdownDisplay } from '../adapt/labels'
+import { useT } from '../i18n'
 import type { CountdownItem } from '../adapt/types'
 import { animSheetUp } from '../anim'
 
@@ -21,6 +23,7 @@ export interface CountdownViewHandle {
 
 export const CountdownView = forwardRef<CountdownViewHandle>(function CountdownView(_props, ref) {
   const qc = useQueryClient()
+  const t = useT()
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | 'NEW' | null>(null)
   // 手机端「右下角大加号」新建（20260921 走查：NEW 状态下编辑弹层因 item=null
@@ -237,6 +240,7 @@ function CountdownEditSheet({ item, onClose, onSave, onDelete }: {
 }
 
 function CountdownCard({ item, selected, onSelect }: { item: CountdownItem; selected: boolean; onSelect: () => void }) {
+  const tCard = useT()
   const catColor = CATEGORY_COLORS[item.category] ?? '#9ca3af'
   const text = item.is_today
     ? '🎉 就是今天'
@@ -269,7 +273,7 @@ function CountdownCard({ item, selected, onSelect }: { item: CountdownItem; sele
           {item.never_expire && <span title="永不过期"><InfinityIcon size={12} className="text-gray-400" /></span>}
         </div>
       </div>
-      <p className="text-sm font-medium text-gray-800 break-words leading-snug">{item.display}</p>
+      <p className="text-sm font-medium text-gray-800 break-words leading-snug">{countdownDisplay(tCard, item)}</p>
       <p className="text-xs text-gray-400">{item.next_date}</p>
       <p className={clsx(
         'text-lg font-bold leading-none mt-1 text-gray-700',

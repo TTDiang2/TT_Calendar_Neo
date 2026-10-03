@@ -5,6 +5,8 @@ import { CalendarClock, Check, ClipboardList, ListTodo, Plus } from 'lucide-reac
 import type { Layer, MonthData, Todo } from '../adapt/types'
 import { COLORING_COLORS, getBusyColors, parseDate, todayStr } from '../adapt/data'
 import { getTodoBusyConfig } from '../adapt/api'
+import { lunarText } from '../adapt/labels'
+import { useLang, useT } from '../i18n'
 import { useIsMobile } from '../hooks/useMedia'
 
 interface Props {
@@ -29,6 +31,8 @@ export function DayView(props: Props) {
     与桌面版拆分为两个分支，桌面保持逐字原样，零变化红线） */
 function MobileDayView({ monthData, layers, onSelect, onDoubleClick }: Props) {
   // hooks 全部前置（react-hooks/rules-of-hooks：早退必须在 hooks 之后）
+  const t = useT()
+  const lang = useLang()
   const day = monthData.days[0]
   const schedules = useMemo(
     () => (day ? [...(day.schedule_items ?? [])].sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')) : []),
@@ -41,6 +45,7 @@ function MobileDayView({ monthData, layers, onSelect, onDoubleClick }: Props) {
 
   const { y, m, d } = parseDate(day.date)
   const weekday = WEEK_NAMES[new Date(y, m - 1, d).getDay()]
+  const lunarStr = lunarText(t, lang, day.lunar)
   const layerById = new Map(layers.map((l) => [l.layer_id, l]))
 
   const visibleEvents = Object.entries(day.events_by_layer)
@@ -92,8 +97,8 @@ function MobileDayView({ monthData, layers, onSelect, onDoubleClick }: Props) {
           </div>
           <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-0.5 flex-wrap">
             <span>{y}年{day.is_weekend ? ' · 周末' : ''}</span>
-            {day.lunar && <span className="text-gray-300">|</span>}
-            {day.lunar && <span>{day.lunar}</span>}
+            {lunarStr && <span className="text-gray-300">|</span>}
+            {lunarStr && <span>{lunarStr}</span>}
           </div>
         </div>
       </div>
@@ -220,6 +225,8 @@ function MTodoLine({ todo, done, divider }: { todo: Todo; done?: boolean; divide
 }
 
 function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSelect, onDoubleClick }: Props) {
+  const t = useT()
+  const lang = useLang()
   const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
   // hooks 全部前置（react-hooks/rules-of-hooks）：原版早退在 useMemo 之前。
   // 行为不变——day 为空时走「无数据」渲染，这三个 memo 结果不会被消费。
@@ -235,6 +242,7 @@ function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSele
 
   const { y, m, d } = parseDate(day.date)
   const weekday = WEEK_NAMES[new Date(y, m - 1, d).getDay()]
+  const lunarStr = lunarText(t, lang, day.lunar)
   const layerById = new Map(layers.map((l) => [l.layer_id, l]))
   const today = todayStr()
 
@@ -287,8 +295,8 @@ function DesktopDayView({ monthData, layers, selectedDate: _selectedDate, onSele
           </div>
           <div className="flex items-center gap-1.5 text-[11px] md:text-xs text-gray-400 mt-0.5 flex-wrap">
             <span>{weekday}{day.is_weekend ? ' · 周末' : ''}</span>
-            {day.lunar && <span className="text-gray-300">|</span>}
-            {day.lunar && <span>{day.lunar}</span>}
+            {lunarStr && <span className="text-gray-300">|</span>}
+            {lunarStr && <span>{lunarStr}</span>}
           </div>
         </div>
         <button

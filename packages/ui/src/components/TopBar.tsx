@@ -1,6 +1,7 @@
 import { BarChart3, Calendar, CheckSquare, ChevronLeft, ChevronRight, ListTodo, Search, Settings, Sparkles } from 'lucide-react'
 import clsx from 'clsx'
 import type { TopTab, TodoViewMode, ViewMode } from '../adapt/types'
+import { useT, type TxKey } from '../i18n'
 
 interface Props {
   title: string
@@ -19,33 +20,34 @@ interface Props {
   onOpenSettings: () => void
 }
 
-const MODES: { key: ViewMode; label: string; mobileHidden?: boolean }[] = [
-  { key: 'month', label: '月' },
+const MODES: { key: ViewMode; labelKey: TxKey; mobileHidden?: boolean }[] = [
+  { key: 'month', labelKey: 'topbar.mode.month' },
   // 周视图手机端不呈现（20260916 任务书：手机布局放周视图意义不大；代码保留，桌面照常）
-  { key: 'week', label: '周', mobileHidden: true },
-  { key: 'day', label: '日' },
-  { key: 'year', label: '年' },
-  { key: 'countdown', label: '倒数日' },
+  { key: 'week', labelKey: 'topbar.mode.week', mobileHidden: true },
+  { key: 'day', labelKey: 'topbar.mode.day' },
+  { key: 'year', labelKey: 'topbar.mode.year' },
+  { key: 'countdown', labelKey: 'topbar.mode.countdown' },
 ]
 
-const TODO_MODES: { key: TodoViewMode; label: string; mobileHidden?: boolean }[] = [
-  { key: 'list', label: '列表' },
-  { key: 'matrix', label: '矩阵' },
+const TODO_MODES: { key: TodoViewMode; labelKey: TxKey; mobileHidden?: boolean }[] = [
+  { key: 'list', labelKey: 'topbar.todoMode.list' },
+  { key: 'matrix', labelKey: 'topbar.todoMode.matrix' },
   // 看板手机端不呈现（20260916 任务书：手机不适合看板；代码保留，桌面照常）
-  { key: 'kanban', label: '看板', mobileHidden: true },
-  { key: 'gantt', label: '甘特' },
-  { key: 'stickies', label: '便签' },
+  { key: 'kanban', labelKey: 'topbar.todoMode.kanban', mobileHidden: true },
+  { key: 'gantt', labelKey: 'topbar.todoMode.gantt' },
+  { key: 'stickies', labelKey: 'topbar.todoMode.stickies' },
 ]
 
 /** 一级 tab 定义：手机端走 BottomTabBar，桌面端走本组件的分段控件 */
-const TOP_TABS: { key: TopTab; label: string; icon: React.ReactNode }[] = [
-  { key: 'calendar', label: '日历', icon: <Calendar size={14} /> },
-  { key: 'todo', label: '待办', icon: <CheckSquare size={14} /> },
-  { key: 'stats', label: '分析', icon: <BarChart3 size={14} /> },
-  { key: 'widgets', label: '小组件', icon: <Sparkles size={14} /> },
+const TOP_TABS: { key: TopTab; labelKey: TxKey; icon: React.ReactNode }[] = [
+  { key: 'calendar', labelKey: 'terms.calendar', icon: <Calendar size={14} /> },
+  { key: 'todo', labelKey: 'terms.todo', icon: <CheckSquare size={14} /> },
+  { key: 'stats', labelKey: 'terms.stats', icon: <BarChart3 size={14} /> },
+  { key: 'widgets', labelKey: 'terms.widgets', icon: <Sparkles size={14} /> },
 ]
 
 export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeChange, onTodoViewChange, onPrev, onNext, onToday, canPrev, canNext, onOpenSearch, onOpenSettings }: Props) {
+  const t = useT()
   return (
     /* 布局：手机竖屏（<md）flex-wrap 拆行——一级 tab 交给底部标签栏（md:hidden），
          本栏只剩：第 1 行 标题+操作、第 2 行 视图模式横滚。
@@ -53,16 +55,16 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
     <header className="glass-topbar flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 md:px-4 py-1.5 md:py-0 md:h-14 md:flex-nowrap flex-shrink-0">
       {/* 一级 tab：仅桌面显示（手机用底部标签栏，避免双份导航） */}
       <div className="hidden md:inline-flex rounded-xl border border-white/70 p-0.5 bg-white/50 md:mr-3 flex-shrink-0">
-        {TOP_TABS.map((t) => (
+        {TOP_TABS.map((tab) => (
           <button
-            key={t.key}
-            onClick={() => onTopTabChange(t.key)}
+            key={tab.key}
+            onClick={() => onTopTabChange(tab.key)}
             className={clsx(
               'flex items-center gap-1 px-3 py-1 text-sm rounded-md transition',
-              topTab === t.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
+              topTab === tab.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
             )}
           >
-            {t.icon} {t.label}
+            {tab.icon} {t(tab.labelKey)}
           </button>
         ))}
       </div>
@@ -73,12 +75,12 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
           <div className="order-2 w-full md:w-auto md:flex-none justify-center flex items-center gap-1.5 min-w-0">
             {topTab === 'stats' ? <BarChart3 size={18} className="flex-shrink-0" /> : <Sparkles size={18} className="flex-shrink-0" />}
             <h1 className="text-sm md:text-lg font-semibold text-gray-800 truncate">
-              {topTab === 'stats' ? '分析' : '小组件'}
+              {topTab === 'stats' ? t('terms.stats') : t('terms.widgets')}
             </h1>
           </div>
           <div className="order-1 md:order-4 ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
             {/* 订阅入口已随「Neo 端不做订阅」决策移除（20260918）；设置手机端收进左侧边栏（20260916） */}
-            <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
+            <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title={t('common.settings')}>
               <Settings size={18} />
             </button>
           </div>
@@ -92,7 +94,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
                 onClick={onPrev}
                 disabled={!canPrev}
                 className="p-1.5 md:p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition flex-shrink-0 active:bg-gray-100"
-                title={mode === 'year' ? '上一年' : mode === 'week' ? '上一周' : mode === 'day' ? '上一天' : '上一月'}
+                title={mode === 'year' ? t('topbar.nav.prevYear') : mode === 'week' ? t('topbar.nav.prevWeek') : mode === 'day' ? t('topbar.nav.prevDay') : t('topbar.nav.prevMonth')}
               >
                 <ChevronLeft size={18} />
               </button>
@@ -101,7 +103,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
                 onClick={onNext}
                 disabled={!canNext}
                 className="p-1.5 md:p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition flex-shrink-0 active:bg-gray-100"
-                title={mode === 'year' ? '下一年' : mode === 'week' ? '下一周' : mode === 'day' ? '下一天' : '下一月'}
+                title={mode === 'year' ? t('topbar.nav.nextYear') : mode === 'week' ? t('topbar.nav.nextWeek') : mode === 'day' ? t('topbar.nav.nextDay') : t('topbar.nav.nextMonth')}
               >
                 <ChevronRight size={18} />
               </button>
@@ -109,13 +111,13 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
                 onClick={onToday}
                 className="ml-1 md:ml-2 px-2.5 md:px-3 py-1.5 text-sm font-medium text-pink-600 hover:bg-pink-50 active:bg-pink-50 rounded-lg transition flex-shrink-0"
               >
-                今天
+                {t('common.today')}
               </button>
             </div>
           ) : (
             <div className="order-2 w-full md:w-auto md:flex-none justify-center flex items-center gap-1.5 min-w-0">
               <ListTodo size={18} className="flex-shrink-0" />
-              <h1 className="text-sm md:text-lg font-semibold text-gray-800 truncate">倒数日</h1>
+              <h1 className="text-sm md:text-lg font-semibold text-gray-800 truncate">{t('terms.countdown')}</h1>
             </div>
           )}
 
@@ -133,7 +135,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
                     mode === m.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
                   )}
                 >
-                  {m.label}
+                  {t(m.labelKey)}
                 </button>
               ))}
             </div>
@@ -143,7 +145,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
               手机只保留搜索图标（搜索是日历页刚需，20260916 智者 P0-2）；
               图层/详情走 dock 左右按钮，设置收进左侧边栏抽屉；桌面保持原样 */}
           <div className="order-1 md:order-4 ml-auto md:ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
-            <button onClick={onOpenSearch} className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="搜索事件" aria-label="搜索事件">
+            <button onClick={onOpenSearch} className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title={t('topbar.searchTitle')} aria-label={t('topbar.searchTitle')}>
               <Search size={18} />
             </button>
             <button
@@ -151,9 +153,9 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
               className="relative hidden md:flex items-center w-48 pl-2.5 pr-3 py-1.5 text-sm text-gray-400 bg-white/60 border border-white/80 rounded-lg hover:bg-white hover:text-gray-600 transition"
             >
               <Search size={14} className="mr-2" />
-              搜索事件…
+              {t('topbar.searchPlaceholder')}
             </button>
-            <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
+            <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title={t('common.settings')}>
               <Settings size={18} />
             </button>
           </div>
@@ -162,7 +164,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
         <>
           <div className="order-2 w-full md:w-auto md:flex-none justify-center flex items-center gap-1.5 min-w-0">
             <ListTodo size={18} className="flex-shrink-0" />
-            <h1 className="text-sm md:text-lg font-semibold text-gray-800 truncate">待办</h1>
+            <h1 className="text-sm md:text-lg font-semibold text-gray-800 truncate">{t('terms.todo')}</h1>
           </div>
 
           <div className="order-4 md:order-3 w-full md:w-auto md:ml-4 -mx-2 px-2 md:mx-0 md:px-0 overflow-x-auto flex-shrink-0">
@@ -177,14 +179,14 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
                     todoView === m.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
                   )}
                 >
-                  {m.label}
+                  {t(m.labelKey)}
                 </button>
               ))}
             </div>
           </div>
 
           <div className="order-1 md:order-4 ml-auto flex items-center gap-1 md:gap-2 flex-shrink-0">
-            <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title="设置">
+            <button onClick={onOpenSettings} className="hidden md:block p-2 rounded-lg text-gray-500 hover:bg-gray-100 active:bg-gray-100 transition" title={t('common.settings')}>
               <Settings size={18} />
             </button>
           </div>

@@ -51,12 +51,8 @@ export function quadrantOf(t: Todo, today: DateStr = todayStr()): QuadrantKey {
   return 'drop'
 }
 
-export const QUADRANT_LABELS: Record<QuadrantKey, string> = {
-  doNow: '重要且紧急',
-  planIt: '重要不紧急',
-  delegate: '紧急不重要',
-  drop: '不紧急不重要',
-}
+// 四象限显示名（原 QUADRANT_LABELS）已迁至 UI 层 i18n 字典（quadrant.*，
+// 20260930 本地化任务书：domain 不携带面向用户的文案）。
 
 export interface GanttRange {
   start: DateStr

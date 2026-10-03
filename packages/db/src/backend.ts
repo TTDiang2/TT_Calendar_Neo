@@ -37,7 +37,6 @@ import {
   addDays,
   diffDays,
   buildCountdownList,
-  buildCountdownText,
   buildView,
   computeTodoBusyLevel,
   monthDays,
@@ -741,9 +740,8 @@ export class SqliteBackend {
     return this.countdownItems()
   }
 
-  getCountdownText(): { text: string } {
-    return { text: buildCountdownText(this.countdownItems()) }
-  }
+  // getCountdownText 已随 i18n 重构移除：顶部一句话倒数由 UI 层按语言组装
+  // （packages/ui/src/hooks/useApi.ts useCountdown → adapt/labels.ts countdownBanner）
 
   createCountdown(
     data: Partial<CountdownLike> & Pick<CountdownLike, 'name' | 'base_date'> & { id?: number; sort_order?: number },

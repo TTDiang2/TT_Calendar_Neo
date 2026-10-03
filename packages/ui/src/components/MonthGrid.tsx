@@ -5,6 +5,8 @@ import { CalendarClock, Check, ClipboardList, ListTodo } from 'lucide-react'
 import type { Day, Layer, MonthData, Todo } from '../adapt/types'
 import { COLORING_COLORS, getBusyColors, parseDate, pickContrastColor, todayStr } from '../adapt/data'
 import { getTodoBusyConfig, updateTodo, type TodoBusyConfig } from '../adapt/api'
+import { lunarText } from '../adapt/labels'
+import { useLang, useT } from '../i18n'
 import { useIsMobile } from '../hooks/useMedia'
 import { DayCell } from './DayCell'
 import { collectDayVisuals } from './dayVisuals'
@@ -281,7 +283,10 @@ function TodayAgenda({
   onToggleTodo?: (todo: Todo, done: boolean) => void
 }) {
   const { y, m, d } = parseDate(day.date)
+  const tAgenda = useT()
+  const langAgenda = useLang()
   const weekday = WEEK_NAMES[new Date(y, m - 1, d).getDay()]
+  const lunarStr = lunarText(tAgenda, langAgenda, day.lunar)
 
   const layerById = useMemo(() => new Map(layers.map((l) => [l.layer_id, l])), [layers])
 
@@ -318,7 +323,7 @@ function TodayAgenda({
           )}
           <span className="text-sm font-bold text-gray-800 flex-shrink-0">{m}月{d}日</span>
           <span className="text-[11px] text-gray-400 truncate">{weekday}</span>
-          {day.lunar && <span className="text-[11px] text-gray-400 truncate">{day.lunar}</span>}
+          {lunarStr && <span className="text-[11px] text-gray-400 truncate">{lunarStr}</span>}
         </div>
         {day.holiday?.name && (
           <span className="text-[11px] bg-purple-500 text-white px-1.5 py-0.5 rounded whitespace-nowrap flex-shrink-0">

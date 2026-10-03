@@ -22,7 +22,7 @@ import type {
 import { LAYER_IDS } from '@tt-calendar/contracts'
 import { monthRange, todayStr } from './date'
 import { holidayOf } from './holiday'
-import { lunarDisplay } from './lunar'
+import { getLunarProvider } from './lunar'
 import {
   applySubscriptionSwitch,
   buildDayMarks,
@@ -118,7 +118,8 @@ export function buildDay(
     schedule_items: items,
     coloring_level: input.coloring[d] ?? null,
     holiday: holidayOf(d),
-    lunar: lunarDisplay(d),
+    // 农历只输出数值信息，显示文案由 UI 层按语言组装（i18n 任务书）
+    lunar: getLunarProvider()?.fromSolar(d) ?? null,
     gradient_bg: gradient[d] ?? null,
     custom_bg: customBg && customBg.color ? customBg : null,
     todos: [...dayTodos],

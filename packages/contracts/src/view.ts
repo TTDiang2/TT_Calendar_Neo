@@ -38,6 +38,15 @@ export const CustomBg = z.object({
 })
 export type CustomBg = z.infer<typeof CustomBg>
 
+/** 农历数值信息（domain LunarProvider.fromSolar 的输出形态） */
+export const LunarInfoView = z.object({
+  year: z.number().int(),
+  month: z.number().int().min(1).max(12),
+  day: z.number().int().min(1).max(30),
+  leap: z.boolean(),
+})
+export type LunarInfoView = z.infer<typeof LunarInfoView>
+
 export const Day = z.object({
   date: DateStr,
   is_today: z.boolean(),
@@ -51,8 +60,11 @@ export const Day = z.object({
   schedule_items: z.array(ScheduleItem).optional(),
   coloring_level: z.number().int().min(0).max(4).nullable(),
   holiday: HolidayInfo.nullable(),
-  /** 农历显示串，如「七月初四」 */
-  lunar: z.string(),
+  /**
+   * 农历信息（结构化，替代旧的中文显示串「七月初四」）。
+   * 显示文案由 UI 层按语言组装（adapt/labels.ts lunarText；非 CJK 语言默认隐藏）。
+   */
+  lunar: LunarInfoView.nullable(),
   /** 重要日期 / 倒数日当天的染色 */
   gradient_bg: ColorHex.nullable(),
   custom_bg: CustomBg.nullable().optional(),

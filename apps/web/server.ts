@@ -207,7 +207,7 @@ async function handle(
   // ----- 倒数日 -----
   if (a === 'countdown') {
     if (!b) {
-      if (method === 'GET') return ok(res, be.getCountdownText())
+      // getCountdownText 已随 i18n 重构移除（顶部倒数由 UI 层按语言组装）
       if (method === 'POST') return ok(res, be.createCountdown(body as any))
       return bad(res)
     }

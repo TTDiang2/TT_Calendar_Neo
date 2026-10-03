@@ -53,11 +53,9 @@ async function fetchWasmBinary(): Promise<ArrayBuffer> {
   return resp.arrayBuffer()
 }
 
-/** 统一的后端代理：method 转发 + 手机端别名（/countdown 的 HTTP 形态是 { text }） */
+/** 统一的后端代理：method 转发（getCountdownText 已随 i18n 重构移除，文案在 UI 层组装） */
 function makeBackend(call: (method: string, args: unknown[]) => Promise<unknown>): BackendAdapter {
-  const overrides: Record<string, (...args: unknown[]) => Promise<unknown>> = {
-    getCountdown: () => call('getCountdownText', []),
-  }
+  const overrides: Record<string, (...args: unknown[]) => Promise<unknown>> = {}
   return new Proxy(
     {},
     {

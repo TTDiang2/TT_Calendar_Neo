@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 
 import type { DateStr } from '@tt-calendar/contracts'
 import { lunarTypescriptProvider } from './lunar-adapter'
-import { lunarDisplay, lunarName, setLunarProvider } from './lunar'
+import { setLunarProvider } from './lunar'
 import { nextOccurrence } from './countdown'
 
 setLunarProvider(lunarTypescriptProvider)
@@ -43,18 +43,10 @@ describe('lunar-typescript 适配器（实测锚点）', () => {
     expect(lunarTypescriptProvider.toSolar(2025, 5, 1, true)).toBeNull()
   })
 
-  it('lunarName：初一显示月名，闰月带「闰」', () => {
-    expect(lunarName({ year: 2025, month: 6, day: 1, leap: true })).toBe('闰六月')
-    expect(lunarName({ year: 2026, month: 1, day: 15, leap: false })).toBe('正月十五')
-    expect(lunarName({ year: 2026, month: 12, day: 30, leap: false })).toBe('腊月三十')
-  })
-
-  it('lunarDisplay：无 provider 时降级为空串', () => {
-    setLunarProvider(null)
-    expect(lunarDisplay('2026-02-17' as DateStr)).toBe('')
-    setLunarProvider(lunarTypescriptProvider)
-    // 初一显示成月名（lunarName 约定），而非「正月初一」
-    expect(lunarDisplay('2026-02-17' as DateStr)).toBe('正月')
+  it('农历数值信息：闰六月、正月的月号正确', () => {
+    // 显示名（闰六月/正月十五等）属 UI 层 i18n 字典职责，domain 只保证数值
+    expect(lunarTypescriptProvider.fromSolar('2025-07-25' as DateStr)?.month).toBe(6)
+    expect(lunarTypescriptProvider.fromSolar('2026-02-17' as DateStr)).toMatchObject({ month: 1, day: 1 })
   })
 })
 
@@ -103,7 +95,7 @@ describe('countdown 公历周年与里程碑', () => {
       '2026-09-02' as DateStr,
     )
     expect(next.next_date).toBe('2026-09-05')
-    expect(next.next_label).toBe('3 周年')
+    expect(next.label).toEqual({ kind: 'solarAnniversary', years: 3 })
   })
 
   it('2/29 生日 → 平年退 2/28', () => {
@@ -144,6 +136,6 @@ describe('countdown 公历周年与里程碑', () => {
       '2026-09-02' as DateStr,
     )
     expect(next.next_date).toBe('2027-10-06')
-    expect(next.next_label).toBe('800 天')
+    expect(next.label).toEqual({ kind: 'milestone', days: 800 })
   })
 })

@@ -27,20 +27,6 @@ export interface LunarProvider {
   toSolar(year: number, month: number, day: number, leap?: boolean): DateStr | null
 }
 
-const CN_MONTHS = '正二三四五六七八九十冬腊'
-const CN_DAYS = [
-  '初一', '初二', '初三', '初四', '初五', '初六', '初七', '初八', '初九', '初十',
-  '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
-  '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十',
-]
-
-/** 农历日期 → 中文名（'七月初四'；初一显示成 '七月'，闰月带「闰」） */
-export function lunarName(info: LunarInfo): string {
-  const monthName = (info.leap ? '闰' : '') + (CN_MONTHS[info.month - 1] ?? '') + '月'
-  if (info.day === 1) return monthName
-  return monthName + (CN_DAYS[info.day - 1] ?? String(info.day))
-}
-
 let provider: LunarProvider | null = null
 
 /** 注入农历实现（由 app 层在启动时调用；未注入时 lunar 相关功能降级为不可用） */
@@ -50,15 +36,6 @@ export function setLunarProvider(p: LunarProvider | null): void {
 
 export function getLunarProvider(): LunarProvider | null {
   return provider
-}
-
-/**
- * 公历日期 → 农历显示串（移植自 tt_calendar/utils/lunar_utils.py lunar_display）。
- * 无 provider 或超范围时返回空串（降级：不显示农历，而不是显示错的农历）。
- */
-export function lunarDisplay(date: DateStr): string {
-  const info = provider?.fromSolar(date)
-  return info ? lunarName(info) : ''
 }
 
 /**

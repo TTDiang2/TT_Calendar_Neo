@@ -40,6 +40,40 @@ export const SCHEDULE_CATEGORY_LABELS: Record<ScheduleCategory, string> = {
 }
 
 /**
+ * 内置图层的默认显示名（zh 种子值，与 packages/db/src/backend.ts DEFAULT_LAYERS、
+ * packages/db/src/sources/jisilu.ts JISILU_QTYPES 对应）。
+ * 这些名字会写进数据库（持久化数据，用户可改名）；UI 显示时经
+ * packages/ui/src/adapt/layerLabel.ts 按语言映射，改名检测以本表为基准。
+ */
+export const BUILTIN_LAYER_DEFAULT_NAMES: Record<string, string> = {
+  important: '重要日期',
+  coloring: '充实度染色',
+  holiday: '公共节假日',
+  todo: '待办',
+  todo_done: '待办·已完成',
+  schedule_work: '工作',
+  schedule_course: '课程',
+  schedule_sport: '运动',
+  schedule_play: '玩耍',
+  schedule_other: '其他',
+  jisilu_newstock_onlist: '新股上市',
+  jisilu_newstock_apply: '新股申购',
+  jisilu_CNV: '可转债',
+  jisilu_CBDIV: '正股分红',
+  jisilu_cnreits: 'REITs',
+  jisilu_FUND: '基金',
+  jisilu_BOND: '债券',
+  jisilu_STOCK: '股票',
+  jisilu_OTHER: '其它',
+  jisilu_newbond_apply: '新债申购',
+  jisilu_newbond_onlist: '新债上市',
+  jisilu_diva: 'A股分红',
+  jisilu_divhk: 'H股分红',
+  jisilu_idxfut: '股指期货',
+  jisilu_idxopt: '股指期权',
+}
+
+/**
  * 自动涂色图层：由系统计算/关联，**不允许手动新增涂色**，
  * 不出现在「新增涂色」下拉里（docs/ARCHITECTURE.md 红线 2）。
  */

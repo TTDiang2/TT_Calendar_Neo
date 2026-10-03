@@ -4,6 +4,8 @@ import clsx from 'clsx'
 import type { CalEvent, Day, Layer } from '../adapt/types'
 import { COLORING_COLORS, parseDate, TODO_BUSY_PREDICT_COLORS, TODO_BUSY_DONE_COLORS } from '../adapt/data'
 import { deleteEvent, deleteMark, deleteScheduleItem, getTodoBusyConfig, updateTodo } from '../adapt/api'
+import { holidayName, lunarText } from '../adapt/labels'
+import { useLang, useT } from '../i18n'
 
 interface Props {
   day: Day | null
@@ -23,6 +25,8 @@ interface Props {
 
 export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetColoring, onAddDot, onAddColor, onAddEvent, variant = 'panel', onClose }: Props) {
   const qc = useQueryClient()
+  const t = useT()
+  const lang = useLang()
   const drawer = variant === 'drawer'
   const { data: busyConfig } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
   const delMut = useMutation({
@@ -96,7 +100,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
           </p>
           <p className="text-sm text-gray-500">
             {y} 年 · 周{weekday}
-            {day.lunar && <span className="ml-2 text-gray-400">{day.lunar}</span>}
+            {lunarText(t, lang, day.lunar) && <span className="ml-2 text-gray-400">{lunarText(t, lang, day.lunar)}</span>}
             {day.is_today && <span className="ml-2 text-rose-500 text-xs">今天</span>}
           </p>
         </div>

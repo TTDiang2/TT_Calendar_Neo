@@ -26,6 +26,8 @@ private let actionsFileName = "widget-actions.json"
 struct WSnapshot: Codable {
     var generatedAt: String?
     var today: String?
+    /// 主 App 当前语言（BCP-47：zh-CN/zh-Hant/en/ja/ko/fr/es/ru，20260930 i18n）
+    var lang: String?
     var todos: [WTodo]?
     var events: [WEvent]?
     var countdowns: [WCountdown]?
@@ -77,6 +79,159 @@ struct WDayCount: Codable {
 
 func groupContainerURL() -> URL? {
     FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)
+}
+
+// ── L10n：小组件文案（20260930 本地化任务书，智者定稿方案）─────────────────────
+// 与主 App 的语言保持一致：主 App 把 lang 写进快照 JSON，这里读快照选表。
+// 不用 Localizable.strings/lproj（NSLocalizedString 跟随系统语言，与「跟随
+// App 内选择」相悖，且 patch 脚本要生成 PBXVariantGroup 易碎）；纯源码字典
+// 编译期可查、CI 的 iOS 构建就是编译门禁。
+//
+// key 命名与主 App 字典同名同义（widget.todayOverview 等）；en 与 JS 字典的
+// en 一致；其余语言由翻译阶段同步补入（缺语言回落 zh-CN 表）。
+enum L10n {
+    static let tables: [String: [String: String]] = [
+        "zh-CN": [
+            "todayOverview": "今日概览",
+            "todayOverviewDesc": "今天的日程与待办一览",
+            "countdown": "倒数日",
+            "countdownDesc": "最近的三个倒数日",
+            "monthDone": "本月完成",
+            "monthDoneDesc": "当月待办完成热力图",
+            "heatmapTitle": "完成热力 · 近 13 周",
+            "heatmapDesc": "近 13 周每日完成热力图，GitHub 风格",
+            "streakDays": "连续 {n} 天",
+            "less": "少",
+            "more": "多",
+            "statsTitle": "完成概览",
+            "statsDesc": "待办完成率与连续打卡",
+            "statsMediumTitle": "完成统计",
+            "statsMediumDesc": "完成率 + 连续打卡 + 近 7 天走势",
+            "doneOfTotal": "已完成 {done} / 共 {total} 项",
+            "habitTitle": "今日打卡",
+            "habitDesc": "重复待办清单，iOS 17+ 可直接点勾完成",
+            "habitEmpty": "暂无重复待办，去建一条每日打卡吧",
+            "quickTitle": "一键打卡",
+            "quickDesc": "一项点击完成今日打卡（iOS 17+）",
+            "quickRemaining": "还剩 {n} 项",
+            "quickCheckLabel": "打卡",
+            "quickLongPressHint": "长按小组件打开 App 打卡",
+            "allDoneToday": "今日打卡全部完成 🎉",
+            "openAppToSync": "打开 App 同步数据",
+            "noData": "暂无数据",
+            "freeDay": "今天没有安排 🎉",
+            "overdue": "逾期",
+            "today": "今天",
+            "daysLeft": "{n}天",
+            "intentDone": "「{title}」已打卡 ✓",
+        ],
+        "en": [
+            "todayOverview": "Today at a glance",
+            "todayOverviewDesc": "Today's events and to-dos",
+            "countdown": "Countdowns",
+            "countdownDesc": "Your three nearest countdowns",
+            "monthDone": "Done this month",
+            "monthDoneDesc": "Monthly to-do completion heatmap",
+            "heatmapTitle": "Completion heatmap · last 13 weeks",
+            "heatmapDesc": "Daily completion heatmap for the last 13 weeks, GitHub style",
+            "streakDays": "{n}-day streak",
+            "less": "Less",
+            "more": "More",
+            "statsTitle": "Completion overview",
+            "statsDesc": "To-do completion rate and streak",
+            "statsMediumTitle": "Completion stats",
+            "statsMediumDesc": "Completion rate + streak + last 7 days",
+            "doneOfTotal": "{done} of {total} done",
+            "habitTitle": "Today's check-ins",
+            "habitDesc": "Recurring to-dos; tap to check off on iOS 17+",
+            "habitEmpty": "No recurring to-dos yet — create one to check in daily",
+            "quickTitle": "Quick check-in",
+            "quickDesc": "Tap to complete today's check-in (iOS 17+)",
+            "quickRemaining": "{n} left",
+            "quickCheckLabel": "Check in",
+            "quickLongPressHint": "Long-press the widget to open the app",
+            "allDoneToday": "All check-ins done today 🎉",
+            "openAppToSync": "Open the app to sync data",
+            "noData": "No data yet",
+            "freeDay": "Nothing scheduled today 🎉",
+            "overdue": "Overdue",
+            "today": "Today",
+            "daysLeft_one": "1 day",
+            "daysLeft_other": "{n} days",
+            "intentDone": "\"{title}\" checked off ✓",
+        ],
+    ]
+
+    /// 当前语言（读快照缓存；主 App 未写过/解析失败回落 zh-CN）
+    static func currentLang(_ snap: WSnapshot?) -> String {
+        let lang = snap?.lang ?? cachedLang
+        return tables[lang] != nil ? lang : "zh-CN"
+    }
+
+    static var cachedLang: String = "zh-CN"
+
+    /// 取文案：{n}/{done}/{total}/{title} 具名插值；缺 key 回落 zh-CN，再缺显示 key
+    static func tr(_ lang: String, _ key: String, _ params: [String: String] = [:]) -> String {
+        var text = tables[lang]?[key] ?? tables["zh-CN"]?[key] ?? key
+        for (name, value) in params {
+            text = text.replacingOccurrences(of: "{\(name)}", with: value)
+        }
+        return text
+    }
+
+    /// 复数取文案：表里查 "<key>_<类别>"，再 "<key>_other"，再裸 "<key>"（zh 无类别形态），
+    /// 最后回落 zh-CN 表。类别由 pluralCategory 决定（与 JS 侧 Intl.PluralRules 对齐）。
+    static func trPlural(_ lang: String, _ key: String, _ n: Int) -> String {
+        let cat = pluralCategory(lang, n)
+        let params = ["n": String(n)]
+        if let text = tables[lang]?["\(key)_\(cat)"] { return interp(text, params) }
+        if let text = tables[lang]?["\(key)_other"] { return interp(text, params) }
+        if let text = tables[lang]?[key] { return interp(text, params) }
+        let fallback = tables["zh-CN"]?["\(key)_other"] ?? tables["zh-CN"]?[key] ?? key
+        return interp(fallback, params)
+    }
+
+    private static func interp(_ text: String, _ params: [String: String]) -> String {
+        var out = text
+        for (name, value) in params {
+            out = out.replacingOccurrences(of: "{\(name)}", with: value)
+        }
+        return out
+    }
+
+    /// 整数复数类别：只覆盖本产品 8 种语言的基数规则（fr 的 many 仅 ≥1e6，小组件不出现）。
+    static func pluralCategory(_ lang: String, _ n: Int) -> String {
+        switch lang {
+        case "zh-CN", "zh-Hant", "ja", "ko":
+            return "other"
+        case "en":
+            return n == 1 ? "one" : "other"
+        case "fr", "es":
+            return n <= 1 ? "one" : "other" // es 实际 0/1 → one；fr 0/1 → one
+        case "ru":
+            let m10 = n % 10, m100 = n % 100
+            if m10 == 1 && m100 != 11 { return "one" }
+            if (2...4).contains(m10) && !(12...14).contains(m100) { return "few" }
+            return "many"
+        default:
+            return "other"
+        }
+    }
+}
+
+/// 语言 → Locale 标识（日期格式化用；未知语言回落 zh_CN）
+private func localeID(for lang: String) -> String {
+    switch lang {
+    case "zh-CN": return "zh_CN"
+    case "zh-Hant": return "zh_TW"
+    case "en": return "en_US"
+    case "ja": return "ja_JP"
+    case "ko": return "ko_KR"
+    case "fr": return "fr_FR"
+    case "es": return "es_ES"
+    case "ru": return "ru_RU"
+    default: return "zh_CN"
+    }
 }
 
 func loadSnapshot() -> WSnapshot? {
@@ -139,7 +294,9 @@ struct CompleteHabitIntent: AppIntent {
             saveSnapshot(snap)
         }
         WidgetCenter.shared.reloadAllTimelines()
-        return .result(dialog: IntentDialog(stringLiteral: "「\(title)」已打卡 ✓"))
+        // 打卡成功弹窗按主 App 语言（快照 lang）；缺 key 回落 zh-CN 表
+        let lang = L10n.currentLang(loadSnapshot())
+        return .result(dialog: IntentDialog(stringLiteral: L10n.tr(lang, "intentDone", ["title": title])))
     }
 }
 
@@ -173,15 +330,18 @@ struct Provider: TimelineProvider {
     }
 }
 
-private func shortDate(_ d: Date) -> String {
+/// 语言感知的日期格式（"M月d日 EEEE" 的各语言形态）：
+/// 用 ICU 模板让系统按 locale 决定字段顺序与文案，禁止手拼。
+private func shortDate(_ d: Date, lang: String) -> String {
     let f = DateFormatter()
-    f.locale = Locale(identifier: "zh_CN")
-    f.dateFormat = "M月d日 EEEE"
+    f.locale = Locale(identifier: localeID(for: lang))
+    f.setLocalizedDateFormatFromTemplate("MdEEEE")
     return f.string(from: d)
 }
 
 func snapEmptyText(_ snap: WSnapshot?) -> String {
-    snap == nil ? "打开 App 同步数据" : "暂无数据"
+    let lang = L10n.currentLang(snap)
+    return snap == nil ? L10n.tr(lang, "openAppToSync") : L10n.tr(lang, "noData")
 }
 
 /// iOS 17+ 交互按钮 / 旧系统的静态兜底，统一包一层
@@ -201,6 +361,7 @@ struct TodayWidgetView: View {
 
     var body: some View {
         let snap = entry.snap
+        let lang = L10n.currentLang(snap)
         let todos = snap?.todos ?? []
         let events = snap?.events ?? []
         VStack(alignment: .leading, spacing: 5) {
@@ -208,7 +369,7 @@ struct TodayWidgetView: View {
                 Image(systemName: "calendar")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.pink)
-                Text(shortDate(entry.date))
+                Text(shortDate(entry.date, lang: lang))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -237,14 +398,14 @@ struct TodayWidgetView: View {
                             .font(.system(size: 12))
                             .lineLimit(1)
                         if todos[i].overdue == true {
-                            Text("逾期").font(.system(size: 9)).foregroundColor(.red)
+                            Text(L10n.tr(lang, "overdue")).font(.system(size: 9)).foregroundColor(.red)
                         }
                         Spacer(minLength: 0)
                     }
                 }
             }
             if events.isEmpty && todos.isEmpty {
-                Text(snap == nil ? "打开 App 同步数据" : "今天没有安排 🎉")
+                Text(snap == nil ? L10n.tr(lang, "openAppToSync") : L10n.tr(lang, "freeDay"))
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
             }
@@ -256,11 +417,13 @@ struct TodayWidgetView: View {
 
 struct TodayWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "TTTodayWidget", provider: Provider()) { entry in
+        let lang = L10n.currentLang(loadSnapshot())
+        L10n.cachedLang = lang
+        return StaticConfiguration(kind: "TTTodayWidget", provider: Provider()) { entry in
             widgetBackground(TodayWidgetView(entry: entry))
         }
-        .configurationDisplayName("今日概览")
-        .description("今天的日程与待办一览")
+        .configurationDisplayName(L10n.tr(lang, "todayOverview"))
+        .description(L10n.tr(lang, "todayOverviewDesc"))
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -271,19 +434,21 @@ struct CountdownWidgetView: View {
     var entry: TodayEntry
 
     var body: some View {
-        let items = entry.snap?.countdowns ?? []
+        let snap = entry.snap
+        let lang = L10n.currentLang(snap)
+        let items = snap?.countdowns ?? []
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 4) {
                 Image(systemName: "hourglass")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.pink)
-                Text("倒数日")
+                Text(L10n.tr(lang, "countdown"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 Spacer(minLength: 0)
             }
             if items.isEmpty {
-                Text(snapEmptyText(entry.snap))
+                Text(snapEmptyText(snap))
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
             } else {
@@ -294,7 +459,8 @@ struct CountdownWidgetView: View {
                             .lineLimit(1)
                         Spacer(minLength: 0)
                         if let left = items[i].daysLeft {
-                            Text(left == 0 ? "今天" : "\(left)天")
+                            // 天数文案按语言复数（en 1 day / 2 days；ru one/few/many）
+                            Text(left == 0 ? L10n.tr(lang, "today") : L10n.trPlural(lang, "daysLeft", left))
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(left <= 7 ? .pink : .secondary)
                         }
@@ -309,11 +475,13 @@ struct CountdownWidgetView: View {
 
 struct TTCCountdownWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "TTCountdownWidget", provider: Provider()) { entry in
+        let lang = L10n.currentLang(loadSnapshot())
+        L10n.cachedLang = lang
+        return StaticConfiguration(kind: "TTCountdownWidget", provider: Provider()) { entry in
             widgetBackground(CountdownWidgetView(entry: entry))
         }
-        .configurationDisplayName("倒数日")
-        .description("最近的三个倒数日")
+        .configurationDisplayName(L10n.tr(lang, "countdown"))
+        .description(L10n.tr(lang, "countdownDesc"))
         .supportedFamilies([.systemSmall])
     }
 }
@@ -346,13 +514,14 @@ struct ColoringWidgetView: View {
     }
 
     var body: some View {
+        let lang = L10n.currentLang(entry.snap)
         let cells = monthCells(entry.snap)
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 4) {
                 Image(systemName: "paintpalette")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.green)
-                Text("本月完成")
+                Text(L10n.tr(lang, "monthDone"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 Spacer(minLength: 0)
@@ -384,11 +553,13 @@ struct ColoringWidgetView: View {
 
 struct TTCColoringWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "TTColoringWidget", provider: Provider()) { entry in
+        let lang = L10n.currentLang(loadSnapshot())
+        L10n.cachedLang = lang
+        return StaticConfiguration(kind: "TTColoringWidget", provider: Provider()) { entry in
             widgetBackground(ColoringWidgetView(entry: entry))
         }
-        .configurationDisplayName("本月完成")
-        .description("当月待办完成热力图")
+        .configurationDisplayName(L10n.tr(lang, "monthDone"))
+        .description(L10n.tr(lang, "monthDoneDesc"))
         .supportedFamilies([.systemMedium])
     }
 }
@@ -438,13 +609,14 @@ struct HeatmapWidgetView: View {
     }
 
     var body: some View {
+        let lang = L10n.currentLang(entry.snap)
         let cols = weeks(entry.snap)
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: "square.grid.3x3.fill")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.green)
-                Text("完成热力 · 近 13 周")
+                Text(L10n.tr(lang, "heatmapTitle"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 if let streak = entry.snap?.streak, streak > 0 {
@@ -452,7 +624,7 @@ struct HeatmapWidgetView: View {
                     Image(systemName: "flame.fill")
                         .font(.system(size: 9))
                         .foregroundColor(.orange)
-                    Text("连续 \(streak) 天")
+                    Text(L10n.tr(lang, "streakDays", ["n": String(streak)]))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.orange)
                 }
@@ -481,12 +653,12 @@ struct HeatmapWidgetView: View {
                 Spacer(minLength: 0)
                 HStack(spacing: 3) {
                     Spacer(minLength: 0)
-                    Text("少")
+                    Text(L10n.tr(lang, "less"))
                         .font(.system(size: 9)).foregroundColor(.secondary)
                     ForEach(coloringPalette.indices, id: \.self) { i in
                         RoundedRectangle(cornerRadius: 1.5).fill(coloringPalette[i]).frame(width: 9, height: 9)
                     }
-                    Text("多")
+                    Text(L10n.tr(lang, "more"))
                         .font(.system(size: 9)).foregroundColor(.secondary)
                 }
             }
@@ -497,11 +669,13 @@ struct HeatmapWidgetView: View {
 
 struct TTCHeatmapWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "TTHeatmapWidget", provider: Provider()) { entry in
+        let lang = L10n.currentLang(loadSnapshot())
+        L10n.cachedLang = lang
+        return StaticConfiguration(kind: "TTHeatmapWidget", provider: Provider()) { entry in
             widgetBackground(HeatmapWidgetView(entry: entry))
         }
-        .configurationDisplayName("完成热力")
-        .description("近 13 周每日完成热力图，GitHub 风格")
+        .configurationDisplayName(L10n.tr(lang, "heatmapTitle"))
+        .description(L10n.tr(lang, "heatmapDesc"))
         .supportedFamilies([.systemLarge])
     }
 }
@@ -513,6 +687,7 @@ struct StatsWidgetView: View {
     var medium: Bool = false
 
     var body: some View {
+        let lang = L10n.currentLang(entry.snap)
         let stats = entry.snap?.stats
         let done = stats?.completed ?? 0
         let total = stats?.total ?? 0
@@ -523,7 +698,7 @@ struct StatsWidgetView: View {
                 Image(systemName: "chart.pie.fill")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.pink)
-                Text("完成概览")
+                Text(L10n.tr(lang, medium ? "statsMediumTitle" : "statsTitle"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 Spacer(minLength: 0)
@@ -539,7 +714,7 @@ struct StatsWidgetView: View {
             Text("\(Int((rate * 100).rounded()))%")
                 .font(.system(size: medium ? 30 : 26, weight: .bold))
                 .foregroundColor(.pink)
-            Text("已完成 \(done) / 共 \(total) 项")
+            Text(L10n.tr(lang, "doneOfTotal", ["done": String(done), "total": String(total)]))
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
             if medium {
@@ -562,22 +737,26 @@ struct StatsWidgetView: View {
 
 struct TTCStatsWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "TTStatsWidget", provider: Provider()) { entry in
+        let lang = L10n.currentLang(loadSnapshot())
+        L10n.cachedLang = lang
+        return StaticConfiguration(kind: "TTStatsWidget", provider: Provider()) { entry in
             widgetBackground(StatsWidgetView(entry: entry))
         }
-        .configurationDisplayName("完成概览")
-        .description("待办完成率与连续打卡")
+        .configurationDisplayName(L10n.tr(lang, "statsTitle"))
+        .description(L10n.tr(lang, "statsDesc"))
         .supportedFamilies([.systemSmall])
     }
 }
 
 struct TTCStatsMediumWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "TTStatsMediumWidget", provider: Provider()) { entry in
+        let lang = L10n.currentLang(loadSnapshot())
+        L10n.cachedLang = lang
+        return StaticConfiguration(kind: "TTStatsMediumWidget", provider: Provider()) { entry in
             widgetBackground(StatsWidgetView(entry: entry, medium: true))
         }
-        .configurationDisplayName("完成统计")
-        .description("完成率 + 连续打卡 + 近 7 天走势")
+        .configurationDisplayName(L10n.tr(lang, "statsMediumTitle"))
+        .description(L10n.tr(lang, "statsMediumDesc"))
         .supportedFamilies([.systemMedium])
     }
 }
@@ -615,13 +794,14 @@ struct HabitWidgetView: View {
     var entry: TodayEntry
 
     var body: some View {
+        let lang = L10n.currentLang(entry.snap)
         let habits = entry.snap?.habits ?? []
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: "checkmark.seal.fill")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.pink)
-                Text("今日打卡")
+                Text(L10n.tr(lang, "habitTitle"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 Spacer(minLength: 0)
@@ -631,7 +811,7 @@ struct HabitWidgetView: View {
                     .foregroundColor(.secondary)
             }
             if habits.isEmpty {
-                Text(snapEmptyText(entry.snap) == "暂无数据" ? "暂无重复待办，去建一条每日打卡吧" : snapEmptyText(entry.snap))
+                Text(entry.snap == nil ? L10n.tr(lang, "openAppToSync") : L10n.tr(lang, "habitEmpty"))
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
                 Spacer(minLength: 0)
@@ -648,11 +828,13 @@ struct HabitWidgetView: View {
 
 struct TTCHabitWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "TTCHabitWidget", provider: Provider()) { entry in
+        let lang = L10n.currentLang(loadSnapshot())
+        L10n.cachedLang = lang
+        return StaticConfiguration(kind: "TTCHabitWidget", provider: Provider()) { entry in
             widgetBackground(HabitWidgetView(entry: entry))
         }
-        .configurationDisplayName("今日打卡")
-        .description("重复待办清单，iOS 17+ 可直接点勾完成")
+        .configurationDisplayName(L10n.tr(lang, "habitTitle"))
+        .description(L10n.tr(lang, "habitDesc"))
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -662,19 +844,20 @@ struct QuickCheckWidgetView: View {
     var entry: TodayEntry
 
     var body: some View {
+        let lang = L10n.currentLang(entry.snap)
         let habits = (entry.snap?.habits ?? []).filter { !$0.done }
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 4) {
                 Image(systemName: "bolt.circle.fill")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.orange)
-                Text("一键打卡")
+                Text(L10n.tr(lang, "quickTitle"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 Spacer(minLength: 0)
                 let remaining = habits.count
                 if remaining > 1 {
-                    Text("还剩 \(remaining) 项")
+                    Text(L10n.tr(lang, "quickRemaining", ["n": String(remaining)]))
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
@@ -687,7 +870,7 @@ struct QuickCheckWidgetView: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .lineLimit(2)
                                 .multilineTextAlignment(.center)
-                            Label("打卡", systemImage: "checkmark")
+                            Label(L10n.tr(lang, "quickCheckLabel"), systemImage: "checkmark")
                                 .font(.system(size: 12, weight: .bold))
                             Spacer(minLength: 0)
                         }
@@ -699,13 +882,13 @@ struct QuickCheckWidgetView: View {
                     Text(first.title)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(2)
-                    Text("长按小组件打开 App 打卡")
+                    Text(L10n.tr(lang, "quickLongPressHint"))
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                     Spacer(minLength: 0)
                 }
             } else {
-                Text(entry.snap == nil ? "打开 App 同步数据" : "今日打卡全部完成 🎉")
+                Text(entry.snap == nil ? L10n.tr(lang, "openAppToSync") : L10n.tr(lang, "allDoneToday"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.secondary)
                 Spacer(minLength: 0)
@@ -717,11 +900,13 @@ struct QuickCheckWidgetView: View {
 
 struct TTCQuickCheckWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "TTCQuickCheckWidget", provider: Provider()) { entry in
+        let lang = L10n.currentLang(loadSnapshot())
+        L10n.cachedLang = lang
+        return StaticConfiguration(kind: "TTCQuickCheckWidget", provider: Provider()) { entry in
             widgetBackground(QuickCheckWidgetView(entry: entry))
         }
-        .configurationDisplayName("一键打卡")
-        .description("一项点击完成今日打卡（iOS 17+）")
+        .configurationDisplayName(L10n.tr(lang, "quickTitle"))
+        .description(L10n.tr(lang, "quickDesc"))
         .supportedFamilies([.systemSmall])
     }
 }

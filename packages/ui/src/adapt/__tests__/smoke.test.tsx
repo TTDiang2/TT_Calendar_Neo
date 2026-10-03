@@ -22,7 +22,6 @@ function makeBackend(): BackendAdapter {
       } as unknown as MonthData
     },
     getLayers: async () => layers,
-    getCountdown: async () => ({ text: '' }),
     getCountdownList: async () => [],
     getTodoLists: async () => [],
     getSyncStatus: async () => ({ configured: false }),
