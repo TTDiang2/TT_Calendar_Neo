@@ -795,6 +795,8 @@ export const ko: DeepPartialDict<Dict> = {
       syncing: '동기화 중…',
       savedMsg: '저장됨',
       initDone: { other: '최초 초기화 완료: {n}행을 업로드했습니다' },
+      pendingNeedsDecisionUnknown: '백그라운드 동기화가 결정을 기다리고 있습니다: 원격 저장소에 이미 데이터가 있습니다. 데이터 동기화에서 병합 방식을 선택하세요.',
+      pendingAutoSyncFailed: '백그라운드 자동 동기화 실패: {message}',
       report: '가져옴 {pulled} · 내보냄 {pushed} · 충돌 {conflicts} · 삭제 {deleted}',
       reportWarning: '({warning})',
       resolvedDone: '연결 완료: {report}',

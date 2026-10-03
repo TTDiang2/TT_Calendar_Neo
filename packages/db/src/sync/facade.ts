@@ -153,15 +153,22 @@ export class SyncFacade {
     ok?: boolean
     report?: Record<string, number>
     commit?: string | null
-    notice?: string
+    /** 结构化提示码（C3）：文案由 UI 层按语言组装；legacy 兼容旧库存量字符串 */
+    notice?: { code: string; n?: number; message?: string; text?: string }
   } {
     const cfg = this.getConfig()
     const at = this.backend.getMeta(K_LAST_AT) ?? undefined
-    let notice: string | undefined
+    let notice: { code: string; n?: number; message?: string; text?: string } | undefined
     const rawNotice = this.backend.getMeta(K_PENDING_NOTICE)
     if (rawNotice) {
       try {
-        notice = (JSON.parse(rawNotice) as { detail?: string }).detail
+        const parsed = JSON.parse(rawNotice) as { detail?: string; code?: string; n?: number; message?: string }
+        if (typeof parsed.code === 'string') {
+          notice = { code: parsed.code, n: parsed.n, message: parsed.message }
+        } else if (parsed.detail) {
+          // 旧版落库的是已拼好的文案（语言滞后），原样透传给 UI 显示
+          notice = { code: 'legacy', text: parsed.detail }
+        }
       } catch {
         notice = undefined
       }

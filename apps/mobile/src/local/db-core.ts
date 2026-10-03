@@ -78,23 +78,25 @@ export class LocalDbCore {
         this.handle?.backend.setMeta('sync.pending_notice', '')
         this.onSynced?.(result)
       } else if (result.result === 'needs_decision') {
+        // C3（智者终审）：meta 存结构化码而非拼好的文案——文案由设置页按当前语言组装；
+        // 旧版在 Worker realm 拼 zh 文案落库，切语言后展示滞后
         const remoteRows = result.remote_rows
-        const detail =
+        const payload =
           typeof remoteRows === 'number'
-            ? i18n.tPlural('mobile.sync.needsDecision', remoteRows)
-            : i18n.t('mobile.sync.needsDecisionUnknown')
-        this.handle?.backend.setMeta('sync.pending_notice', JSON.stringify({ at: Date.now(), detail }))
+            ? { at: Date.now(), code: 'needsDecision', n: remoteRows }
+            : { at: Date.now(), code: 'needsDecisionUnknown' }
+        this.handle?.backend.setMeta('sync.pending_notice', JSON.stringify(payload))
       } else if (result.result === 'initialized') {
         this.handle?.backend.setMeta(
           'sync.pending_notice',
-          JSON.stringify({ at: Date.now(), detail: i18n.tPlural('mobile.sync.initialUploadDone', result.pushed ?? 0) }),
+          JSON.stringify({ at: Date.now(), code: 'initialUploadDone', n: result.pushed ?? 0 }),
         )
       }
     } catch (e) {
       // 后台同步失败（离线/凭据过期等）不打断使用；留痕后手动同步时会看到具体错误
-      const detail = i18n.t('mobile.sync.autoSyncFailed', { message: e instanceof Error ? e.message : String(e) })
+      const payload = { at: Date.now(), code: 'autoSyncFailed', message: e instanceof Error ? e.message : String(e) }
       try {
-        this.handle?.backend.setMeta('sync.pending_notice', JSON.stringify({ at: Date.now(), detail }))
+        this.handle?.backend.setMeta('sync.pending_notice', JSON.stringify(payload))
       } catch {
         /* 库都打不开时无处可写，只能放弃 */
       }

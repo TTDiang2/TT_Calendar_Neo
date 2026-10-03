@@ -78,8 +78,19 @@ export interface SyncStatus {
   ok?: boolean
   report?: SyncReport
   commit?: string | null
-  /** 后台自动同步留下的待办提示（如 needs_decision 等待用户决定） */
-  notice?: string
+  /**
+   * 后台自动同步留下的待办提示（智者终审 C3：结构化码，展示时按当前语言组装；
+   * 旧库存量是已拼好的文案，解析层包装为 code='legacy' 原样显示）
+   */
+  notice?: SyncNotice
+}
+
+export interface SyncNotice {
+  code: 'needsDecision' | 'needsDecisionUnknown' | 'initialUploadDone' | 'autoSyncFailed' | 'legacy'
+  n?: number
+  message?: string
+  /** code='legacy' 时的存量文案（旧版直接落库的字符串） */
+  text?: string
 }
 
 export interface SyncResult {

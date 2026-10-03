@@ -823,6 +823,8 @@ export const fr: DeepPartialDict<Dict> = {
         many: 'Première initialisation terminée : {n} lignes envoyées',
         other: 'Première initialisation terminée : {n} lignes envoyées',
       },
+      pendingNeedsDecisionUnknown: 'La synchronisation en arrière-plan attend votre décision : le dépôt distant contient déjà des données. Choisissez une stratégie de fusion dans Sync des données.',
+      pendingAutoSyncFailed: 'Échec de la synchronisation automatique en arrière-plan : {message}',
       report: 'Reçues {pulled} · Envoyées {pushed} · Conflits {conflicts} · Supprimées {deleted}',
       reportWarning: ' ({warning})',
       resolvedDone: 'Liaison terminée : {report}',

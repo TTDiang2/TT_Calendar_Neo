@@ -116,6 +116,10 @@ export const settings = {
       savedMsg: '已保存',
       /** 首次初始化完成提示，{n} 为上传行数（计数含名词，用复数条目：en row/rows） */
       initDone: { other: '首次初始化完成：已上传 {n} 行' },
+      /** 后台同步提示（C3 结构化码展示）：远端行数缺失的防御分支 */
+      pendingNeedsDecisionUnknown: '后台同步等待你的决定：远端仓库已有数据，请到「数据同步」选择合并方式',
+      /** 后台同步失败提示，{message} 为错误消息 */
+      pendingAutoSyncFailed: '后台自动同步失败：{message}',
       /** 同步结果报告行：四项计数（纯数字无名词，不做复数） */
       report: '拉取 {pulled} · 推送 {pushed} · 冲突 {conflicts} · 删除 {deleted}',
       /** 同步结果报告的警告后缀，{warning} 为后端警告文本 */
@@ -222,6 +226,10 @@ export const settings = {
         one: 'First-time initialization complete: uploaded {n} row',
         other: 'First-time initialization complete: uploaded {n} rows',
       },
+      /** Background sync notice (C3 structured code): fallback when remote row count is missing */
+      pendingNeedsDecisionUnknown: 'Background sync is waiting for your decision: the remote repository already has data. Choose a merge strategy under Data Sync.',
+      /** Background sync failure notice; {message} is the error message */
+      pendingAutoSyncFailed: 'Background auto-sync failed: {message}',
       report: 'Pulled {pulled} · Pushed {pushed} · Conflicts {conflicts} · Deleted {deleted}',
       reportWarning: ' ({warning})',
       resolvedDone: 'Binding complete: {report}',

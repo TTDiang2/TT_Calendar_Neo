@@ -8,8 +8,24 @@ import {
   getTodoBusyConfig, setTodoBusyConfig, recomputeTodoBusy, type TodoBusyConfig,
   getTodoReminderConfig, setTodoReminderConfig, type TodoReminderConfig,
   getSyncConfig, getSyncStatus, saveSyncConfig, testSync, syncNow, resolveSync,
-  type SyncResult,
+  type SyncResult, type SyncNotice,
 } from '../adapt/api'
+
+/** 后台同步提示按当前语言组装（智者终审 C3：meta 只存结构化码，文案在展示层组装） */
+function syncNoticeText(t: I18n['t'], tPlural: I18n['tPlural'], notice: SyncNotice): string {
+  switch (notice.code) {
+    case 'needsDecision':
+      return tPlural('settings.sync.decisionPrompt', notice.n ?? 0)
+    case 'needsDecisionUnknown':
+      return t('settings.sync.pendingNeedsDecisionUnknown')
+    case 'initialUploadDone':
+      return tPlural('settings.sync.initDone', notice.n ?? 0)
+    case 'autoSyncFailed':
+      return t('settings.sync.pendingAutoSyncFailed', { message: notice.message ?? '' })
+    default:
+      return notice.text ?? '' // legacy：旧版落库的存量文案原样显示
+  }
+}
 import type { Layer } from '../adapt/types'
 import { LANGS, LANG_META, chooseLang, useLang, useT, useTPlural, type I18n, type Lang } from '../i18n'
 
@@ -422,7 +438,7 @@ function SyncConfigSection() {
       )}
       {status?.notice && decision === null && (
         <div className="mb-3 p-3 rounded-md bg-sky-50 border border-sky-200 text-sm text-sky-800">
-          {status.notice}
+          {syncNoticeText(t, tPlural, status.notice)}
         </div>
       )}
       <div className="flex flex-col gap-3">

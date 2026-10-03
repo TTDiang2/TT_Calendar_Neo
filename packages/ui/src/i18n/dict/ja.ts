@@ -793,6 +793,8 @@ export const ja: DeepPartialDict<Dict> = {
       syncing: '同期中…',
       savedMsg: '保存しました',
       initDone: { other: '初回初期化が完了：{n}行をアップロードしました' },
+      pendingNeedsDecisionUnknown: 'バックグラウンド同期が決定を待っています：リモートリポジトリに既にデータがあります。データ同期でマージ方式を選択してください。',
+      pendingAutoSyncFailed: 'バックグラウンド自動同期に失敗しました：{message}',
       report: '取得 {pulled} · 送信 {pushed} · 競合 {conflicts} · 削除 {deleted}',
       reportWarning: '（{warning}）',
       resolvedDone: 'バインド完了：{report}',
