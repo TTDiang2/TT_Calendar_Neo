@@ -11,6 +11,8 @@
  * 绝不能吞真机点击（否则验收动作本身会被污染，2026-09-13 智者审查 P0-1）。
  */
 
+import { makeI18n, activeLang } from '@tt-calendar/ui'
+
 const BOOTLOG_FLAG = 'tt-bootlog'
 const WATCHDOG_MS = 15000
 const BUFFER_LINES = 10
@@ -52,7 +54,7 @@ function armWatchdog(): void {
     revealed = true
     // 头行 + 最近 9 条一次显形：屏上立刻能看到「卡在哪一步」
     // （appendToScreen 只留最后 10 行，所以头行之外最多回灌 9 条）
-    appendToScreen('[watchdog] 启动已 15s 无进展，最近日志：')
+    appendToScreen(makeI18n(activeLang()).t('mobile.bootlog.watchdogHeader'))
     for (const l of recent.slice(-9)) appendToScreen(l)
   }, WATCHDOG_MS)
 }

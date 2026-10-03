@@ -14,6 +14,7 @@ import { GitHubDataRepo } from '@tt-calendar/db/sync/github'
 import { SyncFacade } from '@tt-calendar/db/sync/facade'
 import { runJisiluImport, refreshSubscriptionOnBackend, refreshDueOnBackend } from '@tt-calendar/db/sources/jisilu'
 import { importTodosCsvOnBackend } from '@tt-calendar/db/sources/csv-todos'
+import { i18n } from './i18n-worker'
 import './polyfills'
 
 export interface CoreInitOptions {
@@ -77,17 +78,21 @@ export class LocalDbCore {
         this.handle?.backend.setMeta('sync.pending_notice', '')
         this.onSynced?.(result)
       } else if (result.result === 'needs_decision') {
-        const detail = `后台同步等待你的决定：远端仓库已有 ${result.remote_rows ?? '?'} 行数据，请到「设置 → 数据同步」选择合并方式`
+        const remoteRows = result.remote_rows
+        const detail =
+          typeof remoteRows === 'number'
+            ? i18n.tPlural('mobile.sync.needsDecision', remoteRows)
+            : i18n.t('mobile.sync.needsDecisionUnknown')
         this.handle?.backend.setMeta('sync.pending_notice', JSON.stringify({ at: Date.now(), detail }))
       } else if (result.result === 'initialized') {
         this.handle?.backend.setMeta(
           'sync.pending_notice',
-          JSON.stringify({ at: Date.now(), detail: `后台已完成首次上传（${result.pushed ?? 0} 行）` }),
+          JSON.stringify({ at: Date.now(), detail: i18n.tPlural('mobile.sync.initialUploadDone', result.pushed ?? 0) }),
         )
       }
     } catch (e) {
       // 后台同步失败（离线/凭据过期等）不打断使用；留痕后手动同步时会看到具体错误
-      const detail = `后台自动同步失败：${e instanceof Error ? e.message : String(e)}`
+      const detail = i18n.t('mobile.sync.autoSyncFailed', { message: e instanceof Error ? e.message : String(e) })
       try {
         this.handle?.backend.setMeta('sync.pending_notice', JSON.stringify({ at: Date.now(), detail }))
       } catch {
@@ -98,9 +103,9 @@ export class LocalDbCore {
 
   async call(method: string, args: unknown[]): Promise<unknown> {
     const handle = this.handle
-    if (!handle || !this.facade) throw new Error('本地数据库尚未初始化')
+    if (!handle || !this.facade) throw new Error(i18n.t('mobile.dbcore.notInitialized'))
     const fn = this.methodTable()[method]
-    if (typeof fn !== 'function') throw new Error(`本地后端没有方法 ${method}`)
+    if (typeof fn !== 'function') throw new Error(`LocalDbCore has no method ${method}`)
     return await fn.apply(handle.backend, args)
   }
 
@@ -143,13 +148,13 @@ export class LocalDbCore {
       // 订阅刷新：按 source_key 分发（jisilu 已实装，其余 pending_adaptation）
       refreshSubscription: (id: unknown) => {
         const sub = handle.backend.getSubscriptions().find((s) => s.id === String(id))
-        if (!sub) throw new Error('订阅不存在')
+        if (!sub) throw new Error(i18n.t('mobile.dbcore.subscriptionNotFound'))
         return refreshSubscriptionOnBackend(handle.backend, sub)
       },
       refreshDueSubscriptions: () => refreshDueOnBackend(handle.backend),
       // 待办 CSV 导入：File/Blob 可结构化克隆穿越 postMessage，读文本在核心侧
       importTodosCsv: async (file: unknown) => {
-        if (!(file instanceof Blob)) throw new Error('缺少 CSV 文件')
+        if (!(file instanceof Blob)) throw new Error(i18n.t('mobile.dbcore.csvFileMissing'))
         return importTodosCsvOnBackend(handle.backend, await file.text())
       },
     })

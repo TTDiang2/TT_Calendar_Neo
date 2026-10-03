@@ -28,7 +28,7 @@ function installCryptoPolyfill(): void {
   const getRandom =
     cryptoOwner.crypto?.getRandomValues?.bind(cryptoOwner.crypto) ??
     (() => {
-      throw new Error('crypto.getRandomValues 不可用，无法生成 UUID')
+      throw new Error('crypto.getRandomValues unavailable: cannot generate UUID')
     })
   const uuidV4 = (): `${string}-${string}-${string}-${string}-${string}` => {
     const b = getRandom(new Uint8Array(16))

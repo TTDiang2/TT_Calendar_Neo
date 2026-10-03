@@ -141,9 +141,9 @@ async function consumeWidgetActions(): Promise<void> {
       if (a.kind === 'completeTodo' && a.id) {
         try {
           const cur = await be.updateTodo(a.id, { status: 'completed' })
-          if (!cur) console.warn('[widget] 动作目标不存在（可能已滚动到下一期）:', a.id)
+          if (!cur) console.warn('[widget] action target missing (maybe rolled to next period):', a.id)
         } catch (e) {
-          console.warn('[widget] 动作落库失败:', a.id, e)
+          console.warn('[widget] action persist failed:', a.id, e)
         }
       }
     }

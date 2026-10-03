@@ -16,6 +16,7 @@
 
 import { getView, getTodos } from '@tt-calendar/ui/adapt/api'
 import type { CalEvent, Day, MonthData, Todo } from '@tt-calendar/contracts'
+import { makeI18n, activeLang } from '@tt-calendar/ui'
 import { todayStr } from '@tt-calendar/ui/adapt/data'
 
 const ALARM_HOUR = 9
@@ -87,6 +88,8 @@ async function collectImportantEvents(today: string): Promise<CalEvent[]> {
 }
 
 async function computeDesired(): Promise<DesiredReminder[]> {
+  // 通知文案按组装时的当前语言取词（非 React 场景，每次新建；按语言缓存无开销）
+  const i18n = makeI18n(activeLang())
   const today = todayStr()
   const horizon = fmt(addDays(new Date(), 7))
   const [open, allNonDone, importantEvents] = await Promise.all([
@@ -108,8 +111,10 @@ async function computeDesired(): Promise<DesiredReminder[]> {
     out.push({
       key: `overdue-${today}`,
       at: new Date(Date.now() + 5_000),
-      title: `有 ${overdue.length} 项待办已过期`,
-      body: overdue.slice(0, 3).map((t) => t.title).join('、') + (overdue.length > 3 ? ' …' : ''),
+      title: i18n.tPlural('mobile.reminder.overdueCount', overdue.length),
+      body:
+        overdue.slice(0, 3).map((t) => t.title).join(i18n.t('mobile.reminder.titleJoiner')) +
+        (overdue.length > 3 ? i18n.t('mobile.reminder.titleEllipsis') : ''),
     })
   }
   for (const t of open) {
@@ -118,7 +123,10 @@ async function computeDesired(): Promise<DesiredReminder[]> {
     out.push({
       key: `todo-${t.id}`,
       at: alarmAt(t.due_date),
-      title: t.due_date === today ? '待办今天截止' : `待办截止 · ${t.due_date.slice(5)}`,
+      title:
+        t.due_date === today
+          ? i18n.t('mobile.reminder.todoDueToday')
+          : i18n.t('mobile.reminder.todoDueOn', { date: t.due_date.slice(5) }),
       body: t.title,
     })
   }
@@ -139,7 +147,7 @@ async function computeDesired(): Promise<DesiredReminder[]> {
     out.push({
       key: `alarm-${t.id}`,
       at,
-      title: '⏰ 待办闹钟',
+      title: i18n.t('mobile.reminder.todoAlarm'),
       body: t.title,
     })
   }
@@ -153,8 +161,8 @@ async function computeDesired(): Promise<DesiredReminder[]> {
     out.push({
       key: `evt-${ev.id ?? ev.title}`,
       at: eve,
-      title: '重要日期提醒',
-      body: `明天（${ev.date.slice(5)}）：${ev.title}`,
+      title: i18n.t('mobile.reminder.importantTitle'),
+      body: i18n.t('mobile.reminder.importantTomorrow', { date: ev.date.slice(5), title: ev.title }),
     })
   }
   return out

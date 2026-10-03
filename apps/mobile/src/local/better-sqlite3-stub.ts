@@ -13,7 +13,7 @@
 export default class BetterSqlite3Stub {
   constructor() {
     throw new Error(
-      '[mobile] better-sqlite3 原生客户端不应在浏览器里被构造；数据库应使用 sql.js shim',
+      '[mobile] native better-sqlite3 must not be constructed in the browser; use the sql.js shim',
     )
   }
 }

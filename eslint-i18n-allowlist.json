@@ -1,11 +1,1 @@
-[
-  "apps/mobile/src/boot-log.ts",
-  "apps/mobile/src/local/backend.ts",
-  "apps/mobile/src/local/better-sqlite3-stub.ts",
-  "apps/mobile/src/local/db-core.ts",
-  "apps/mobile/src/local/db.worker.ts",
-  "apps/mobile/src/local/polyfills.ts",
-  "apps/mobile/src/main.tsx",
-  "apps/mobile/src/reminders.ts",
-  "apps/mobile/src/widget-bridge.ts"
-]
+[]

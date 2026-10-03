@@ -14,6 +14,7 @@
  */
 
 import { LocalDbCore } from './db-core'
+import { i18n } from './i18n-worker'
 
 interface CallMsg {
   type: 'call'
@@ -46,7 +47,7 @@ async function onMsg(msg: InMsg): Promise<void> {
       return
     }
     if (msg.type === 'call') {
-      if (!core) throw new Error('本地数据库尚未初始化')
+      if (!core) throw new Error(i18n.t('mobile.dbcore.notInitialized'))
       const result = await core.call(msg.method, msg.args)
       ctx.postMessage({ type: 'result', id: msg.id, ok: true, result })
     }

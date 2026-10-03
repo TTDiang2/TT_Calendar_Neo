@@ -2,21 +2,24 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider, QueryErrorResetBoundary } from '@tanstack/react-query'
 import '@tt-calendar/ui/index.css'
-import { App, setBackend, createHttpBackend } from '@tt-calendar/ui'
+import { App, setBackend, createHttpBackend, makeI18n, activeLang } from '@tt-calendar/ui'
 import { ErrorBoundary } from '@tt-calendar/ui/components/ErrorBoundary'
 import { createLocalBackend } from './local/backend'
 import { bootLog, bootLogSettle } from './boot-log'
 import { refreshWidgetSnapshot, startWidgetRefresh } from './widget-bridge'
 import { nudgeReminders, startReminders } from './reminders'
 
+// React 挂载前的启动占位/错误横幅按当前语言组装（非 React 场景入口）
+const tr = makeI18n(activeLang()).t
+
 // 启动期兜底诊断：任何未捕获 rejection / 脚本错误都必须留痕上屏，
 // 否则真机上就是一张没有线索的白屏（2026-09-13 卡点排查教训）
 window.addEventListener('unhandledrejection', (e) => {
   const r = e.reason as { stack?: string; message?: string } | null
-  bootLog('未捕获 rejection:', (r && (r.stack || r.message)) || String(e.reason))
+  bootLog(tr('mobile.bootlog.unhandledRejection'), (r && (r.stack || r.message)) || String(e.reason))
 })
 window.addEventListener('error', (e) => {
-  bootLog('脚本错误:', e.message, `@${e.filename}:${e.lineno}:${e.colno}`)
+  bootLog(tr('mobile.bootlog.scriptError'), e.message, `@${e.filename}:${e.lineno}:${e.colno}`)
 })
 
 /**
@@ -55,8 +58,7 @@ async function waitForDataServer(base: string): Promise<boolean> {
 }
 
 const root = document.getElementById('root')!
-root.innerHTML =
-  '<div class="flex h-screen items-center justify-center text-sm text-gray-500">正在启动数据服务…</div>'
+root.innerHTML = `<div class="flex h-screen items-center justify-center text-sm text-gray-500">${tr('mobile.boot.startingDataServer')}</div>`
 
 /** 异形错误（DOMException 等 WebKit 常抛的对象可能不是 Error 实例）也要保住 name/message/stack */
 function renderErr(err: unknown): { message: string; stack: string } {
@@ -144,7 +146,7 @@ async function boot(): Promise<void> {
     // 本地库起不来（worker / wasm / IndexedDB 失败）时必须把错误画出来，
     // 否则真机上就是一张永远停在启动文案的"白屏"，无从排查。
     // 动态内容一律 textContent，避免把错误文本当 HTML 注进去。
-    console.error('[mobile] 启动失败', err)
+    console.error('[mobile] boot failed', err)
     const { message, stack } = renderErr(err)
     let env = ''
     try {
@@ -156,7 +158,7 @@ async function boot(): Promise<void> {
     box.className = 'flex h-screen flex-col items-center justify-center gap-3 p-6 text-center'
     const title = document.createElement('div')
     title.className = 'text-sm font-medium text-red-600'
-    title.textContent = '启动失败，请截图反馈'
+    title.textContent = tr('mobile.boot.bootFailedTitle')
     const messageEl = document.createElement('div')
     messageEl.className = 'max-w-full text-xs text-red-500'
     messageEl.textContent = message
@@ -178,8 +180,7 @@ async function bootInner(): Promise<void> {
     setBackend(createHttpBackend(HTTP_BASE))
     ready = await waitForDataServer(HTTP_BASE)
   } else {
-    root.innerHTML =
-      '<div class="flex h-screen items-center justify-center text-sm text-gray-500">正在打开本地数据库…</div>'
+    root.innerHTML = `<div class="flex h-screen items-center justify-center text-sm text-gray-500">${tr('mobile.boot.openingLocalDb')}</div>`
     bootLog('awaiting createLocalBackend')
     try {
       setBackend(
@@ -222,7 +223,7 @@ async function bootInner(): Promise<void> {
   // 启动已走完关键路径：撤销 bootlog 看门狗（卡死自动显形不再触发）
   bootLogSettle()
   if (!ready) {
-    console.warn('[mobile] 数据服务 30 秒内没就绪，界面可能没数据')
+    console.warn('[mobile] data server not ready in 30s, UI may have no data')
   }
 }
 

@@ -17,10 +17,14 @@
  */
 
 import type { BackendAdapter } from '@tt-calendar/ui'
+import { makeI18n, activeLang } from '@tt-calendar/ui'
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 import { bootLog } from '../boot-log'
 import workerUrl from './db.worker?worker&url'
 import { LocalDbCore } from './db-core'
+
+/** 用户可见错误文案按当前语言组装（非 React 场景：见 docs/i18n-extraction-spec.md §0） */
+const tr = makeI18n(activeLang()).t
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void }
 
@@ -41,7 +45,7 @@ export interface LocalBackendOptions {
 
 export class LocalBackendInitError extends Error {
   constructor(message: string) {
-    super(`本地数据库初始化失败：${message}`)
+    super(tr('mobile.backend.initFailed', { message }))
     this.name = 'LocalBackendInitError'
   }
 }
@@ -49,7 +53,7 @@ export class LocalBackendInitError extends Error {
 /** 主线程 fetch 是 tauri:// 环境里唯一可靠的网络路径，wasm 在这里取成二进制 */
 async function fetchWasmBinary(): Promise<ArrayBuffer> {
   const resp = await fetch(wasmUrl)
-  if (!resp.ok) throw new Error(`加载 sql-wasm 失败：HTTP ${resp.status}（${wasmUrl}）`)
+  if (!resp.ok) throw new Error(tr('mobile.backend.wasmLoadFailed', { status: String(resp.status), url: wasmUrl }))
   return resp.arrayBuffer()
 }
 
@@ -105,7 +109,7 @@ async function createWorkerBackend(
   } else {
     bootLog('fetch worker script')
     const resp = await fetch(workerUrl)
-    if (!resp.ok) throw new LocalBackendInitError(`加载 worker 脚本失败：HTTP ${resp.status}`)
+    if (!resp.ok) throw new LocalBackendInitError(tr('mobile.backend.workerLoadFailed', { status: String(resp.status) }))
     const source = await resp.text()
     bootLog('worker script', source.length, 'bytes; create blob worker')
     const blobUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
@@ -129,12 +133,12 @@ async function createWorkerBackend(
       if (!p) return
       pending.delete(msg.id)
       if (msg.ok) p.resolve(msg.result)
-      else p.reject(new Error(String(msg.error ?? '本地数据操作失败')))
+      else p.reject(new Error(String(msg.error ?? tr('mobile.backend.opFailed'))))
     }
   })
 
   worker.addEventListener('error', (e: ErrorEvent) => {
-    initError = new LocalBackendInitError(e.message || 'worker 崩溃')
+    initError = new LocalBackendInitError(e.message || tr('mobile.backend.workerCrashed'))
     // worker 脚本级失败要立刻打断握手，否则用户要干等 15 秒超时
     rejectHandshake?.(initError)
     rejectHandshake = null
@@ -152,7 +156,7 @@ async function createWorkerBackend(
   // 等 init 握手（快照可能几 MB，给足时间）
   try {
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new LocalBackendInitError('15 秒内未就绪')), 15_000)
+      const timer = setTimeout(() => reject(new LocalBackendInitError(tr('mobile.backend.initTimeout'))), 15_000)
       const onReady = (e: MessageEvent): void => {
         const msg = e.data as WorkerMsg
         if (msg.type === 'ready') {
@@ -161,7 +165,7 @@ async function createWorkerBackend(
           resolve()
         } else if (msg.type === 'init-error') {
           cleanup()
-          reject(new LocalBackendInitError(String(msg.message ?? '未知错误')))
+          reject(new LocalBackendInitError(String(msg.message ?? tr('mobile.backend.unknownError'))))
         }
       }
       const cleanup = (): void => {
@@ -222,7 +226,7 @@ export async function createLocalBackend(opts: LocalBackendOptions = {}): Promis
   try {
     return await createWorkerBackend(wasmBinary, opts)
   } catch (err) {
-    console.warn('[local] Worker 不可用，回退主线程运行本地库：', err)
+    console.warn('[local] Worker unavailable, falling back to main-thread local db:', err)
     return await createMainThreadBackend(wasmBinary, opts)
   }
 }
