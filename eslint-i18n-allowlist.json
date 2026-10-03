@@ -8,11 +8,6 @@
   "apps/mobile/src/main.tsx",
   "apps/mobile/src/reminders.ts",
   "apps/mobile/src/widget-bridge.ts",
-  "packages/ui/src/components/DetailPanel.tsx",
-  "packages/ui/src/components/ErrorBoundary.tsx",
-  "packages/ui/src/components/NotesEditorModal.tsx",
-  "packages/ui/src/components/ReminderBanner.tsx",
   "packages/ui/src/components/SettingsDialog.tsx",
-  "packages/ui/src/components/StatsView.tsx",
-  "packages/ui/src/components/dialogs.tsx"
+  "packages/ui/src/components/StatsView.tsx"
 ]

@@ -5,7 +5,8 @@ import type { CalEvent, Day, Layer } from '../adapt/types'
 import { COLORING_COLORS, parseDate, TODO_BUSY_PREDICT_COLORS, TODO_BUSY_DONE_COLORS } from '../adapt/data'
 import { deleteEvent, deleteMark, deleteScheduleItem, getTodoBusyConfig, updateTodo } from '../adapt/api'
 import { holidayName, lunarText } from '../adapt/labels'
-import { useLang, useT } from '../i18n'
+import { layerLabel } from '../adapt/layerLabel'
+import { fmtDate, fmtWeekday, useLang, useT } from '../i18n'
 
 interface Props {
   day: Day | null
@@ -64,18 +65,19 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
   if (!day) {
     if (drawer) {
       return (
-        <p className="text-sm text-gray-400 p-4">点月历上的日期，这里会显示当天详情。</p>
+        <p className="text-sm text-gray-400 p-4">{t('dialogs.detail.drawerEmpty')}</p>
       )
     }
     return (
       <aside className="hidden lg:block w-72 bg-white/55 border-l border-white/60 p-4 overflow-y-auto">
-        <p className="text-sm text-gray-400">点击日期查看详情</p>
+        <p className="text-sm text-gray-400">{t('dialogs.detail.panelEmpty')}</p>
       </aside>
     )
   }
 
   const { y, m, d } = parseDate(day.date)
-  const weekday = '一二三四五六日'[new Date(y, m - 1, d).getDay() === 0 ? 6 : new Date(y, m - 1, d).getDay() - 1]
+  // 日期头部一律走 Intl 封装（规范 §3）：大字行=月+日，小字行=年 · 星期
+  const dateObj = new Date(y, m - 1, d)
   const enabledSet = new Set(layers.filter((l) => l.enabled).map((l) => l.layer_id))
   // 涂色图层（kind=color 且 custom_*）的旧 events 不当事件显示（已迁到 marks）
   const colorLayerIds = new Set(layers.filter((l) => l.kind === 'color' && l.layer_id.startsWith('custom_')).map((l) => l.layer_id))
@@ -83,7 +85,11 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
     .filter(([lid]) => (lid === 'important' || enabledSet.has(lid)) && !colorLayerIds.has(lid))
     .flatMap(([, evs]) => evs)
   const layerColor = (lid: string) => layers.find((l) => l.layer_id === lid)?.color ?? '#9ca3af'
-  const layerName = (lid: string) => layers.find((l) => l.layer_id === lid)?.display_name ?? lid
+  // 图层显示名走 layerLabel（内置 ID 译文 / 用户改名原样）
+  const layerName = (lid: string) => {
+    const l = layers.find((x) => x.layer_id === lid)
+    return layerLabel(t, lid, l?.display_name)
+  }
 
   return (
     <aside
@@ -94,21 +100,24 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
     >
       <div className="flex items-center justify-between mb-3">
         <div>
-          <p className="text-[11px] text-gray-400">已选日期</p>
+          <p className="text-[11px] text-gray-400">{t('dialogs.detail.selectedDate')}</p>
           <p className="text-2xl font-semibold text-gray-800">
-            {m} 月 {d} 日
+            {fmtDate(lang, dateObj, { month: 'long', day: 'numeric' })}
           </p>
           <p className="text-sm text-gray-500">
-            {y} 年 · 周{weekday}
+            {t('dialogs.detail.yearWeekday', {
+              year: fmtDate(lang, dateObj, { year: 'numeric' }),
+              weekday: fmtWeekday(lang, dateObj, 'short'),
+            })}
             {lunarText(t, lang, day.lunar) && <span className="ml-2 text-gray-400">{lunarText(t, lang, day.lunar)}</span>}
-            {day.is_today && <span className="ml-2 text-rose-500 text-xs">今天</span>}
+            {day.is_today && <span className="ml-2 text-rose-500 text-xs">{t('common.today')}</span>}
           </p>
         </div>
         {drawer && onClose && (
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md text-lg flex-shrink-0"
-            title="关闭"
+            title={t('common.close')}
           >
             ×
           </button>
@@ -125,13 +134,13 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
               onClick={() => onAddDot(day.date)}
               className="flex-1 flex items-center justify-center gap-1.5 text-sm text-gray-700 py-2.5 rounded-xl bg-white/80 border border-black/5 shadow-sm active:bg-pink-50 active:text-pink-600 transition-colors"
             >
-              <Clock size={15} className="text-pink-500" /> 加点点
+              <Clock size={15} className="text-pink-500" /> {t('dialogs.detail.addDot')}
             </button>
             <button
               onClick={() => onAddColor(day.date)}
               className="flex-1 flex items-center justify-center gap-1.5 text-sm text-gray-700 py-2.5 rounded-xl bg-white/80 border border-black/5 shadow-sm active:bg-pink-50 active:text-pink-600 transition-colors"
             >
-              <Palette size={15} className="text-amber-500" /> 涂色
+              <Palette size={15} className="text-amber-500" /> {t('dialogs.detail.coloring')}
             </button>
           </>
         ) : (
@@ -141,7 +150,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                 onClick={() => onAddEvent(day.date)}
                 className="flex-1 flex items-center justify-center gap-1 text-xs text-white py-1.5 rounded-md bg-pink-500 hover:bg-pink-600"
               >
-                <CalendarPlus size={12} /> 事件
+                <CalendarPlus size={12} /> {t('dialogs.detail.event')}
               </button>
             )}
             {/* 日程快捷入口常驻：手机端没有桌面右键菜单，「编辑日程」又只在已有日程时出现，
@@ -150,19 +159,19 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
               onClick={() => onEditSchedule(day.date)}
               className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"
             >
-              <CalendarClock size={12} /> 日程
+              <CalendarClock size={12} /> {t('dialogs.detail.schedule')}
             </button>
             <button
               onClick={() => onAddDot(day.date)}
               className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"
             >
-              <Clock size={12} /> 点点
+              <Clock size={12} /> {t('dialogs.detail.dot')}
             </button>
             <button
               onClick={() => onAddColor(day.date)}
               className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100"
             >
-              <Palette size={12} /> 涂色
+              <Palette size={12} /> {t('dialogs.detail.coloring')}
             </button>
           </>
         )}
@@ -170,7 +179,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
 
       {day.holiday?.name && (
         <div className="mb-3 p-2 rounded-lg bg-purple-50 border border-purple-100">
-          <p className="text-xs text-purple-600 font-medium">🏮 {day.holiday.name}</p>
+          <p className="text-xs text-purple-600 font-medium">🏮 {holidayName(t, day.holiday?.name)}</p>
         </div>
       )}
 
@@ -182,7 +191,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
         <div className="mb-3 space-y-1">
           {day.coloring_level != null && (
             <div className="flex items-center gap-2 group">
-              <span className="text-[11px] text-gray-500 w-16 flex-shrink-0 truncate">充实度</span>
+              <span className="text-[11px] text-gray-500 w-16 flex-shrink-0 truncate">{t('dialogs.detail.fullness')}</span>
               <div className="flex-1 flex gap-px h-2 rounded overflow-hidden">
                 {COLORING_COLORS.map((c, i) => (
                   <div key={i} className="flex-1" style={{ backgroundColor: c, opacity: i <= day.coloring_level! ? 1 : 0.3 }} />
@@ -195,7 +204,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
             .filter((mk) => mk.mode === 'graded')
             .map((mk) => (
               <div key={mk.layer_id} className="flex items-center gap-2 group">
-                <span className="text-[11px] text-gray-500 w-16 flex-shrink-0 truncate">{mk.display_name}</span>
+                <span className="text-[11px] text-gray-500 w-16 flex-shrink-0 truncate">{layerLabel(t, mk.layer_id, mk.display_name)}</span>
                 {mk.level != null ? (
                   <>
                     <div className="flex-1 flex gap-px h-2 rounded overflow-hidden">
@@ -210,12 +219,12 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                     <span className="text-xs text-gray-500">{(mk.level ?? 0) + 1}/5</span>
                   </>
                 ) : (
-                  <span className="flex-1 text-[11px] text-gray-300">未标记档位</span>
+                  <span className="flex-1 text-[11px] text-gray-300">{t('dialogs.detail.noLevel')}</span>
                 )}
                 <button
                   onClick={() => delMarkMut.mutate({ layerId: mk.layer_id, date: day.date })}
                   className={`p-0.5 text-gray-300 hover:text-red-500 transition flex-shrink-0 ${hoverCls}`}
-                  title="删除标记"
+                  title={t('dialogs.detail.deleteMark')}
                 >
                   <Trash2 size={11} />
                 </button>
@@ -223,7 +232,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
             ))}
           {day.predict_level != null && (
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-gray-500 w-16 flex-shrink-0 truncate">待办·未完成</span>
+              <span className="text-[11px] text-gray-500 w-16 flex-shrink-0 truncate">{t('dialogs.detail.todoPredict')}</span>
               <div className="flex-1 flex gap-px h-2 rounded overflow-hidden">
                 {(busyConfig?.predict_colors ?? TODO_BUSY_PREDICT_COLORS).map((c, i) => (
                   <div key={i} className="flex-1" style={{ backgroundColor: c, opacity: i <= day.predict_level! ? 1 : 0.3 }} />
@@ -234,7 +243,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
           )}
           {day.done_level != null && (
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-gray-500 w-16 flex-shrink-0 truncate">待办·已完成</span>
+              <span className="text-[11px] text-gray-500 w-16 flex-shrink-0 truncate">{t('dialogs.detail.todoDone')}</span>
               <div className="flex-1 flex gap-px h-2 rounded overflow-hidden">
                 {(busyConfig?.done_colors ?? TODO_BUSY_DONE_COLORS).map((c, i) => (
                   <div key={i} className="flex-1" style={{ backgroundColor: c, opacity: i <= day.done_level! ? 1 : 0.3 }} />
@@ -253,15 +262,15 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
             .filter((mk) => mk.mode !== 'graded')
             .map((mk) => (
               <div key={mk.layer_id} className="flex items-center gap-2 group">
-                <span className="text-[11px] text-gray-500 w-16 flex-shrink-0 truncate">{mk.display_name}</span>
+                <span className="text-[11px] text-gray-500 w-16 flex-shrink-0 truncate">{layerLabel(t, mk.layer_id, mk.display_name)}</span>
                 <div className="flex-1 flex items-center gap-1">
                   <span className="w-3 h-3 rounded flex-shrink-0" style={{ backgroundColor: mk.color ?? '#9ca3af' }} />
-                  <span className="text-[11px] text-gray-400">已标记</span>
+                  <span className="text-[11px] text-gray-400">{t('dialogs.detail.marked')}</span>
                 </div>
                 <button
                   onClick={() => delMarkMut.mutate({ layerId: mk.layer_id, date: day.date })}
                   className={`p-0.5 text-gray-300 hover:text-red-500 transition flex-shrink-0 ${hoverCls}`}
-                  title="删除标记"
+                  title={t('dialogs.detail.deleteMark')}
                 >
                   <Trash2 size={11} />
                 </button>
@@ -274,14 +283,14 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-1 text-xs text-gray-400">
-              <Clock size={12} /> 日程
+              <Clock size={12} /> {t('dialogs.detail.schedule')}
             </div>
             <button
               onClick={() => onEditSchedule(day.date)}
               className="text-[11px] text-gray-400 hover:text-pink-500"
-              title="编辑全部日程"
+              title={t('dialogs.detail.editAllSchedule')}
             >
-              编辑
+              {t('common.edit')}
             </button>
           </div>
           <div className="space-y-1">
@@ -293,14 +302,14 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                   className="flex items-center gap-1.5 group rounded -mx-1 px-1 py-0.5 hover:bg-gray-50"
                 >
                   <span className="text-gray-400 flex-shrink-0 tabular-nums whitespace-nowrap text-sm">
-                    {it.start_time ? (it.end_time ? `${it.start_time}-${it.end_time}` : it.start_time) : '全天'}
+                    {it.start_time ? (it.end_time ? `${it.start_time}-${it.end_time}` : it.start_time) : t('dialogs.detail.allDay')}
                   </span>
                   <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">{it.title}</span>
                   <div className={`flex gap-0.5 transition flex-shrink-0 ${hoverCls}`}>
                     <button
                       onClick={() => onEditSchedule(day.date)}
                       className="p-1 text-gray-400 hover:text-pink-500"
-                      title="编辑日程"
+                      title={t('dialogs.editSchedule')}
                     >
                       <Pencil size={12} />
                     </button>
@@ -308,7 +317,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                       <button
                         onClick={() => delScheduleMut.mutate(it.id!)}
                         className="p-1 text-gray-400 hover:text-red-500"
-                        title="删除这条日程"
+                        title={t('dialogs.deleteScheduleItem')}
                       >
                         <Trash2 size={12} />
                       </button>
@@ -322,11 +331,11 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
 
       <div>
         <div className="flex items-center gap-1 mb-1.5 text-xs text-gray-400">
-          <CalendarDays size={12} /> 事件（{events.length}）
+          <CalendarDays size={12} /> {t('dialogs.detail.eventsCount', { n: events.length })}
         </div>
         {events.length === 0 ? (
           <p className="text-sm text-gray-300 flex items-center gap-1">
-            <Sparkles size={12} /> 无事件
+            <Sparkles size={12} /> {t('dialogs.detail.noEvents')}
           </p>
         ) : (
           <div className="space-y-2">
@@ -347,14 +356,14 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                       <button
                         onClick={() => onEditEvent(day.date, ev)}
                         className="p-1 text-gray-400 hover:text-pink-500"
-                        title="编辑"
+                        title={t('common.edit')}
                       >
                         <Pencil size={12} />
                       </button>
                       <button
                         onClick={() => ev.id && delMut.mutate(ev.id)}
                         className="p-1 text-gray-400 hover:text-red-500"
-                        title="删除"
+                        title={t('common.delete')}
                       >
                         <Trash2 size={12} />
                       </button>
@@ -370,17 +379,17 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
       {day.todos && day.todos.length > 0 && (
         <div className="mt-4">
           <div className="flex items-center gap-1 mb-1.5 text-xs text-gray-400">
-            <CheckCircle2 size={12} /> 待办（{day.todos.length}）
+            <CheckCircle2 size={12} /> {t('dialogs.detail.todosCount', { n: day.todos.length })}
           </div>
           <div className="space-y-1">
-            {day.todos.map((t) => {
-              const isDone = t.status === 'completed'
+            {day.todos.map((td) => {
+              const isDone = td.status === 'completed'
               return (
-                <div key={t.id} className="flex items-start gap-1.5 p-1.5 rounded bg-amber-50/50">
+                <div key={td.id} className="flex items-start gap-1.5 p-1.5 rounded bg-amber-50/50">
                   <button
                     onClick={() => toggleTodoMut.mutate({
-                      id: t.id,
-                      data: { ...t, id: t.id, status: isDone ? 'notStarted' : 'completed' },
+                      id: td.id,
+                      data: { ...td, id: td.id, status: isDone ? 'notStarted' : 'completed' },
                     })}
                     className={clsx(
                       'w-3.5 h-3.5 rounded border flex-shrink-0 mt-0.5 flex items-center justify-center',
@@ -390,10 +399,10 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
                     {isDone && <span className="text-white text-[8px]">✓</span>}
                   </button>
                   <div className="flex-1 min-w-0">
-                    <p className={clsx('text-sm leading-tight', isDone ? 'text-gray-400 line-through' : 'text-gray-700')}>{t.title}</p>
-                    {t.importance === 'high' && !isDone && <span className="text-[10px] text-red-500">⚡高</span>}
-                    {t.due_date === day.date && !isDone && (
-                      <span className="text-[10px] text-red-500 ml-1">截止</span>
+                    <p className={clsx('text-sm leading-tight', isDone ? 'text-gray-400 line-through' : 'text-gray-700')}>{td.title}</p>
+                    {td.importance === 'high' && !isDone && <span className="text-[10px] text-red-500">{t('dialogs.detail.highImportance')}</span>}
+                    {td.due_date === day.date && !isDone && (
+                      <span className="text-[10px] text-red-500 ml-1">{t('dialogs.detail.dueTag')}</span>
                     )}
                   </div>
                 </div>

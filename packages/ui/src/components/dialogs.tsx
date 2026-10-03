@@ -20,9 +20,19 @@ import {
 import { Plus, Trash2 } from 'lucide-react'
 import { COLORING_COLORS } from '../adapt/data'
 import { subscriptionLayerFilter } from '../adapt/subscription'
+import { layerLabel } from '../adapt/layerLabel'
+import { useT } from '../i18n'
 import type { CalEvent, Layer, Schedule, ScheduleItem, Todo } from '../adapt/types'
 
-const COLORING_LABELS = ['放松', '轻松', '适中', '充实', '高产']
+// 充实度 5 档显示名走字典（contracts COLORING_LEVELS 的英文 key 小写映射），
+// 档位顺序与 COLORING_COLORS 一一对应
+const COLORING_LEVEL_KEYS = [
+  'dialogs.coloringLevel.relaxed',
+  'dialogs.coloringLevel.mild',
+  'dialogs.coloringLevel.moderate',
+  'dialogs.coloringLevel.busy',
+  'dialogs.coloringLevel.productive',
+] as const
 
 // ===========================================================================
 // 事件编辑器（新建 / 编辑）
@@ -41,6 +51,7 @@ export function EventEditor({
   onClose: () => void
   fixedLayerId?: string
 }) {
+  const t = useT()
   const qc = useQueryClient()
   const isEdit = !!event
   // 事件图层候选（20260918 智者 R2）：订阅图层（统一判别式）与自动图层
@@ -102,13 +113,13 @@ export function EventEditor({
   })
 
   return (
-    <Modal title={isEdit ? '编辑事件' : '新建事件'} onClose={onClose}>
+    <Modal title={isEdit ? t('dialogs.event.titleEdit') : t('dialogs.event.titleNew')} onClose={onClose}>
       <div className="flex flex-col gap-3">
-        <Field label="标题">
+        <Field label={t('dialogs.event.fieldTitle')}>
           <input className="tt-input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
         </Field>
         <div className="flex gap-2">
-          <Field label="日期">
+          <Field label={t('dialogs.event.fieldDate')}>
             <input
               type="date"
               className="tt-input"
@@ -117,18 +128,18 @@ export function EventEditor({
             />
           </Field>
           {!fixedLayerId && (
-            <Field label="图层">
+            <Field label={t('dialogs.event.fieldLayer')}>
               <select className="tt-input" value={layerId} onChange={(e) => setLayerId(e.target.value)}>
                 {layerOptions.map((l) => (
                   <option key={l.layer_id} value={l.layer_id}>
-                    {l.display_name}
+                    {layerLabel(t, l.layer_id, l.display_name)}
                   </option>
                 ))}
               </select>
             </Field>
           )}
         </div>
-        <Field label="描述（可选）">
+        <Field label={t('dialogs.event.fieldDesc')}>
           <textarea
             className="tt-input"
             rows={2}
@@ -136,7 +147,7 @@ export function EventEditor({
             onChange={(e) => setDescription(e.target.value)}
           />
         </Field>
-        <Field label="颜色（可选，#RRGGBB）">
+        <Field label={t('dialogs.event.fieldColor')}>
           <input
             className="tt-input"
             value={color}
@@ -150,7 +161,7 @@ export function EventEditor({
               onClick={() => delMut.mutate()}
               className="text-sm text-red-500 hover:underline"
             >
-              删除
+              {t('common.delete')}
             </button>
           ) : (
             <span />
@@ -160,14 +171,14 @@ export function EventEditor({
               onClick={onClose}
               className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               onClick={() => saveMut.mutate()}
               disabled={!title.trim() || saveMut.isPending}
               className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
-              保存
+              {t('common.save')}
             </button>
           </div>
         </div>
@@ -187,6 +198,7 @@ export function ScheduleEditor({
   date: string
   onClose: () => void
 }) {
+  const t = useT()
   const qc = useQueryClient()
   const { data: items = [] } = useQuery({
     queryKey: ['scheduleItems', date],
@@ -238,10 +250,10 @@ export function ScheduleEditor({
   }
 
   return (
-    <Modal title={`日程 ${date}`} onClose={onClose} width={560}>
+    <Modal title={t('dialogs.schedule.titleWithDate', { date })} onClose={onClose} width={560}>
       <div className="flex flex-col gap-2">
         {effective.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-4">当天没有日程，点「添加日程」开始</p>
+          <p className="text-sm text-gray-400 text-center py-4">{t('dialogs.schedule.empty')}</p>
         )}
         {effective.map((r, i) => (
           <div key={r.id ?? `new-${i}`} className="flex items-center gap-2 border border-gray-200 rounded-lg px-2 py-2">
@@ -251,7 +263,7 @@ export function ScheduleEditor({
               value={r.start_time ?? ''}
               onChange={(e) => setRow(i, { start_time: e.target.value || null })}
             />
-            <span className="text-gray-400 text-xs">至</span>
+            <span className="text-gray-400 text-xs">{t('dialogs.toTime')}</span>
             <input
               type="time"
               className="tt-input w-[90px] text-sm"
@@ -263,22 +275,22 @@ export function ScheduleEditor({
               value={r.category ?? 'work'}
               onChange={(e) => setRow(i, { category: e.target.value as 'work' | 'course' | 'sport' | 'play' | 'other' })}
             >
-              <option value="work">工作</option>
-              <option value="course">课程</option>
-              <option value="sport">运动</option>
-              <option value="play">玩耍</option>
-              <option value="other">其他</option>
+              <option value="work">{t('dialogs.schedule.cat.work')}</option>
+              <option value="course">{t('dialogs.schedule.cat.course')}</option>
+              <option value="sport">{t('dialogs.schedule.cat.sport')}</option>
+              <option value="play">{t('dialogs.schedule.cat.play')}</option>
+              <option value="other">{t('dialogs.schedule.cat.misc')}</option>
             </select>
             <input
               className="tt-input flex-1 text-sm py-1.5"
-              placeholder="做什么"
+              placeholder={t('dialogs.schedule.what')}
               value={r.title}
               onChange={(e) => setRow(i, { title: e.target.value })}
             />
             <button
               onClick={() => removeRow(i)}
               className="text-gray-400 hover:text-red-500 p-1"
-              title="删除这条日程"
+              title={t('dialogs.deleteScheduleItem')}
             >
               <Trash2 size={14} />
             </button>
@@ -289,18 +301,18 @@ export function ScheduleEditor({
             onClick={addRow}
             className="flex items-center gap-1 px-3 py-1.5 text-sm text-pink-600 hover:bg-pink-50 rounded-lg"
           >
-            <Plus size={14} /> 添加日程
+            <Plus size={14} /> {t('dialogs.schedule.add')}
           </button>
           <div className="flex gap-2">
             <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">
-              取消
+              {t('common.cancel')}
             </button>
             <button
               onClick={() => saveMut.mutate()}
               disabled={saveMut.isPending || effective.some((r) => !r.title.trim())}
               className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
-              保存
+              {t('common.save')}
             </button>
           </div>
         </div>
@@ -322,6 +334,7 @@ export function ColoringPicker({
   current: number | null
   onClose: () => void
 }) {
+  const t = useT()
   const qc = useQueryClient()
   const setMut = useMutation({
     mutationFn: (lvl: number) => upsertColoring(date, lvl),
@@ -339,9 +352,11 @@ export function ColoringPicker({
   })
 
   return (
-    <Modal title={`充实度 ${date}`} onClose={onClose} width={380}>
+    <Modal title={t('dialogs.coloring.titleWithDate', { date })} onClose={onClose} width={380}>
       <p className="text-xs text-gray-500 mb-2">
-        当前：{current != null ? COLORING_LABELS[current] : '未设'}
+        {t('dialogs.coloring.current', {
+          level: current != null ? t(COLORING_LEVEL_KEYS[current]) : t('dialogs.coloring.notSet'),
+        })}
       </p>
       <div className="grid grid-cols-5 gap-2">
         {COLORING_COLORS.map((c, i) => (
@@ -353,7 +368,7 @@ export function ColoringPicker({
               i >= 3 ? 'text-white' : 'text-gray-700'
             } ${current === i ? 'ring-2 ring-pink-500' : ''}`}
           >
-            {COLORING_LABELS[i]}
+            {t(COLORING_LEVEL_KEYS[i])}
           </button>
         ))}
       </div>
@@ -363,10 +378,10 @@ export function ColoringPicker({
           disabled={current == null}
           className="text-sm text-gray-500 hover:underline disabled:opacity-40"
         >
-          清除
+          {t('dialogs.coloring.clear')}
         </button>
         <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">
-          关闭
+          {t('common.close')}
         </button>
       </div>
     </Modal>
@@ -393,6 +408,7 @@ export function SearchDialog({
   /** 订阅图层判别式（统一口径，见 adapt/subscription.ts）；手机端由 App 传入 */
   excludeSub?: (l: Layer) => boolean
 }) {
+  const t = useT()
   const [q, setQ] = useState('')
   const trimmed = q.trim()
   const { data: events, isFetching: fetchingEvents } = useQuery({
@@ -404,8 +420,8 @@ export function SearchDialog({
   // 防抖（智者 P2-12）：待办候选是 500+500 条全量，每敲一字重拉太重
   const [debouncedQ, setDebouncedQ] = useState('')
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQ(trimmed), 250)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setDebouncedQ(trimmed), 250)
+    return () => clearTimeout(timer)
   }, [trimmed])
 
   const { data: todos, isFetching: fetchingTodos } = useQuery({
@@ -434,10 +450,10 @@ export function SearchDialog({
     if (!todos || !debouncedQ) return []
     const kw = debouncedQ.toLowerCase()
     return todos
-      .filter((t) =>
-        t.title.toLowerCase().includes(kw)
-        || (t.body ?? '').toLowerCase().includes(kw)
-        || (t.tags ?? []).some((tag) => tag.toLowerCase().includes(kw)),
+      .filter((td) =>
+        td.title.toLowerCase().includes(kw)
+        || (td.body ?? '').toLowerCase().includes(kw)
+        || (td.tags ?? []).some((tag) => tag.toLowerCase().includes(kw)),
       )
       .slice(0, 30)
   }, [todos, debouncedQ])
@@ -447,20 +463,20 @@ export function SearchDialog({
   const nothing = trimmed.length > 0 && !searching && hitEvents.length === 0 && hitTodos.length === 0
 
   return (
-    <Modal title="搜索" onClose={onClose} width={520}>
+    <Modal title={t('common.search')} onClose={onClose} width={520}>
       <input
         className="tt-input mb-3"
-        placeholder="搜事件、待办…"
+        placeholder={t('dialogs.search.placeholder')}
         value={q}
         onChange={(e) => setQ(e.target.value)}
         autoFocus
       />
       <div className="max-h-80 overflow-y-auto -mx-1">
-        {nothing && <p className="text-sm text-gray-400 px-1 py-2">未找到与「{trimmed}」相关的事件或待办</p>}
+        {nothing && <p className="text-sm text-gray-400 px-1 py-2">{t('dialogs.search.nothing', { q: trimmed })}</p>}
 
         {hitEvents.length > 0 && (
           <>
-            <p className="text-[11px] font-semibold text-gray-400 px-1 pt-1 pb-0.5 uppercase tracking-wide">事件</p>
+            <p className="text-[11px] font-semibold text-gray-400 px-1 pt-1 pb-0.5 uppercase tracking-wide">{t('dialogs.search.sectionEvents')}</p>
             {hitEvents.map((ev, i) => (
               <button
                 key={`ev-${ev.id ?? i}`}
@@ -480,15 +496,15 @@ export function SearchDialog({
 
         {hitTodos.length > 0 && (
           <>
-            <p className="text-[11px] font-semibold text-gray-400 px-1 pt-2 pb-0.5 uppercase tracking-wide">待办</p>
-            {hitTodos.map((t) => {
-              const done = t.status === 'completed'
-              const overdue = !done && t.due_date != null && t.due_date < new Date().toISOString().slice(0, 10)
+            <p className="text-[11px] font-semibold text-gray-400 px-1 pt-2 pb-0.5 uppercase tracking-wide">{t('terms.todo')}</p>
+            {hitTodos.map((td) => {
+              const done = td.status === 'completed'
+              const overdue = !done && td.due_date != null && td.due_date < new Date().toISOString().slice(0, 10)
               return (
                 <button
-                  key={`todo-${t.id}`}
+                  key={`todo-${td.id}`}
                   onClick={() => {
-                    if (onJumpTodo) onJumpTodo(t)
+                    if (onJumpTodo) onJumpTodo(td)
                     onClose()
                   }}
                   className="w-full flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded-md text-left"
@@ -501,10 +517,10 @@ export function SearchDialog({
                   >
                     {done ? '✓' : ''}
                   </span>
-                  <span className={clsx('flex-1 text-sm truncate', done ? 'text-gray-400 line-through' : 'text-gray-700')}>{t.title}</span>
-                  {t.due_date && (
+                  <span className={clsx('flex-1 text-sm truncate', done ? 'text-gray-400 line-through' : 'text-gray-700')}>{td.title}</span>
+                  {td.due_date && (
                     <span className={clsx('text-xs flex-shrink-0', overdue ? 'text-red-500 font-medium' : 'text-gray-400')}>
-                      {overdue ? '已过期' : t.due_date.slice(5)}
+                      {overdue ? t('dialogs.search.overdue') : td.due_date.slice(5)}
                     </span>
                   )}
                 </button>
@@ -539,10 +555,11 @@ export function ContextMenu({
   onColoring: () => void
   onClose: () => void
 }) {
+  const t = useT()
   const items = [
-    { label: '新建事件', action: onNew },
-    { label: '编辑日程', action: onSchedule },
-    { label: '设置充实度', action: onColoring },
+    { label: t('dialogs.menu.newEvent'), action: onNew },
+    { label: t('dialogs.editSchedule'), action: onSchedule },
+    { label: t('dialogs.menu.setColoring'), action: onColoring },
   ]
   return (
     <>
@@ -582,6 +599,7 @@ export function DotEntryDialog({
   excludeSub?: (l: Layer) => boolean
   onClose: () => void
 }) {
+  const t = useT()
   const qc = useQueryClient()
   // 订阅判别统一口径（20260918 智者 R5 对齐）：桌面兜底也走 subscriptionLayerFilter，
   // 不再各写各的 jisilu_ 前缀判断
@@ -623,7 +641,7 @@ export function DotEntryDialog({
 
   const saveMut = useMutation({
     mutationFn: async () => {
-      if (!title.trim()) throw new Error('请填写内容')
+      if (!title.trim()) throw new Error(t('dialogs.dot.contentRequired'))
       if (isSchedule) {
         await createScheduleItem({
           id: null, date, start_time: startTime || null, end_time: endTime || null,
@@ -644,31 +662,31 @@ export function DotEntryDialog({
   })
 
   return (
-    <Modal title={`新增点点 ${date}`} onClose={onClose} width={480}>
+    <Modal title={t('dialogs.dot.titleWithDate', { date })} onClose={onClose} width={480}>
       <div className="flex flex-col gap-3">
-        <Field label="选择图层">
+        <Field label={t('dialogs.dot.pickLayer')}>
           <select className="tt-input" value={targetLayer} onChange={(e) => setTargetLayer(e.target.value)}>
             {scheduleCatLayers.length > 0 && (
-              <optgroup label="日程">
+              <optgroup label={t('dialogs.dot.groupSchedule')}>
                 {scheduleCatLayers.map((l) => (
                   <option key={l.layer_id} value={l.layer_id}>
-                    {l.display_name}{l.enabled ? '' : '（隐藏）'}
+                    {layerLabel(t, l.layer_id, l.display_name)}{l.enabled ? '' : t('dialogs.hiddenSuffix')}
                   </option>
                 ))}
               </optgroup>
             )}
             {importantLayer && (
-              <optgroup label="事件">
+              <optgroup label={t('dialogs.dot.groupEvents')}>
                 <option key={importantLayer.layer_id} value={importantLayer.layer_id}>
-                  {importantLayer.display_name}
+                  {layerLabel(t, importantLayer.layer_id, importantLayer.display_name)}
                 </option>
               </optgroup>
             )}
             {otherDotLayers.length > 0 && (
-              <optgroup label="其他">
+              <optgroup label={t('dialogs.dot.groupOther')}>
                 {otherDotLayers.map((l) => (
                   <option key={l.layer_id} value={l.layer_id}>
-                    {l.display_name}{l.enabled ? '' : '（隐藏）'}
+                    {layerLabel(t, l.layer_id, l.display_name)}{l.enabled ? '' : t('dialogs.hiddenSuffix')}
                   </option>
                 ))}
               </optgroup>
@@ -679,29 +697,29 @@ export function DotEntryDialog({
         {!isImportantEvent && (
           <div className="flex items-center gap-2">
             <input type="time" className="tt-input w-[110px]" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-            <span className="text-gray-400 text-xs">至</span>
+            <span className="text-gray-400 text-xs">{t('dialogs.toTime')}</span>
             <input type="time" className="tt-input w-[110px]" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: targetColor }} title="图层颜色" />
+            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: targetColor }} title={t('dialogs.dot.layerColorTitle')} />
           </div>
         )}
 
-        <Field label="内容">
+        <Field label={t('dialogs.dot.content')}>
           <textarea
             className="tt-input min-h-[72px] resize-y"
-            placeholder="做什么（可多行）"
+            placeholder={t('dialogs.dot.placeholder')}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
         </Field>
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
+          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">{t('common.cancel')}</button>
           <button
             onClick={() => saveMut.mutate()}
             disabled={saveMut.isPending || !title.trim()}
             className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
           >
-            添加
+            {t('common.add')}
           </button>
         </div>
       </div>
@@ -725,6 +743,7 @@ export function ColorEntryDialog({
   excludeSub?: (l: Layer) => boolean
   onClose: () => void
 }) {
+  const t = useT()
   const qc = useQueryClient()
   // 订阅判别统一口径（20260918 智者 R5 对齐）：桌面兜底也走 subscriptionLayerFilter
   const { data: subs = [] } = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions })
@@ -768,33 +787,33 @@ export function ColorEntryDialog({
 
   // 按 mode 分组：打卡（solid）/ 完成度（graded + 内置 coloring）/ 关联（tag）
   const grouped: { label: string; items: typeof colorLayers }[] = [
-    { label: '习惯打卡', items: colorLayers.filter((l) => {
+    { label: t('dialogs.colorEntry.group.habit'), items: colorLayers.filter((l) => {
         if (l.layer_id === 'coloring') return false
         const m = (l.config as Record<string, unknown>)?.mode as string | undefined
         return m === 'solid' || !m
       }) },
-    { label: '工作完成度', items: colorLayers.filter((l) => {
+    { label: t('dialogs.colorEntry.group.progress'), items: colorLayers.filter((l) => {
         if (l.layer_id === 'coloring') return true
         const m = (l.config as Record<string, unknown>)?.mode as string | undefined
         return m === 'graded'
       }) },
-    { label: '关联涂色', items: colorLayers.filter((l) => {
+    { label: t('dialogs.colorEntry.group.linked'), items: colorLayers.filter((l) => {
         const m = (l.config as Record<string, unknown>)?.mode as string | undefined
         return m === 'tag'
       }) },
   ]
 
   return (
-    <Modal title={`新增涂色 ${date}`} onClose={onClose} width={440}>
+    <Modal title={t('dialogs.colorEntry.titleWithDate', { date })} onClose={onClose} width={440}>
       <div className="flex flex-col gap-3">
-        <Field label="选择涂色图层">
+        <Field label={t('dialogs.colorEntry.pickLayer')}>
           <select className="tt-input" value={targetLayer} onChange={(e) => setTargetLayer(e.target.value)}>
             {grouped.map((g) =>
               g.items.length > 0 ? (
                 <optgroup key={g.label} label={g.label}>
                   {g.items.map((l) => (
                     <option key={l.layer_id} value={l.layer_id}>
-                      {l.display_name}{l.enabled ? '' : '（隐藏）'}
+                      {layerLabel(t, l.layer_id, l.display_name)}{l.enabled ? '' : t('dialogs.hiddenSuffix')}
                     </option>
                   ))}
                 </optgroup>
@@ -804,7 +823,7 @@ export function ColorEntryDialog({
         </Field>
 
         {isColoring ? (
-          <Field label="充实度档位">
+          <Field label={t('dialogs.colorEntry.levelFullness')}>
             <div className="grid grid-cols-5 gap-2">
               {COLORING_COLORS.map((c, i) => (
                 <button
@@ -813,13 +832,13 @@ export function ColorEntryDialog({
                   style={{ backgroundColor: c }}
                   className={clsx('h-12 rounded-lg text-xs font-medium', i >= 3 ? 'text-white' : 'text-gray-700', level === i && 'ring-2 ring-pink-500')}
                 >
-                  {COLORING_LABELS[i]}
+                  {t(COLORING_LEVEL_KEYS[i])}
                 </button>
               ))}
             </div>
           </Field>
         ) : isGraded && palette ? (
-          <Field label="档位">
+          <Field label={t('dialogs.colorEntry.level')}>
             <div className="grid grid-cols-5 gap-2">
               {palette.map((c, i) => (
                 <button
@@ -832,27 +851,27 @@ export function ColorEntryDialog({
             </div>
           </Field>
         ) : (
-          <Field label="图层颜色（固定）">
+          <Field label={t('dialogs.colorEntry.fixedColor')}>
             <div className="flex items-center gap-2">
               <span
                 className="w-8 h-8 rounded-lg flex-shrink-0"
                 style={{ backgroundColor: targetCfg?.color ?? '#9ca3af' }}
               />
               <p className="text-[11px] text-gray-400">
-                标记将使用图层预设颜色，不可在此修改。如需改色请到设置页编辑图层。
+                {t('dialogs.colorEntry.fixedColorHint')}{t('dialogs.colorEntry.fixedColorHintMore')}
               </p>
             </div>
           </Field>
         )}
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
+          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">{t('common.cancel')}</button>
           <button
             onClick={() => saveMut.mutate()}
             disabled={saveMut.isPending}
             className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
           >
-            标记
+            {t('dialogs.colorEntry.mark')}
           </button>
         </div>
       </div>
