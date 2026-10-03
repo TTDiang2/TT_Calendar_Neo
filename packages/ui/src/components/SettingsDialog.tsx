@@ -11,7 +11,7 @@ import {
   type SyncResult,
 } from '../adapt/api'
 import type { Layer } from '../adapt/types'
-import { LANGS, LANG_META, chooseLang, useLang, useT, type Lang } from '../i18n'
+import { LANGS, LANG_META, chooseLang, useLang, useT, useTPlural, type I18n, type Lang } from '../i18n'
 
 interface Props {
   layers: Layer[]
@@ -52,13 +52,13 @@ export function SettingsDialog({ layers, onToggleLayer, onClose }: Props) {
   const customLayers = layers.filter((l) => l.layer_id.startsWith('custom_'))
 
   return (
-    <Modal title="设置" onClose={onClose} width={720}>
+    <Modal title={t('common.settings')} onClose={onClose} width={720}>
       <div className="flex flex-col gap-5">
         <LanguageSection />
         <section>
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">自定义图层</h3>
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('settings.layers.sectionTitle')}</h3>
           {customLayers.length === 0 ? (
-            <p className="text-sm text-gray-400">暂无自定义图层。可在日历左侧边栏点「新建图层」创建。</p>
+            <p className="text-sm text-gray-400">{t('settings.layers.empty')}</p>
           ) : (
             <div className="flex flex-col gap-1">
               {customLayers.map((l) => (
@@ -81,23 +81,23 @@ export function SettingsDialog({ layers, onToggleLayer, onClose }: Props) {
 }
 
 function PrivacySection() {
+  const t = useT()
   return (
     <section>
-      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">隐私政策</h3>
+      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('settings.privacy.sectionTitle')}</h3>
       <p className="text-sm text-gray-600 leading-relaxed">
-        你的数据完全属于你：全部数据保存在本设备本地，本应用不含广告与任何第三方追踪组件，不收集、不上传、不出售任何个人数据。
-        唯一可选的数据传输是「数据同步」——若你开启，数据仅在<b>你自己的 GitHub 私有仓库</b>与设备之间流动，开发者无法访问。
+        {t('settings.privacy.intro')} {t('settings.privacy.introSync')}
       </p>
       <details className="mt-2 text-sm">
-        <summary className="cursor-pointer text-pink-600 select-none hover:text-pink-700">查看完整政策</summary>
+        <summary className="cursor-pointer text-pink-600 select-none hover:text-pink-700">{t('settings.privacy.showFull')}</summary>
         <div className="mt-2 space-y-2 text-xs text-gray-500 leading-relaxed border border-gray-100 rounded-md p-3 bg-gray-50/60">
-          <p><b className="text-gray-600">一、我们不收集任何数据。</b>不含广告 SDK、不嵌入第三方统计/追踪组件；不请求位置、通讯录、照片、健康数据；不注册账号，不建立用户档案。</p>
-          <p><b className="text-gray-600">二、数据存储位置。</b>全部数据（事件、日程、待办、倒数日、涂色、配置）保存在设备本地（SQLite + 应用沙盒），离线可完整使用。小组件快照保存在设备本地的 App Group 共享容器，仅本设备的小组件扩展可读取。</p>
-          <p><b className="text-gray-600">三、唯一可选传输。</b>开启数据同步后，数据仅与你自己的 GitHub 私有仓库同步；认证 Token 仅存本机、永不上传；可随时停用或删除。不开启同步则不产生任何网络传输。</p>
-          <p><b className="text-gray-600">四、权限说明。</b>通知：仅在设置闹钟/每日提醒后弹本地通知；本地网络：仅连接局域网内电脑数据服务时使用。</p>
-          <p><b className="text-gray-600">五、数据删除。</b>卸载应用即删除设备数据；删除同步仓库即删除云端副本。我们没有任何服务器。</p>
+          <p><b className="text-gray-600">{t('settings.privacy.rule1Title')}</b>{t('settings.privacy.rule1Body')}</p>
+          <p><b className="text-gray-600">{t('settings.privacy.rule2Title')}</b>{t('settings.privacy.rule2Body')}</p>
+          <p><b className="text-gray-600">{t('settings.privacy.rule3Title')}</b>{t('settings.privacy.rule3Body')}</p>
+          <p><b className="text-gray-600">{t('settings.privacy.rule4Title')}</b>{t('settings.privacy.rule4Body')}</p>
+          <p><b className="text-gray-600">{t('settings.privacy.rule5Title')}</b>{t('settings.privacy.rule5Body')}</p>
           <p>
-            完整政策（含变更与联系方式）：
+            {t('settings.privacy.fullPolicyLine')}
             <a
               href="https://github.com/TTDiang2/TT_Calendar_Neo/blob/main/docs/PRIVACY.md"
               target="_blank"
@@ -115,6 +115,8 @@ function PrivacySection() {
 
 function BusyConfigSection() {
   const qc = useQueryClient()
+  const t = useT()
+  const tPlural = useTPlural()
   const { data: cfg } = useQuery({ queryKey: ['todoBusyConfig'], queryFn: getTodoBusyConfig, staleTime: 60_000 })
   const [local, setLocal] = useState<TodoBusyConfig | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -132,7 +134,7 @@ function BusyConfigSection() {
     onSuccess: (days) => {
       qc.invalidateQueries({ queryKey: ['todoBusyConfig'] })
       qc.invalidateQueries({ queryKey: ['view'] })
-      setMsg(`已保存并重算 ${days} 天的忙度快照`)
+      setMsg(tPlural('settings.busy.savedDays', days ?? 0))
     },
   })
 
@@ -154,26 +156,26 @@ function BusyConfigSection() {
 
   return (
     <section>
-      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">待办忙度</h3>
+      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('settings.busy.sectionTitle')}</h3>
       <p className="text-xs text-gray-400 mb-2">
-        预测层：未完成待办按「截止×5 + 计划×3 + 重要度 + 复杂度」加权，用于未来日期；实际层：勾选当天计分，用于过去日期。
+        {t('settings.busy.desc')}
       </p>
       {!local ? (
-        <p className="text-sm text-gray-400">加载中…</p>
+        <p className="text-sm text-gray-400">{t('common.loading')}</p>
       ) : (
         <div className="flex flex-col gap-3">
           <div className="flex gap-2">
-            <Field label="截止权重">
+            <Field label={t('settings.busy.fieldDue')}>
               <input type="number" step="0.5" className="tt-input w-full" value={local.weights.due_date}
                 onChange={(e) => setNum(['weights', 'due_date'], e.target.value)} />
             </Field>
-            <Field label="计划权重">
+            <Field label={t('settings.busy.fieldPlanned')}>
               <input type="number" step="0.5" className="tt-input w-full" value={local.weights.planned_date}
                 onChange={(e) => setNum(['weights', 'planned_date'], e.target.value)} />
             </Field>
           </div>
           <div className="flex gap-2">
-            <Field label="重要度 高/中/低">
+            <Field label={t('settings.busy.fieldImportance')}>
               <div className="flex gap-1">
                 {(['high', 'medium', 'low'] as const).map((k) => (
                   <input key={k} type="number" step="0.5" className="tt-input w-14" value={local.weights.importance[k]}
@@ -181,7 +183,7 @@ function BusyConfigSection() {
                 ))}
               </div>
             </Field>
-            <Field label="复杂度 高/中/低">
+            <Field label={t('settings.busy.fieldComplexity')}>
               <div className="flex gap-1">
                 {(['high', 'medium', 'low'] as const).map((k) => (
                   <input key={k} type="number" step="0.5" className="tt-input w-14" value={local.weights.complexity[k]}
@@ -190,10 +192,10 @@ function BusyConfigSection() {
               </div>
             </Field>
           </div>
-          <Field label="分档阈值（5 个）">
+          <Field label={t('settings.busy.fieldThresholds')}>
             <div className="flex gap-1">
-              {local.thresholds.map((t, i) => (
-                <input key={i} type="number" className="tt-input w-12" value={t}
+              {local.thresholds.map((th, i) => (
+                <input key={i} type="number" className="tt-input w-12" value={th}
                   onChange={(e) => {
                     const n = Number(e.target.value)
                     if (Number.isNaN(n)) return
@@ -205,10 +207,10 @@ function BusyConfigSection() {
             </div>
           </Field>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-gray-500 flex-shrink-0">预测层</span>
+            <span className="text-[11px] text-gray-500 flex-shrink-0">{t('settings.busy.predictLayer')}</span>
             <div className="flex gap-1">
               {local.predict_colors.map((c, i) => (
-                <input key={i} type="color" value={c} title={`档位 ${i + 1}`}
+                <input key={i} type="color" value={c} title={t('settings.busy.levelTitle', { n: i + 1 })}
                   onChange={(e) => {
                     const next = structuredClone(local)
                     next.predict_colors[i] = e.target.value
@@ -218,10 +220,10 @@ function BusyConfigSection() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-gray-500 flex-shrink-0">实际层</span>
+            <span className="text-[11px] text-gray-500 flex-shrink-0">{t('settings.busy.actualLayer')}</span>
             <div className="flex gap-1">
               {local.done_colors.map((c, i) => (
-                <input key={i} type="color" value={c} title={`档位 ${i + 1}`}
+                <input key={i} type="color" value={c} title={t('settings.busy.levelTitle', { n: i + 1 })}
                   onChange={(e) => {
                     const next = structuredClone(local)
                     next.done_colors[i] = e.target.value
@@ -236,7 +238,7 @@ function BusyConfigSection() {
               disabled={saveMut.isPending}
               className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
-              {saveMut.isPending ? '保存中…' : '保存并重算'}
+              {saveMut.isPending ? t('settings.saving') : t('settings.busy.save')}
             </button>
             {msg && <span className="text-sm text-green-600">{msg}</span>}
           </div>
@@ -246,12 +248,16 @@ function BusyConfigSection() {
   )
 }
 
-function reportText(r: SyncResult): string {
-  return `拉取 ${r.pulled ?? 0} · 推送 ${r.pushed ?? 0} · 冲突 ${r.conflicts ?? 0} · 删除 ${r.deleted ?? 0}` + (r.warning ? `（${r.warning}）` : '')
+/** 非 React 工具函数：t 由调用方传入（规范 §0） */
+function reportText(t: I18n['t'], r: SyncResult): string {
+  return t('settings.sync.report', {
+    pulled: r.pulled ?? 0, pushed: r.pushed ?? 0, conflicts: r.conflicts ?? 0, deleted: r.deleted ?? 0,
+  }) + (r.warning ? t('settings.sync.reportWarning', { warning: r.warning }) : '')
 }
 
 function ReminderConfigSection() {
   const qc = useQueryClient()
+  const t = useT()
   const { data: cfg } = useQuery({
     queryKey: ['todoReminderConfig'],
     queryFn: getTodoReminderConfig,
@@ -273,17 +279,17 @@ function ReminderConfigSection() {
   if (!local) {
     return (
       <section>
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">每日提醒</h3>
-        <p className="text-sm text-gray-400">加载中…</p>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('settings.reminder.sectionTitle')}</h3>
+        <p className="text-sm text-gray-400">{t('common.loading')}</p>
       </section>
     )
   }
 
   return (
     <section>
-      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">每日提醒</h3>
+      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('settings.reminder.sectionTitle')}</h3>
       <p className="text-xs text-gray-400 mb-2">
-        到了设定时间，若今日仍有计划未完成的待办，应用顶部会出现一条安静横幅。默认关。
+        {t('settings.reminder.desc')}
       </p>
       <div className="flex items-center gap-3">
         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -294,9 +300,9 @@ function ReminderConfigSection() {
             disabled={saveMut.isPending}
             className="rounded border-gray-300 text-pink-500 focus:ring-pink-400"
           />
-          <span className="text-sm text-gray-700">启用每日提醒</span>
+          <span className="text-sm text-gray-700">{t('settings.reminder.enable')}</span>
         </label>
-        <Field label="提醒时间">
+        <Field label={t('settings.reminder.fieldTime')}>
           <input
             type="time"
             value={local.time}
@@ -315,6 +321,8 @@ function ReminderConfigSection() {
 
 function SyncConfigSection() {
   const qc = useQueryClient()
+  const t = useT()
+  const tPlural = useTPlural()
   const { data: cfg } = useQuery({ queryKey: ['syncConfig'], queryFn: getSyncConfig })
   const { data: status } = useQuery({ queryKey: ['syncStatus'], queryFn: getSyncStatus })
   const [repo, setRepo] = useState('')
@@ -347,7 +355,7 @@ function SyncConfigSection() {
       await persist()
       setToken('')
       qc.invalidateQueries({ queryKey: ['syncConfig'] })
-      setMsg({ ok: true, text: '已保存' })
+      setMsg({ ok: true, text: t('settings.sync.savedMsg') })
     } catch (e) { setMsg({ ok: false, text: String(e) }) } finally { setBusy(null) }
   }
 
@@ -369,9 +377,9 @@ function SyncConfigSection() {
       if (r.result === 'needs_decision') {
         setDecision(r.remote_rows ?? 0)
       } else if (r.result === 'initialized') {
-        setMsg({ ok: true, text: `首次初始化完成：已上传 ${r.pushed} 行` })
+        setMsg({ ok: true, text: tPlural('settings.sync.initDone', r.pushed ?? 0) })
       } else {
-        setMsg({ ok: true, text: reportText(r) })
+        setMsg({ ok: true, text: reportText(t, r) })
       }
       qc.invalidateQueries()
     } catch (e) { setMsg({ ok: false, text: String(e) }) } finally { setBusy(null) }
@@ -382,32 +390,32 @@ function SyncConfigSection() {
     try {
       const r = await resolveSync(mode)
       setDecision(null)
-      setMsg({ ok: true, text: `绑定完成：${reportText(r)}` })
+      setMsg({ ok: true, text: t('settings.sync.resolvedDone', { report: reportText(t, r) }) })
       qc.invalidateQueries()
     } catch (e) { setMsg({ ok: false, text: String(e) }) } finally { setBusy(null) }
   }
 
   const lastLine = status?.at
-    ? `${status.ok ? '✓' : '⚠'} 上次同步 ${status.at.slice(11, 19)}`
-    : '尚未同步过'
+    ? t(status.ok ? 'settings.sync.lastSyncOk' : 'settings.sync.lastSyncWarn', { time: status.at.slice(11, 19) })
+    : t('settings.sync.lastSyncNever')
 
   return (
     <section>
-      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">数据同步</h3>
+      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('settings.sync.sectionTitle')}</h3>
       <p className="text-xs text-gray-400 mb-2">
-        通过你的 GitHub 私有仓库在多台设备间同步全部数据（图层、事件、日程、待办、倒数日、涂色）。数据明文存于你的私有仓库；PAT 仅保存在本机数据库（同步私有键，不进入同步快照），永不上传。配置步骤见 docs/SYNC_SETUP.md。
+        {t('settings.sync.desc')}
       </p>
       {decision !== null && (
         <div className="mb-3 p-3 rounded-md bg-amber-50 border border-amber-200 text-sm">
-          <p className="mb-2">远端仓库已有 {decision} 行数据，本地是首次绑定。如何处理？</p>
+          <p className="mb-2">{tPlural('settings.sync.decisionPrompt', decision)}</p>
           <div className="flex gap-2">
             <button disabled={busy !== null} onClick={() => onResolve('merge_push')}
               className="px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40">
-              合并两边并上传（推荐）
+              {t('settings.sync.resolveMerge')}
             </button>
             <button disabled={busy !== null} onClick={() => onResolve('pull_overwrite')}
               className="px-3 py-1.5 text-sm bg-white border border-red-300 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-40">
-              用远端覆盖本地
+              {t('settings.sync.resolveOverwrite')}
             </button>
           </div>
         </div>
@@ -419,41 +427,41 @@ function SyncConfigSection() {
       )}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 w-20 flex-shrink-0">{status?.configured ? lastLine : '未配置'}</span>
+          <span className="text-xs text-gray-500 w-20 flex-shrink-0">{status?.configured ? lastLine : t('settings.sync.notConfigured')}</span>
         </div>
         <div className="flex gap-2">
-          <Field label="仓库（owner/repo）">
+          <Field label={t('settings.sync.fieldRepo')}>
             <input className="tt-input w-full" placeholder="TTDiang2/tt-calendar-data"
               value={repo} onChange={(e) => setRepo(e.target.value)} />
           </Field>
-          <Field label="分支">
+          <Field label={t('settings.sync.fieldBranch')}>
             <input className="tt-input w-24" value={branch} onChange={(e) => setBranch(e.target.value)} />
           </Field>
         </div>
-        <Field label={`PAT（${cfg?.has_token ? '已存储，留空则不修改' : 'fine-grained，见操作指引'}）`}>
+        <Field label={t('settings.sync.patLabel', { state: cfg?.has_token ? t('settings.sync.patStored') : t('settings.sync.patMissing') })}>
           <input type="password" className="tt-input w-full" placeholder={cfg?.has_token ? '••••••••' : 'github_pat_...'}
             value={token} onChange={(e) => setToken(e.target.value)} />
         </Field>
         <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
           <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
-          启动时自动同步一次
+          {t('settings.sync.autoOnStart')}
         </label>
         <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
           <input type="checkbox" checked={closeSync} onChange={(e) => setCloseSync(e.target.checked)} />
-          关闭前自动同步（点窗口 ✕ 时先同步再退出）
+          {t('settings.sync.syncOnClose')}
         </label>
         <div className="flex items-center gap-2">
           <button onClick={onSave} disabled={busy !== null || !repo}
             className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-40">
-            {busy === 'save' ? '保存中…' : '保存'}
+            {busy === 'save' ? t('settings.saving') : t('common.save')}
           </button>
           <button onClick={onTest} disabled={busy !== null || !repo || (!token && !cfg?.has_token)}
             className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-40">
-            {busy === 'test' ? '测试中…' : '测试连接'}
+            {busy === 'test' ? t('settings.sync.testing') : t('settings.sync.test')}
           </button>
           <button onClick={onSync} disabled={busy !== null || !repo || !cfg?.has_token}
             className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40">
-            {busy === 'sync' ? '同步中…' : '立即同步'}
+            {busy === 'sync' ? t('settings.sync.syncing') : t('settings.sync.syncNow')}
           </button>
           {msg && <span className={`text-sm ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>{msg.text}</span>}
         </div>
@@ -464,6 +472,7 @@ function SyncConfigSection() {
 
 function CustomLayerRow({ layer, onToggle }: { layer: Layer; onToggle: (id: string) => void }) {
   const qc = useQueryClient()
+  const t = useT()
   const [confirming, setConfirming] = useState(false)
   const delMut = useMutation({
     mutationFn: () => deleteLayer(layer.layer_id),
@@ -476,6 +485,7 @@ function CustomLayerRow({ layer, onToggle }: { layer: Layer; onToggle: (id: stri
   return (
     <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-50">
       <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: layer.color ?? '#9ca3af' }} />
+      {/* 图层名为用户数据（custom_* 无内置映射），原样渲染 */}
       <span className="flex-1 text-sm text-gray-700 truncate">{layer.display_name}</span>
       <button
         onClick={() => onToggle(layer.layer_id)}
@@ -497,13 +507,13 @@ function CustomLayerRow({ layer, onToggle }: { layer: Layer; onToggle: (id: stri
           onClick={() => delMut.mutate()}
           className="text-[11px] text-red-600 bg-red-50 px-2 py-0.5 rounded hover:bg-red-100"
         >
-          确认删除
+          {t('settings.layers.confirmDelete')}
         </button>
       ) : (
         <button
           onClick={() => setConfirming(true)}
           className="text-gray-300 hover:text-red-500 p-1"
-          title="删除图层（标记数据不会保留）"
+          title={t('settings.layers.deleteTitle')}
         >
           <Trash2 size={13} />
         </button>

@@ -7,6 +7,5 @@
   "apps/mobile/src/local/polyfills.ts",
   "apps/mobile/src/main.tsx",
   "apps/mobile/src/reminders.ts",
-  "apps/mobile/src/widget-bridge.ts",
-  "packages/ui/src/components/SettingsDialog.tsx"
+  "apps/mobile/src/widget-bridge.ts"
 ]
