@@ -4,7 +4,7 @@
  * 无 Provider 的测试环境回落到按 activeLang() 的惰性单例（非响应式，够用）。
  */
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react'
-import { activeLang, onLangChange } from './store'
+import { activeLang, hasChosenLang, onLangChange } from './store'
 import { makeI18n, type I18n } from './core'
 
 const I18nCtx = createContext<I18n | null>(null)
@@ -41,4 +41,9 @@ export function useTPlural(): I18n['tPlural'] {
 /** 当前语言（做 CJK 分档、日期 locale 时用）。 */
 export function useLang(): I18n['lang'] {
   return useI18n().lang
+}
+
+/** 是否已完成首次语言选择（响应式：chooseLang 后视图自动切到主界面）。 */
+export function useHasChosenLang(): boolean {
+  return useSyncExternalStore(onLangChange, hasChosenLang, () => hasChosenLang())
 }

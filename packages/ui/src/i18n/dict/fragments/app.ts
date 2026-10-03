@@ -52,6 +52,7 @@ export const app = {
     },
     /** 移动端统一新建 FAB（粉色加号）的 aria-label */
     fabNew: '新建',
+    startingDataServer: '正在启动数据服务…',
   },
   en: {
     modeShort: { countdown: 'Countdown' },
@@ -77,5 +78,6 @@ export const app = {
       milestones: 'Milestones (right sidebar)',
     },
     fabNew: 'New',
+    startingDataServer: 'Starting data service…',
   },
 } as const

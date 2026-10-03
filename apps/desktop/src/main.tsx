@@ -2,7 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider, QueryErrorResetBoundary } from '@tanstack/react-query'
 import '@tt-calendar/ui/index.css'
-import { App, setBackend, createHttpBackend } from '@tt-calendar/ui'
+import { App, setBackend, createHttpBackend, makeI18n, activeLang } from '@tt-calendar/ui'
 import { ErrorBoundary } from '@tt-calendar/ui/components/ErrorBoundary'
 
 // 桌面端：数据由 Node sidecar 提供，端口 8767（刻意避开 web 预览的 8766）。
@@ -39,8 +39,8 @@ async function waitForDataServer(): Promise<boolean> {
 }
 
 const root = document.getElementById('root')!
-root.innerHTML =
-  '<div class="flex h-screen items-center justify-center text-sm text-gray-500">正在启动数据服务…</div>'
+// React 挂载前的启动占位：无 hook 可用，直接用非 React 入口按当前语言组装
+root.innerHTML = `<div class="flex h-screen items-center justify-center text-sm text-gray-500">${makeI18n(activeLang()).t('app.startingDataServer')}</div>`
 
 waitForDataServer().then((ready) => {
   root.innerHTML = ''

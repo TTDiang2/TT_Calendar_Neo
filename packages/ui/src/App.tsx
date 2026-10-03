@@ -21,8 +21,9 @@ import { WidgetsView } from './components/WidgetsView'
 import { BottomTabBar, type DockGestureState } from './components/BottomTabBar'
 import { animDrawerIn, animEnter, animSheetUp, animSlideDirection, animSpringBack } from './anim'
 import { useSwipeTabs } from './hooks/useSwipeNav'
-import { useT, useLang, fmtDate, fmtMonthName } from './i18n'
+import { useT, useLang, fmtDate, fmtMonthName, I18nProvider, useHasChosenLang } from './i18n'
 import type { TxKey } from './i18n'
+import { LanguagePickerScreen } from './components/LanguagePickerScreen'
 // 协议常量（非文案）：旧 sidecar 并发同步报错的消息子串，见 fragments/app.ts 头部 TODO-REVIEW
 import { SYNC_IN_PROGRESS_MARK } from './i18n/dict/fragments/app'
 import {
@@ -229,7 +230,27 @@ function CalendarAddSheet(props: { date: string; onDot: () => void; onColor: () 
   )
 }
 
+/**
+ * App 出口壳：挂 I18nProvider（全树翻译上下文）+ 首启动语言选择页
+ * （20260930 本地化任务书：所有用户首次打开必须先选语言；选择后进入主界面，
+ * 之后可在设置里改）。三端（desktop/web/mobile）共用本出口，无需各自装配。
+ */
 export default function App() {
+  return (
+    <I18nProvider>
+      <AppGate />
+    </I18nProvider>
+  )
+}
+
+/** 选择门：未确认语言 → 语言选择页；确认 → 主界面 */
+function AppGate() {
+  const chosen = useHasChosenLang()
+  if (!chosen) return <LanguagePickerScreen />
+  return <AppInner />
+}
+
+function AppInner() {
   const t = useT()
   const lang = useLang()
   // 初始锚点 = 当前月（不能硬编码：三端冷启动都会落在写死的月份上，

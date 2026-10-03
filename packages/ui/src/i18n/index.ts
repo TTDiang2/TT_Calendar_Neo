@@ -14,7 +14,7 @@ export {
   onLangChange,
 } from './store'
 export { fmtDate, fmtWeekday, fmtMonthName, fmtNumber, fmtRelativeDays } from './format'
-export { I18nProvider, useI18n, useT, useTPlural, useLang } from './runtime'
+export { I18nProvider, useI18n, useT, useTPlural, useLang, useHasChosenLang } from './runtime'
 export type { TxKey, PluralKey } from './keys'
 export { DICTS } from './dict/index'
 export type { Dict } from './dict/zh-CN'
