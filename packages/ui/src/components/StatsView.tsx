@@ -32,6 +32,9 @@ import {
 import clsx from 'clsx'
 import { getStatsSummary, getTodoLists, getTodos } from '../adapt/api'
 import { TODO_BUSY_PREDICT_COLORS, todayStr } from '../adapt/data'
+import { layerLabel } from '../adapt/layerLabel'
+import { useT, useTPlural, useLang, fmtDate, fmtNumber, fmtWeekday } from '../i18n'
+import type { I18n, Lang, TxKey } from '../i18n'
 import { animCountUp, animGrowBars, animDrawerIn, animRing, animStaggerChildren } from '../anim'
 
 const SEGMENT_COLORS = [
@@ -39,24 +42,32 @@ const SEGMENT_COLORS = [
   '#14B8A6', '#F59E0B', '#6366F1', '#EF4444', '#64748B',
 ]
 
-const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+// 英雄卡滚动数字的哨兵占位：译文里 {n} 标出数字位，组件取回译文后按哨兵拆成
+// 前后两段，把滚动数字节点嵌回原位（整句一个 key，各语言词序可译；数字位不能
+// 直接插值——animCountUp 会整节点覆写 textContent）
+const COUNT_UP_SENTINEL = '\u0000'
 
 // 贡献图配色：完成次数用 GitHub 绿系（20260917 起热力图只有这一个口径）
 const DONE_HEAT_COLORS = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']
 
-// 累计完成里程碑阶梯（称号, 门槛）
-const MILESTONES: { title: string; at: number }[] = [
-  { title: '初试身手', at: 10 },
-  { title: '渐入佳境', at: 50 },
-  { title: '百炼成钢', at: 100 },
-  { title: '身经百战', at: 250 },
-  { title: '千锤百炼', at: 1000 },
-  { title: '二千斩', at: 2000 },
-  { title: '待办传奇', at: 5000 },
+// 累计完成里程碑阶梯（门槛是数据口径留在代码；称号/达成描述在 stats 命名空间字典）
+const MILESTONES: { titleKey: TxKey; descKey: TxKey; at: number }[] = [
+  { titleKey: 'stats.milestone.first.title', descKey: 'stats.milestone.first.desc', at: 10 },
+  { titleKey: 'stats.milestone.second.title', descKey: 'stats.milestone.second.desc', at: 50 },
+  { titleKey: 'stats.milestone.hundred.title', descKey: 'stats.milestone.hundred.desc', at: 100 },
+  { titleKey: 'stats.milestone.battleHardened.title', descKey: 'stats.milestone.battleHardened.desc', at: 250 },
+  { titleKey: 'stats.milestone.thousand.title', descKey: 'stats.milestone.thousand.desc', at: 1000 },
+  { titleKey: 'stats.milestone.twoThousand.title', descKey: 'stats.milestone.twoThousand.desc', at: 2000 },
+  { titleKey: 'stats.milestone.legend.title', descKey: 'stats.milestone.legend.desc', at: 5000 },
 ]
 
 function fmt(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** 清单显示名：内置图层走 layerLabel（内置 ID 显示译文，用户改名原样）；存储名缺失兜底「未命名清单」 */
+function listLabel(t: I18n['t'], listId: string, name: string | undefined): string {
+  return name != null ? layerLabel(t, listId, name) : t('stats.scope.unnamedList')
 }
 
 /** 连续完成天数（当前 streak 允许「今天还没完成」从昨天起算；longest 为历史最长） */
@@ -83,11 +94,11 @@ function computeStreaks(dates: string[]): { current: number; longest: number } {
   return { current, longest }
 }
 
-function fmtRangeLabel(dates: string[]): string {
+/** 柱状图窗口的日期区间标尺：MM/DD 由 Intl 产出（规范 §3，不手拼日期串） */
+function fmtRangeLabel(dates: string[], lang: Lang): string {
   if (dates.length === 0) return ''
-  const head = dates[0]!.slice(5).replace('-', '/')
-  const tail = dates[dates.length - 1]!.slice(5).replace('-', '/')
-  return dates.length === 1 ? head : `${head} - ${tail}`
+  const label = (s: string) => fmtDate(lang, new Date(s + 'T00:00:00'), { month: '2-digit', day: '2-digit' })
+  return dates.length === 1 ? label(dates[0]!) : `${label(dates[0]!)} - ${label(dates[dates.length - 1]!)}`
 }
 
 export function StatsView({
@@ -105,6 +116,10 @@ export function StatsView({
   onMilestonesOpenChange: (open: boolean) => void
   onOpenSettings?: () => void
 }) {
+  // i18n hooks 与其余 hook 一样必须挂在早退之前（本文件曾有 hooks 顺序事故，见文件头）
+  const t = useT()
+  const tPlural = useTPlural()
+  const lang = useLang()
   // 统计范围（左侧边栏决定；持久化，桌面同一份逻辑）
   const [scopeList, setScopeList] = useState<string | null>(() => localStorage.getItem('stats_scope'))
   const setScope = (id: string | null) => {
@@ -165,7 +180,7 @@ export function StatsView({
   }, [data])
 
   const currentMilestone = useMemo(() => {
-    let cur = { title: '初出茅庐', at: 0 }
+    let cur: { titleKey: TxKey; at: number } = { titleKey: 'stats.milestone.rookie', at: 0 }
     for (const m of MILESTONES) if ((data?.stats.completed ?? 0) >= m.at) cur = m
     return cur
   }, [data])
@@ -246,12 +261,12 @@ export function StatsView({
       .sort((a, b) => b[1] - a[1])
       .map(([listId, count], i) => ({
         listId,
-        name: data.list_names[listId] ?? '未命名清单',
+        name: listLabel(t, listId, data.list_names[listId]),
         count,
         pct: total > 0 ? count / total : 0,
         color: SEGMENT_COLORS[i % SEGMENT_COLORS.length]!,
       }))
-  }, [data])
+  }, [data, t])
 
   // 洞察推演必须在 early-return 之前挂 hook（智者 P0：hooks 顺序恒定，
   // 否则 loading→data 切换时 React 抛「Rendered more hooks than during the previous render」）
@@ -263,10 +278,12 @@ export function StatsView({
   const weekDone = useMemo(() => daily.slice(0, 7).reduce((s, d) => s + d.count, 0), [daily])
 
   if (isLoading || !data) {
-    return <main className="flex-1 flex items-center justify-center text-gray-400">加载中…</main>
+    return <main className="flex-1 flex items-center justify-center text-gray-400">{t('common.loading')}</main>
   }
 
-  const scopeName = scopeList ? data.list_names[scopeList] ?? '未命名清单' : '全部清单'
+  const scopeName = scopeList ? listLabel(t, scopeList, data.list_names[scopeList]) : t('stats.scope.allLists')
+  // 英雄卡副标题：完成数是滚动数字节点，按哨兵取译文前后段（见 COUNT_UP_SENTINEL 注释）
+  const heroDoneParts = t('stats.milestone.heroDone', { n: COUNT_UP_SENTINEL }).split(COUNT_UP_SENTINEL)
 
   // 面板内容（桌面常驻栏 / 手机抽屉共用同一份 JSX）。
   // 20260917 智者 P2-17 按任务书 1.1-11 原意重构：清单范围降级为顶部一行 chips
@@ -275,7 +292,7 @@ export function StatsView({
   const scopePanel = (
     <div className="flex flex-col flex-1 min-h-0">
       {/* 范围：一行可换行的 chips（降级为次要控件） */}
-      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-1.5">统计范围</p>
+      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-1.5">{t('stats.scope.label')}</p>
       <div className="flex flex-wrap gap-1.5 mb-5">
         <button
           onClick={() => setScope(null)}
@@ -284,7 +301,7 @@ export function StatsView({
             scopeList === null ? 'bg-pink-500 border-pink-500 text-white shadow-sm' : 'bg-white/70 border-black/10 text-gray-600',
           )}
         >
-          全部
+          {t('common.all')}
         </button>
         {lists.map((l) => (
           <button
@@ -295,43 +312,44 @@ export function StatsView({
               scopeList === l.id ? 'bg-pink-500 border-pink-500 text-white shadow-sm' : 'bg-white/70 border-black/10 text-gray-600',
             )}
           >
-            {l.display_name}
+            {/* 图层显示名走 layerLabel（内置 ID 显示译文，用户改名原样；规范 §5） */}
+            {layerLabel(t, l.id, l.display_name)}
           </button>
         ))}
       </div>
 
       {/* 洞察（主体）：六张大数字卡 */}
-      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-2">洞察</p>
+      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-2">{t('stats.scope.insights')}</p>
       <div className="grid grid-cols-2 gap-2.5">
         <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
-          <p className="text-[11px] text-gray-400 flex items-center gap-1"><CheckCircle2 size={12} /> 累计完成</p>
-          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">{data.stats.completed}</p>
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><CheckCircle2 size={12} /> {t('stats.insight.doneTotal')}</p>
+          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">{fmtNumber(lang, data.stats.completed)}</p>
         </div>
         <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
-          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Flame size={12} /> 连续 / 最长</p>
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Flame size={12} /> {t('stats.insight.streak')}</p>
           <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">
-            {streaks.current}<span className="text-sm text-gray-400"> / {streaks.longest} 天</span>
+            {fmtNumber(lang, streaks.current)}<span className="text-sm text-gray-400">{tPlural('stats.insight.streakDays', streaks.longest)}</span>
           </p>
         </div>
         <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
-          <p className="text-[11px] text-gray-400 flex items-center gap-1"><BarChart3 size={12} /> 日均（30天）</p>
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><BarChart3 size={12} /> {t('stats.insight.dailyAvg')}</p>
           <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">
-            {(daily.slice(0, 30).reduce((s, d) => s + d.count, 0) / 30).toFixed(1)}
+            {fmtNumber(lang, Math.round((daily.slice(0, 30).reduce((s, d) => s + d.count, 0) / 30) * 10) / 10)}
           </p>
         </div>
         <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
-          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Trophy size={12} /> 完成率</p>
-          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">{Math.round(doneRate * 100)}%</p>
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Trophy size={12} /> {t('stats.insight.doneRate')}</p>
+          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">{fmtNumber(lang, Math.round(doneRate * 100))}%</p>
         </div>
         <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
-          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Flame size={12} /> 本周完成</p>
-          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">{weekDone}</p>
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Flame size={12} /> {t('stats.insight.weekDone')}</p>
+          <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">{fmtNumber(lang, weekDone)}</p>
         </div>
         <div className="rounded-2xl bg-white/80 border border-black/5 px-3.5 py-3">
-          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Inbox size={12} /> 最佳单日</p>
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Inbox size={12} /> {t('stats.insight.bestDay')}</p>
           <p className="text-2xl font-bold text-gray-800 tabular-nums mt-1">
-            {bestDay.count}
-            {bestDay.date && <span className="text-sm text-gray-400"> · {bestDay.date.slice(5)}</span>}
+            {fmtNumber(lang, bestDay.count)}
+            {bestDay.date && <span className="text-sm text-gray-400">{t('stats.insight.bestDayDate', { date: bestDay.date.slice(5) })}</span>}
           </p>
         </div>
       </div>
@@ -341,31 +359,23 @@ export function StatsView({
           onClick={onOpenSettings}
           className="mt-auto flex items-center gap-2 px-2 py-3 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl transition-colors"
         >
-          <Settings size={16} className="text-gray-400" /> 设置
+          <Settings size={16} className="text-gray-400" /> {t('common.settings')}
         </button>
       )}
     </div>
   )
 
   // 里程碑成就墙（20260917 任务书 1.1-11：更丰满的阶梯——勋章位阶、达成描述、
-  // 进度数字、下一枚提示，铺满抽屉而不是一列干巴巴的标题）
-  const milestoneMeta: Record<string, string> = {
-    初试身手: '完成头 10 项待办，体系开始转起来',
-    渐入佳境: '50 项达成，计划-执行的习惯已经成形',
-    百炼成钢: '百项俱乐部：你已经能稳定交付',
-    身经百战: '250 项，执行力进入熟练区',
-    千锤百炼: '千项里程碑，长期主义的复利看得见',
-    二千斩: '两千斩达成，日历上全是你的足迹',
-    待办传奇: '五千项，传奇就是你本人',
-  }
+  // 进度数字、下一枚提示，铺满抽屉而不是一列干巴巴的标题）。
+  // 位阶称号/达成描述在 stats.milestone.* 字典（MILESTONES 携带 key）。
   const milestonesPanel = (
     <div className="flex flex-col gap-2.5">
       {/* 当前位阶英雄条 */}
       <div className="rounded-2xl p-4 text-white bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 shadow-md shadow-orange-400/30">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/80">当前位阶</p>
-        <p className="text-xl font-bold mt-0.5">{currentMilestone.title}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/80">{t('stats.milestone.currentRank')}</p>
+        <p className="text-xl font-bold mt-0.5">{t(currentMilestone.titleKey)}</p>
         <p className="text-xs text-white/85 mt-1">
-          累计 {data.stats.completed} 项 · 连续 {streaks.current} 天
+          {t('stats.milestone.heroLine', { n: data.stats.completed, m: streaks.current })}
         </p>
       </div>
 
@@ -374,7 +384,7 @@ export function StatsView({
         const remain = Math.max(0, m.at - data.stats.completed)
         return (
           <div
-            key={m.title}
+            key={m.titleKey}
             className={clsx(
               'rounded-2xl border p-3.5 transition',
               m.reached
@@ -385,14 +395,14 @@ export function StatsView({
             <div className="flex items-center justify-between gap-2">
               <span className={clsx('text-[15px] font-bold flex items-center gap-1.5', m.reached ? 'text-amber-700' : 'text-gray-500')}>
                 <span className="text-base">{medal ?? '🔒'}</span>
-                {m.title}
+                {t(m.titleKey)}
               </span>
               <span className={clsx('text-[11px] tabular-nums flex-shrink-0', m.reached ? 'text-amber-600 font-semibold' : 'text-gray-400')}>
-                {m.reached ? '已达成' : `${data.stats.completed} / ${m.at}`}
+                {m.reached ? t('stats.milestone.reached') : `${fmtNumber(lang, data.stats.completed)} / ${fmtNumber(lang, m.at)}`}
               </span>
             </div>
             <p className="text-[11px] text-gray-400 mt-1 leading-snug">
-              {m.reached ? milestoneMeta[m.title] ?? `累计完成 ${m.at} 项` : `${milestoneMeta[m.title] ?? `累计完成 ${m.at} 项`} · 还差 ${remain} 项`}
+              {m.reached ? t(m.descKey) : tPlural('stats.milestone.lockedDesc', remain, { desc: t(m.descKey) })}
             </p>
             <div className="h-2 rounded-full bg-black/5 overflow-hidden mt-2.5">
               <div
@@ -413,7 +423,7 @@ export function StatsView({
     <div className="flex-1 flex overflow-hidden min-w-0">
       {/* 桌面（md+）：常驻左栏 = 统计范围（与手机抽屉同一份内容，20260916 审核项 A） */}
       <aside className="hidden md:flex w-60 bg-white/55 border-r border-white/60 p-3 overflow-y-auto flex-col flex-shrink-0">
-        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-1">统计范围</h2>
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-1">{t('stats.scope.label')}</h2>
         {scopePanel}
       </aside>
       <main className="flex-1 flex flex-col overflow-y-auto min-w-0">
@@ -424,11 +434,11 @@ export function StatsView({
           <div className="relative flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium uppercase tracking-widest text-white/70 flex items-center gap-1.5">
-                <Trophy size={13} /> 里程碑 · {scopeName}
+                <Trophy size={13} /> {t('stats.milestone.heroScope', { name: scopeName })}
               </p>
-              <h2 className="text-2xl md:text-3xl font-bold mt-1 drop-shadow-sm">{currentMilestone.title}</h2>
+              <h2 className="text-2xl md:text-3xl font-bold mt-1 drop-shadow-sm">{t(currentMilestone.titleKey)}</h2>
               <p className="text-sm text-white/85 mt-1">
-                累计完成 <span ref={doneNumRef} className="text-xl font-bold tabular-nums">0</span> 项待办
+                {heroDoneParts[0]}<span ref={doneNumRef} className="text-xl font-bold tabular-nums">0</span>{heroDoneParts[1]}
               </p>
             </div>
             <svg width="64" height="64" viewBox="0 0 64 64" className="-rotate-90 flex-shrink-0 drop-shadow">
@@ -445,8 +455,8 @@ export function StatsView({
           {nextMilestone ? (
             <div className="relative mt-4">
               <div className="flex items-center justify-between text-[11px] text-white/85 mb-1">
-                <span>下一枚：{nextMilestone.title}</span>
-                <span className="tabular-nums">{data.stats.completed} / {nextMilestone.at}</span>
+                <span>{t('stats.milestone.next', { name: t(nextMilestone.titleKey) })}</span>
+                <span className="tabular-nums">{fmtNumber(lang, data.stats.completed)} / {fmtNumber(lang, nextMilestone.at)}</span>
               </div>
               {/* 进度条与右侧「已完成 / 下一枚阈值」同口径：总量占比。
                   此前用「阶段内占比」，115/250 的标注配 10% 的条，视觉自相矛盾
@@ -459,17 +469,17 @@ export function StatsView({
               </div>
             </div>
           ) : (
-            <p className="relative mt-4 text-sm text-white/90">已站上最高里程碑，传奇就是你自己 🏆</p>
+            <p className="relative mt-4 text-sm text-white/90">{t('stats.milestone.maxReached')}</p>
           )}
           <div className="relative mt-4 flex flex-wrap gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 backdrop-blur px-3 py-1.5 text-xs font-medium">
-              <Flame size={13} /> 连续 {streaks.current} 天
+              <Flame size={13} /> {tPlural('stats.chip.streak', streaks.current)}
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 backdrop-blur px-3 py-1.5 text-xs font-medium">
-              <CheckCircle2 size={13} /> 最长 {streaks.longest} 天
+              <CheckCircle2 size={13} /> {tPlural('stats.chip.longest', streaks.longest)}
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 backdrop-blur px-3 py-1.5 text-xs font-medium">
-              <ListTodo size={13} /> 待处理 {data.stats.incomplete}
+              <ListTodo size={13} /> {tPlural('stats.chip.pending', data.stats.incomplete)}
             </span>
           </div>
         </section>
@@ -477,30 +487,34 @@ export function StatsView({
         {/* ── 贡献热力图（GitHub 绿块风格，20260917 起只保留完成口径） ── */}
         <section className="glass-card rounded-3xl p-4 md:p-5 lg:col-span-2">
           <div className="flex items-center justify-between mb-3 gap-2">
-            <h3 className="text-sm font-semibold text-gray-700">贡献热力图</h3>
-            <span className="text-[11px] text-gray-400">近 26 周 · 每日完成</span>
+            <h3 className="text-sm font-semibold text-gray-700">{t('stats.heatmap.title')}</h3>
+            <span className="text-[11px] text-gray-400">{t('stats.heatmap.subtitle')}</span>
           </div>
           <Heatmap done={doneByDate} />
           <div className="flex items-center justify-end gap-1.5 mt-2 text-[10px] text-gray-400">
-            <span>少</span>
+            <span>{t('stats.heatmap.less')}</span>
             {DONE_HEAT_COLORS.map((c) => (
               <span key={c} className="w-2.5 h-2.5 rounded-[2px]" style={{ backgroundColor: c }} />
             ))}
-            <span>多</span>
+            <span>{t('stats.heatmap.more')}</span>
           </div>
         </section>
 
         {/* ── 忙度预测：未来 14 天 ── */}
         <section className="glass-card rounded-3xl p-4 md:p-5 lg:col-span-2">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">忙度预测 · 未来 14 天</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('stats.busy.title')}</h3>
           <div className="flex gap-1.5 overflow-x-auto pb-1">
             {busyPredict.map((b) => {
               const dt = new Date(b.date + 'T00:00:00')
               const today = todayStr()
               return (
-                <div key={b.date} className="flex flex-col items-center gap-1 flex-shrink-0 w-9" title={`${b.date}：${b.level != null ? `忙度 ${b.level + 1} 档` : '暂无预测'}`}>
+                <div
+                  key={b.date}
+                  className="flex flex-col items-center gap-1 flex-shrink-0 w-9"
+                  title={b.level != null ? t('stats.busy.dayTitle', { date: b.date, n: b.level + 1 }) : t('stats.busy.noTitle', { date: b.date })}
+                >
                   <span className={clsx('text-[9px]', b.date === today ? 'text-pink-600 font-semibold' : 'text-gray-400')}>
-                    {b.date === today ? '今天' : WEEKDAYS[dt.getDay()].slice(-1)}
+                    {b.date === today ? t('common.today') : fmtWeekday(lang, dt, 'narrow')}
                   </span>
                   <span
                     className={clsx(
@@ -519,7 +533,7 @@ export function StatsView({
         {/* ── 每日任务完成（保留） ── */}
         <section className="glass-card rounded-3xl p-4 md:p-5">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-semibold text-gray-700">每日任务完成</h3>
+            <h3 className="text-sm font-semibold text-gray-700">{t('stats.daily.title')}</h3>
             <div className="inline-flex rounded-full border border-gray-200 p-0.5 bg-gray-50">
               {([7, 14, 30] as const).map((n) => (
                 <button
@@ -530,7 +544,7 @@ export function StatsView({
                     windowSize === n ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
                   )}
                 >
-                  {n}天
+                  {t('stats.daily.window', { n })}
                 </button>
               ))}
             </div>
@@ -540,16 +554,16 @@ export function StatsView({
               onClick={() => setWindowOffset((o) => Math.min(o + windowSize, Math.max(0, 180 - windowSize)))}
               disabled={windowOffset + windowSize >= 180}
               className="p-1 rounded-md text-gray-400 hover:bg-gray-100 disabled:opacity-30 transition"
-              title="更早"
+              title={t('stats.daily.older')}
             >
               <ChevronLeft size={15} />
             </button>
-            <span className="text-[11px] text-gray-400 tabular-nums w-24 text-center">{fmtRangeLabel(windowDates.map((d) => d.date))}</span>
+            <span className="text-[11px] text-gray-400 tabular-nums w-24 text-center">{fmtRangeLabel(windowDates.map((d) => d.date), lang)}</span>
             <button
               onClick={() => setWindowOffset((o) => Math.max(0, o - windowSize))}
               disabled={windowOffset === 0}
               className="p-1 rounded-md text-gray-400 hover:bg-gray-100 disabled:opacity-30 transition"
-              title="更近"
+              title={t('stats.daily.newer')}
             >
               <ChevronRight size={15} />
             </button>
@@ -557,16 +571,16 @@ export function StatsView({
           {windowDates.every((d) => d.count === 0) ? (
             <div className="h-40 flex flex-col items-center justify-center gap-1 text-gray-300">
               <BarChart3 size={22} strokeWidth={1.5} className="opacity-50" />
-              <p className="text-xs">该时间窗内没有完成记录</p>
-              <p className="text-[11px]">换个更长的时间范围，或先去完成几个待办试试</p>
+              <p className="text-xs">{t('stats.daily.empty')}</p>
+              <p className="text-[11px]">{t('stats.daily.emptyHint')}</p>
             </div>
           ) : (
-            <div className="flex items-stretch gap-1.5 h-40" aria-label="每日完成任务数柱状图">
+            <div className="flex items-stretch gap-1.5 h-40" aria-label={t('stats.daily.chartAria')}>
               {windowDates.map((d, i) => {
                 const h = Math.max(4, (d.count / maxCount) * 100)
                 const dt = new Date(d.date + 'T00:00:00')
                 return (
-                  <div key={d.date} className="flex-1 flex flex-col items-center gap-1 min-w-0" title={`${d.date}：完成 ${d.count} 项`}>
+                  <div key={d.date} className="flex-1 flex flex-col items-center gap-1 min-w-0" title={tPlural('stats.doneOnDate', d.count, { date: d.date })}>
                     <div className="w-full flex-1 flex items-end justify-center min-h-0">
                       <div
                         ref={(el) => { if (el) barsRef.current[i] = el }}
@@ -574,7 +588,7 @@ export function StatsView({
                         style={{ height: `${h}%` }}
                       />
                     </div>
-                    {windowSize <= 14 && <span className="text-[9px] text-gray-400 truncate max-w-full">{WEEKDAYS[dt.getDay()].slice(-1)}</span>}
+                    {windowSize <= 14 && <span className="text-[9px] text-gray-400 truncate max-w-full">{fmtWeekday(lang, dt, 'narrow')}</span>}
                   </div>
                 )
               })}
@@ -585,11 +599,11 @@ export function StatsView({
         {/* ── 未完成任务分类（保留） ── */}
         <section className="glass-card rounded-3xl p-4 md:p-5">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-700">未完成任务分类</h3>
-            <span className="text-[11px] text-gray-400">{data.quadrant.length} 项未完成</span>
+            <h3 className="text-sm font-semibold text-gray-700">{t('stats.breakdown.title')}</h3>
+            <span className="text-[11px] text-gray-400">{tPlural('stats.breakdown.openCount', data.quadrant.length)}</span>
           </div>
           {segments.length === 0 ? (
-            <p className="text-sm text-gray-400 py-10 text-center">太棒了，没有未完成的任务 🎉</p>
+            <p className="text-sm text-gray-400 py-10 text-center">{t('stats.breakdown.empty')}</p>
           ) : (
             <div className="flex items-center gap-5">
               <svg width="110" height="110" viewBox="0 0 110 110" className="-rotate-90 flex-shrink-0">
@@ -626,24 +640,24 @@ export function StatsView({
 
         {/* ── 近期完成（保留） ── */}
         <section className="glass-card rounded-3xl p-4 md:p-5 lg:col-span-2">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">近期完成</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('stats.recent.title')}</h3>
           {recent.length === 0 ? (
-            <p className="text-sm text-gray-400 py-6 text-center">还没有已完成任务</p>
+            <p className="text-sm text-gray-400 py-6 text-center">{t('stats.recent.empty')}</p>
           ) : (
             <div className="flex flex-col gap-2.5">
-              {recent.map((t) => (
-                <div key={t.id} className="flex items-center gap-3 min-w-0">
+              {recent.map((item) => (
+                <div key={item.id} className="flex items-center gap-3 min-w-0">
                   <span
                     className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0"
                     role="img"
-                    aria-label="已完成"
+                    aria-label={t('stats.recent.doneAria')}
                   >
                     <CheckCircle2 size={12} className="text-white" />
                   </span>
-                  <span className="text-sm text-gray-700 truncate flex-1">{t.title}</span>
-                  {t.due_date && <span className="text-[11px] text-gray-300 flex-shrink-0 hidden sm:inline">截止 {t.due_date.slice(5)}</span>}
+                  <span className="text-sm text-gray-700 truncate flex-1">{item.title}</span>
+                  {item.due_date && <span className="text-[11px] text-gray-300 flex-shrink-0 hidden sm:inline">{t('stats.recent.due', { date: item.due_date.slice(5) })}</span>}
                   <span className="text-[11px] text-gray-400 tabular-nums flex-shrink-0">
-                    {(t.completed_at ?? '').slice(5, 16).replace('T', ' ')}
+                    {(item.completed_at ?? '').slice(5, 16).replace('T', ' ')}
                   </span>
                 </div>
               ))}
@@ -654,15 +668,15 @@ export function StatsView({
               onClick={onGoTodo}
               className="mt-3 text-xs text-pink-500 hover:text-pink-600 transition"
             >
-              共 {data.quadrant.length} 项未完成 · 去待办页处理 →
+              {tPlural('stats.recent.goTodo', data.quadrant.length)}
             </button>
           )}
         </section>
 
         {/* 待办四象限（桌面宽屏附加值） */}
         <section className="hidden lg:block glass-card rounded-3xl p-4 lg:col-span-2">
-          <h3 className="text-sm font-semibold text-gray-700 mb-1">待办四象限</h3>
-          <p className="text-[11px] text-gray-400 mb-2">横轴：到期紧迫度 → 纵轴：重要性 ↑（点 = 未完成待办）</p>
+          <h3 className="text-sm font-semibold text-gray-700 mb-1">{t('stats.quadrant.title')}</h3>
+          <p className="text-[11px] text-gray-400 mb-2">{t('stats.quadrant.axes')}</p>
           <Quadrant data={data} />
         </section>
       </div>
@@ -673,8 +687,8 @@ export function StatsView({
           <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={() => onScopeOpenChange(false)} />
           <div ref={scopeDrawerRef} className="glass-sheet absolute inset-y-0 left-0 w-[300px] max-w-[86vw] rounded-r-3xl p-3 pt-[max(0.75rem,env(safe-area-inset-top))] overflow-y-auto flex flex-col">
             <div className="flex items-center justify-between mb-2 pl-1">
-              <h2 className="text-base font-bold text-gray-800">统计与洞察</h2>
-              <button onClick={() => onScopeOpenChange(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl" aria-label="关闭">×</button>
+              <h2 className="text-base font-bold text-gray-800">{t('stats.drawer.title')}</h2>
+              <button onClick={() => onScopeOpenChange(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl" aria-label={t('common.close')}>×</button>
             </div>
             {scopePanel}
             <div className="pt-2">
@@ -682,7 +696,7 @@ export function StatsView({
                 onClick={() => onScopeOpenChange(false)}
                 className="w-full flex items-center gap-2 px-2 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl mb-1 transition-colors"
               >
-                <Check size={16} className="text-gray-400" /> 完成
+                <Check size={16} className="text-gray-400" /> {t('common.done')}
               </button>
             </div>
           </div>
@@ -697,9 +711,9 @@ export function StatsView({
           <aside ref={milestonesDrawerRef} className="glass-sheet absolute inset-y-0 right-0 w-[320px] max-w-[88vw] rounded-l-3xl p-4 pt-[max(0.75rem,env(safe-area-inset-top))] overflow-y-auto flex flex-col">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base font-bold text-gray-800 flex items-center gap-1.5">
-                <Trophy size={16} className="text-amber-400" /> 里程碑
+                <Trophy size={16} className="text-amber-400" /> {t('stats.milestone.wallTitle')}
               </h2>
-              <button onClick={() => onMilestonesOpenChange(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl" aria-label="关闭">×</button>
+              <button onClick={() => onMilestonesOpenChange(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl" aria-label={t('common.close')}>×</button>
             </div>
             {milestonesPanel}
           </aside>
@@ -711,7 +725,7 @@ export function StatsView({
       {/* 桌面（lg+）：常驻右栏 = 里程碑成就墙（断点对齐 DetailPanel 的右栏 lg 惯例） */}
       <aside className="hidden lg:flex w-72 bg-white/55 border-l border-white/60 p-3 overflow-y-auto flex-col flex-shrink-0">
         <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 px-1 flex items-center gap-1.5">
-          <Trophy size={13} className="text-amber-400" /> 里程碑
+          <Trophy size={13} className="text-amber-400" /> {t('stats.milestone.wallTitle')}
         </h2>
         {milestonesPanel}
       </aside>
@@ -731,6 +745,7 @@ function Heatmap({
   done: Map<string, number>
   weeks?: number
 }) {
+  const tPlural = useTPlural()
   const cells = useMemo(() => {
     const today = new Date()
     // 末列 = 本周（以今天收尾），向历史取 weeks*7 天，并对齐到周一开头
@@ -761,7 +776,8 @@ function Heatmap({
               const cell = col[ri]
               if (!cell) return <span key={ri} className="w-[10px] h-[10px]" />
               const color = DONE_HEAT_COLORS[quantize(cell.count)]!
-              const label = `${cell.date}：完成 ${cell.count} 项`
+              // date 为 YYYY-MM-DD 数据串原样插入（不含语言词，不译）
+              const label = tPlural('stats.doneOnDate', cell.count, { date: cell.date })
               return (
                 <span
                   key={ri}
@@ -780,6 +796,8 @@ function Heatmap({
 
 /** 四象限散点（桌面宽屏附加值，保留） */
 function Quadrant({ data }: { data: Awaited<ReturnType<typeof getStatsSummary>> }) {
+  const t = useT()
+  const tPlural = useTPlural()
   const IMPORTANCE_COLOR: Record<string, string> = { high: '#ef4444', normal: '#eab308', low: '#22c55e' }
   const points = data.quadrant.map((q) => {
     const days = q.days_to_due ?? 365
@@ -792,28 +810,36 @@ function Quadrant({ data }: { data: Awaited<ReturnType<typeof getStatsSummary>> 
       <div className="relative h-56 border border-gray-100 rounded-xl bg-gray-50/50">
         <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-200" />
         <div className="absolute top-1/2 left-0 right-0 h-px bg-gray-200" />
-        <span className="absolute top-1.5 left-2 text-[10px] text-red-400">紧急·重要</span>
-        <span className="absolute top-1.5 right-2 text-[10px] text-orange-400">不紧急·重要</span>
-        <span className="absolute bottom-1.5 left-2 text-[10px] text-yellow-500">紧急·次要</span>
-        <span className="absolute bottom-1.5 right-2 text-[10px] text-gray-400">不紧急·次要</span>
-        {points.map((p) => (
-          <div
-            key={p.id}
-            title={`${p.title}${p.days_to_due != null ? `（${p.days_to_due < 0 ? `已逾期${-p.days_to_due}天` : `${p.days_to_due}天后到期`}）` : '（无到期日）'}`}
-            className="absolute w-2.5 h-2.5 rounded-full -translate-x-1/2 -translate-y-1/2 border border-white shadow cursor-pointer"
-            style={{
-              left: `${(p.x * 85 + 7.5).toFixed(1)}%`,
-              top: `${(p.y * 78 + 8).toFixed(1)}%`,
-              backgroundColor: IMPORTANCE_COLOR[p.importance] ?? '#eab308',
-            }}
-          />
-        ))}
+        <span className="absolute top-1.5 left-2 text-[10px] text-red-400">{t('stats.quadrant.doNow')}</span>
+        <span className="absolute top-1.5 right-2 text-[10px] text-orange-400">{t('stats.quadrant.planIt')}</span>
+        <span className="absolute bottom-1.5 left-2 text-[10px] text-yellow-500">{t('stats.quadrant.delegate')}</span>
+        <span className="absolute bottom-1.5 right-2 text-[10px] text-gray-400">{t('stats.quadrant.drop')}</span>
+        {points.map((p) => {
+          // 到期子句三选一（全角括号随子句进字典，译文可用自己的括号风格；title 为用户数据原样）
+          const due = p.days_to_due == null
+            ? t('stats.quadrant.point.noDue')
+            : p.days_to_due < 0
+              ? tPlural('stats.quadrant.point.overdue', -p.days_to_due)
+              : tPlural('stats.quadrant.point.dueIn', p.days_to_due)
+          return (
+            <div
+              key={p.id}
+              title={t('stats.quadrant.point.title', { title: p.title, due })}
+              className="absolute w-2.5 h-2.5 rounded-full -translate-x-1/2 -translate-y-1/2 border border-white shadow cursor-pointer"
+              style={{
+                left: `${(p.x * 85 + 7.5).toFixed(1)}%`,
+                top: `${(p.y * 78 + 8).toFixed(1)}%`,
+                backgroundColor: IMPORTANCE_COLOR[p.importance] ?? '#eab308',
+              }}
+            />
+          )
+        })}
       </div>
       <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-400">
-        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full inline-block" style={{ background: '#ef4444' }} />高</span>
-        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full inline-block" style={{ background: '#eab308' }} />普通</span>
-        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full inline-block" style={{ background: '#22c55e' }} />低</span>
-        <span className="ml-auto flex items-center gap-1"><ListTodo size={10} />{points.length} 个未完成</span>
+        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full inline-block" style={{ background: '#ef4444' }} />{t('stats.quadrant.imp.high')}</span>
+        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full inline-block" style={{ background: '#eab308' }} />{t('stats.quadrant.imp.normal')}</span>
+        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full inline-block" style={{ background: '#22c55e' }} />{t('stats.quadrant.imp.low')}</span>
+        <span className="ml-auto flex items-center gap-1"><ListTodo size={10} />{tPlural('stats.quadrant.openCount', points.length)}</span>
       </div>
     </div>
   )
