@@ -9,6 +9,7 @@ import { en } from './en'
 import { ja } from './ja'
 import { ko } from './ko'
 import { fr } from './fr'
+import { zhHant } from './zh-Hant'
 
 export const DICTS: Partial<Record<string, Dict>> = {
   'zh-CN': zhCN,
@@ -16,4 +17,5 @@ export const DICTS: Partial<Record<string, Dict>> = {
   ja: ja as Dict,
   fr: fr as Dict,
   ko: ko as Dict,
+  'zh-Hant': zhHant as Dict,
 }
