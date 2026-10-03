@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import type { Todo } from '../../adapt/types'
-import { COMPLEXITY_LABELS, IMPORTANCE_LABELS, STATUS_LABELS, dueInDays } from '../../adapt/todoLogic'
+import { dueInDays } from '../../adapt/todoLogic'
+import { useT, useTPlural, type TxKey } from '../../i18n'
 
 // 状态点的颜色：看板/矩阵卡片元信息行用小圆点区分状态，比文字 badge 更紧凑
 const STATUS_DOT: Record<string, string> = {
@@ -24,6 +25,26 @@ const COMPLEXITY_CLS: Record<string, string> = {
   simple: 'text-emerald-600',
 }
 
+// 卡片级词表的 key 映射（zh 沿用 adapt 旧词表：等他人/高中低/困难·中等·简单，
+// 与列表行的 todo.status.* 措辞有意区分）。看板列头与甘特条 title 共用本表。
+export const CARD_STATUS_KEYS: Record<string, TxKey> = {
+  notStarted: 'todo.card.status.notStarted',
+  inProgress: 'todo.card.status.inProgress',
+  waitingOnOthers: 'todo.card.status.waitingOnOthers',
+  deferred: 'todo.card.status.deferred',
+  completed: 'todo.card.status.completed',
+}
+export const CARD_IMPORTANCE_KEYS: Record<string, TxKey> = {
+  high: 'todo.card.importance.high',
+  normal: 'todo.card.importance.normal',
+  low: 'todo.card.importance.low',
+}
+export const CARD_COMPLEXITY_KEYS: Record<string, TxKey> = {
+  hard: 'todo.card.complexity.hard',
+  medium: 'todo.card.complexity.medium',
+  simple: 'todo.card.complexity.simple',
+}
+
 function shortDate(d: string): string {
   // 元信息行空间有限，08-18 短格式够用；跨年任务罕见，若遇到保留原串
   return d.length >= 10 ? d.slice(5, 10) : d
@@ -36,6 +57,8 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
   onClick: () => void
   onToggle?: (done: boolean) => void
 }) {
+  const t = useT()
+  const tPlural = useTPlural()
   const done = todo.status === 'completed'
   const din = dueInDays(todo)
   const overdue = !done && din !== null && din < 0
@@ -54,7 +77,7 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
     >
       {onToggle && (
         <button
-          aria-label={done ? '标记为未完成' : '标记为已完成'}
+          aria-label={done ? t('todo.aria.markUndone') : t('todo.aria.markDone')}
           onClick={(e) => { e.stopPropagation(); onToggle(!done) }}
           className={clsx(
             'mt-0.5 w-4 h-4 rounded-full border flex-shrink-0 flex items-center justify-center cursor-pointer transition-colors duration-200',
@@ -76,11 +99,11 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
           <span className="flex flex-col items-end gap-0.5 flex-shrink-0">
             {overdue && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-medium whitespace-nowrap">
-                逾期 {-(din ?? 0)} 天
+                {tPlural('todo.card.overdueBy', -(din ?? 0))}
               </span>
             )}
             {dueToday && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">今天</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">{t('common.today')}</span>
             )}
           </span>
         </div>
@@ -90,14 +113,14 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
           <div className="mt-1 sm:hidden flex items-center gap-1.5 text-[10px] leading-none text-gray-500">
             <span className="flex items-center gap-0.5">
               <span className={clsx('w-1.5 h-1.5 rounded-full', STATUS_DOT[todo.status] ?? 'bg-gray-300')} />
-              {STATUS_LABELS[todo.status] ?? todo.status}
+              {CARD_STATUS_KEYS[todo.status] ? t(CARD_STATUS_KEYS[todo.status]) : todo.status}
             </span>
             <span className={clsx(IMPORTANCE_CLS[todo.importance] ?? '')}>
-              {IMPORTANCE_LABELS[todo.importance] ?? todo.importance}
+              {CARD_IMPORTANCE_KEYS[todo.importance] ? t(CARD_IMPORTANCE_KEYS[todo.importance]) : todo.importance}
             </span>
             {todo.due_date && (
               <span className={clsx('ml-auto truncate', overdue && 'text-red-600 font-medium')}>
-                {overdue ? `逾期 ${-(din ?? 0)} 天` : `截止 ${shortDate(todo.due_date)}`}
+                {overdue ? tPlural('todo.card.overdueBy', -(din ?? 0)) : t('todo.card.due', { date: shortDate(todo.due_date) })}
               </span>
             )}
           </div>
@@ -108,21 +131,21 @@ export function TodoMiniCard({ todo, selected, sub, onClick, onToggle }: {
           <div className="mt-1 hidden sm:flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] leading-none text-gray-500">
             <span className="flex items-center gap-0.5">
               <span className={clsx('w-1.5 h-1.5 rounded-full', STATUS_DOT[todo.status] ?? 'bg-gray-300')} />
-              {STATUS_LABELS[todo.status] ?? todo.status}
+              {CARD_STATUS_KEYS[todo.status] ? t(CARD_STATUS_KEYS[todo.status]) : todo.status}
             </span>
             <span className={clsx(IMPORTANCE_CLS[todo.importance] ?? '')}>
-              {IMPORTANCE_LABELS[todo.importance] ?? todo.importance}
+              {CARD_IMPORTANCE_KEYS[todo.importance] ? t(CARD_IMPORTANCE_KEYS[todo.importance]) : todo.importance}
             </span>
             <span className={clsx(COMPLEXITY_CLS[todo.complexity] ?? '')}>
-              {COMPLEXITY_LABELS[todo.complexity] ?? todo.complexity}
+              {CARD_COMPLEXITY_KEYS[todo.complexity] ? t(CARD_COMPLEXITY_KEYS[todo.complexity]) : todo.complexity}
             </span>
             {todo.due_date && (
               <span className={clsx(overdue && 'text-red-600 font-medium')}>
-                截止 {shortDate(todo.due_date)}
+                {t('todo.card.due', { date: shortDate(todo.due_date) })}
               </span>
             )}
-            {todo.planned_date && <span>计划 {shortDate(todo.planned_date)}</span>}
-            {todo.start_date && <span>开始 {shortDate(todo.start_date)}</span>}
+            {todo.planned_date && <span>{t('todo.card.planned', { date: shortDate(todo.planned_date) })}</span>}
+            {todo.start_date && <span>{t('todo.card.start', { date: shortDate(todo.start_date) })}</span>}
           </div>
         )}
 

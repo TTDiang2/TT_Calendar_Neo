@@ -13,29 +13,30 @@ import { TodoGanttView } from './todo/TodoGanttView'
 import { TodoJarView } from './todo/TodoJarView'
 import { TodoStickiesView } from './todo/TodoStickiesView'
 import { animDrawerIn, animSheetUp } from '../anim'
+import { useT, useTPlural, type TxKey } from '../i18n'
 
-const SORT_OPTIONS: { key: TodoSort; label: string }[] = [
-  { key: 'manual', label: '手动排序' },
-  { key: 'due_importance', label: '截止+重要性' },
-  { key: 'due_planned_importance', label: '截止+计划+重要性' },
-  { key: 'due', label: '截止日' },
-  { key: 'planned', label: '计划日' },
-  { key: 'importance', label: '重要性' },
-  { key: 'created', label: '创建时间' },
+const SORT_OPTIONS: { key: TodoSort; labelKey: TxKey }[] = [
+  { key: 'manual', labelKey: 'todo.sort.manual' },
+  { key: 'due_importance', labelKey: 'todo.sort.dueImportance' },
+  { key: 'due_planned_importance', labelKey: 'todo.sort.duePlannedImportance' },
+  { key: 'due', labelKey: 'todo.sort.due' },
+  { key: 'planned', labelKey: 'todo.sort.planned' },
+  { key: 'importance', labelKey: 'todo.sort.importance' },
+  { key: 'created', labelKey: 'todo.sort.created' },
 ]
 
-/** 手机端视图切换选项（Top Bar 移除后收进工具行；看板手机端不呈现，与 20260916 一致） */
-const MOBILE_TODO_VIEWS: { key: TodoViewMode; label: string }[] = [
-  { key: 'list', label: '列表' },
-  { key: 'matrix', label: '矩阵' },
-  { key: 'gantt', label: '甘特' },
-  { key: 'stickies', label: '便签' },
+/** 手机端视图切换选项（Top Bar 移除后收进工具行；看板手机端不呈现，与 20260916 一致；标签复用顶栏的 todoMode 词表） */
+const MOBILE_TODO_VIEWS: { key: TodoViewMode; labelKey: TxKey }[] = [
+  { key: 'list', labelKey: 'topbar.todoMode.list' },
+  { key: 'matrix', labelKey: 'topbar.todoMode.matrix' },
+  { key: 'gantt', labelKey: 'topbar.todoMode.gantt' },
+  { key: 'stickies', labelKey: 'topbar.todoMode.stickies' },
 ]
 
-const IMPORTANCE_LABEL: Record<string, string> = {
-  high: '重要',
-  normal: '普通',
-  low: '次要',
+const IMPORTANCE_KEY: Record<string, TxKey> = {
+  high: 'todo.imp.high',
+  normal: 'todo.imp.normal',
+  low: 'todo.imp.low',
 }
 const IMPORTANCE_TAG_CLS: Record<string, string> = {
   high: 'bg-red-50 text-red-600',
@@ -43,12 +44,12 @@ const IMPORTANCE_TAG_CLS: Record<string, string> = {
   low: 'bg-green-50 text-green-600',
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  notStarted: '未开始',
-  inProgress: '进行中',
-  completed: '已完成',
-  waitingOnOthers: '等待他人',
-  deferred: '已推迟',
+const STATUS_KEY: Record<string, TxKey> = {
+  notStarted: 'todo.status.notStarted',
+  inProgress: 'todo.status.inProgress',
+  completed: 'todo.status.completed',
+  waitingOnOthers: 'todo.status.waitingOnOthers',
+  deferred: 'todo.status.deferred',
 }
 const STATUS_TAG_CLS: Record<string, string> = {
   notStarted: 'bg-gray-100 text-gray-500',
@@ -58,10 +59,10 @@ const STATUS_TAG_CLS: Record<string, string> = {
   deferred: 'bg-purple-50 text-purple-600',
 }
 
-const COMPLEXITY_LABEL: Record<string, string> = {
-  simple: '简单',
-  medium: '中等',
-  hard: '复杂',
+const COMPLEXITY_KEY: Record<string, TxKey> = {
+  simple: 'todo.complexity.simple',
+  medium: 'todo.complexity.medium',
+  hard: 'todo.complexity.hard',
 }
 const COMPLEXITY_TAG_CLS: Record<string, string> = {
   simple: 'bg-green-50 text-green-600',
@@ -98,6 +99,8 @@ export const TodoView = forwardRef<TodoViewHandle, {
   ref,
 ) {
   const qc = useQueryClient()
+  const t = useT()
+  const tPlural = useTPlural()
   const [selectedList, setSelectedList] = useState<string | null>(() => localStorage.getItem(DEFAULT_LIST_KEY))
   const [sort, setSort] = useState<TodoSort>('due_planned_importance')
   const [tagFilter, setTagFilter] = useState<string>('')
@@ -204,12 +207,13 @@ export const TodoView = forwardRef<TodoViewHandle, {
     },
   })
 
-  // 无清单时先自动建一个默认清单（桌面新建按钮 / 手机快速新增共用）
+  // 无清单时先自动建一个默认清单（桌面新建按钮 / 手机快速新增共用）。
+  // 默认名经 t() 取词后入库（与 B1 shell.defaultName 同一裁决，见 fragment 头 TODO-REVIEW）
   const ensureList = async (): Promise<boolean> => {
     if (lists.length) return true
     setAutoList(true)
     try {
-      const tl = await createTodoList('任务')
+      const tl = await createTodoList(t('todo.lists.defaultName'))
       setSelectedList(tl.id)
       invalidate()
     } catch {
@@ -280,13 +284,16 @@ export const TodoView = forwardRef<TodoViewHandle, {
     mutationFn: importTodosCsv,
     onSuccess: (r: { inserted: number; lists_created: number; errors: string[] }) => {
       invalidate()
-      setCsvResult(`导入 ${r.inserted} 条，新建 ${r.lists_created} 个列表${r.errors.length ? `，${r.errors.length} 行错误` : ''}`)
+      setCsvResult(
+        t('todo.csv.done', { inserted: r.inserted, lists: r.lists_created })
+        + (r.errors.length ? tPlural('todo.csv.errorRows', r.errors.length) : ''),
+      )
     },
-    onError: (e: unknown) => setCsvResult(`导入失败: ${e instanceof Error ? e.message : 'unknown'}`),
+    onError: (e: unknown) => setCsvResult(t('todo.csv.failed', { msg: e instanceof Error ? e.message : 'unknown' })),
   })
 
   const completedCount = stats?.completed ?? (showCompleted ? completed.length : undefined)
-  const currentListName = selectedList ? lists.find((l) => l.id === selectedList)?.display_name ?? '全部' : '全部'
+  const currentListName = selectedList ? lists.find((l) => l.id === selectedList)?.display_name ?? t('common.all') : t('common.all')
 
   // 清单抽屉打开时弹簧滑入（20260916：左侧边栏 = 当前待办清单的管理面板）
   useEffect(() => {
@@ -331,7 +338,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
             <button
               onClick={() => onListsDrawerOpenChange(true)}
               className="flex items-center gap-1 min-w-0 text-left active:opacity-60 transition-opacity"
-              aria-label="切换待办清单"
+              aria-label={t('todo.aria.switchList')}
             >
               <FolderOpen size={18} className="text-pink-500 flex-shrink-0" />
               <span className="text-[19px] font-bold text-gray-900 truncate">{currentListName}</span>
@@ -352,7 +359,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
                         : 'text-gray-500 active:text-gray-700',
                     )}
                   >
-                    {m.label}
+                    {t(m.labelKey)}
                   </button>
                 ))}
               </div>
@@ -367,21 +374,21 @@ export const TodoView = forwardRef<TodoViewHandle, {
                     : 'text-pink-600 bg-pink-50 active:bg-pink-100',
                 )}
               >
-                全部
+                {t('common.all')}
               </button>
             </div>
           </div>
           <FilterRow
-            label="排序"
+            label={t('todo.filter.sort')}
             value={sort}
-            options={SORT_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}
+            options={SORT_OPTIONS.map((o) => ({ value: o.key, label: t(o.labelKey) }))}
             onChange={(v) => { setSort(v as TodoSort); setManualOrder(null) }}
           />
           {allTags.length > 0 && (
             <FilterRow
-              label="筛选"
+              label={t('todo.filter.tag')}
               value={tagFilter}
-              options={[{ value: '', label: '全部标签' }, ...allTags.map((t) => ({ value: t, label: t }))]}
+              options={[{ value: '', label: t('todo.filter.allTags') }, ...allTags.map((tg) => ({ value: tg, label: tg }))]}
               onChange={(v) => { setTagFilter(v); setManualOrder(null) }}
             />
           )}
@@ -390,22 +397,22 @@ export const TodoView = forwardRef<TodoViewHandle, {
         {/* 桌面工具行（md+，桌面零变化红线）：排序 / 筛选 / CSV 导入 / 新建待办 */}
         <div className="hidden md:flex items-center gap-3 mb-3 flex-shrink-0">
           <FilterSelect
-            label="排序"
+            label={t('todo.filter.sort')}
             value={sort}
-            options={SORT_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}
+            options={SORT_OPTIONS.map((o) => ({ value: o.key, label: t(o.labelKey) }))}
             onChange={(v) => { setSort(v as TodoSort); setManualOrder(null) }}
           />
           {allTags.length > 0 && (
             <FilterSelect
-              label="筛选"
+              label={t('todo.filter.tag')}
               value={tagFilter}
-              options={[{ value: '', label: '全部标签' }, ...allTags.map((t) => ({ value: t, label: t }))]}
+              options={[{ value: '', label: t('todo.filter.allTags') }, ...allTags.map((tg) => ({ value: tg, label: tg }))]}
               onChange={(v) => { setTagFilter(v); setManualOrder(null) }}
             />
           )}
           <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
-            <label className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer" title="CSV 导入">
-              <Upload size={14} /> CSV 导入
+            <label className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer" title={t('todo.toolbar.importCsv')}>
+              <Upload size={14} /> {t('todo.toolbar.importCsv')}
               <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
             </label>
             <button
@@ -413,7 +420,7 @@ export const TodoView = forwardRef<TodoViewHandle, {
               disabled={autoList}
               className="flex items-center gap-1 px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
             >
-              <Plus size={14} /> 新建待办
+              <Plus size={14} /> {t('todo.actions.new')}
             </button>
           </div>
         </div>
@@ -453,18 +460,18 @@ export const TodoView = forwardRef<TodoViewHandle, {
           ) : filteredIncomplete.length === 0 && completedCount === undefined ? (
             <div className="h-full flex items-center justify-center text-gray-300 text-sm text-center px-4">
               {tagFilter ? (
-                `没有「${tagFilter}」标签的待办`
+                t('todo.empty.tagFiltered', { tag: tagFilter })
               ) : (
                 <>
-                  <span className="md:hidden">暂无待办，点右下角 + 新建</span>
-                  <span className="hidden md:inline">暂无待办，点「新建待办」开始</span>
+                  <span className="md:hidden">{t('todo.empty.mobile')}</span>
+                  <span className="hidden md:inline">{t('todo.empty.desktop')}</span>
                 </>
               )}
             </div>
           ) : (
             <div className="flex flex-col gap-2 md:gap-1">
               {filteredIncomplete.length === 0 && completedCount === 0 && (
-                <p className="text-sm text-gray-400 text-center py-4">没有未完成待办</p>
+                <p className="text-sm text-gray-400 text-center py-4">{t('todo.empty.noneOpen')}</p>
               )}
               {filteredIncomplete.map((t) => {
                 const listName = lists.find((l) => l.id === t.list_id)?.display_name
@@ -523,12 +530,12 @@ export const TodoView = forwardRef<TodoViewHandle, {
                     onClick={() => setShowCompleted((v) => !v)}
                     className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-md"
                   >
-                    <span>已完成（{completedCount}）</span>
+                    <span>{t('todo.row.completedWithCount', { n: completedCount ?? 0 })}</span>
                     {showCompleted ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   </button>
                   {showCompleted && (
                     <div className="mt-1 flex flex-col gap-1">
-                      {loadingCompleted && <p className="text-xs text-gray-400 px-3 py-1">加载中…</p>}
+                      {loadingCompleted && <p className="text-xs text-gray-400 px-3 py-1">{t('common.loading')}</p>}
                       {completed.map((t) => {
                         const listName = lists.find((l) => l.id === t.list_id)?.display_name
                         return (
@@ -619,11 +626,11 @@ export const TodoView = forwardRef<TodoViewHandle, {
           <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={() => onListsDrawerOpenChange(false)} />
           <aside ref={listsDrawerRef} className="glass-sheet absolute inset-y-0 left-0 w-[290px] max-w-[85vw] rounded-r-3xl p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-2 pl-1 flex-shrink-0">
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">待办清单</h2>
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t('todo.lists.title')}</h2>
               <button
                 onClick={() => onListsDrawerOpenChange(false)}
                 className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md text-lg"
-                aria-label="关闭"
+                aria-label={t('common.close')}
               >
                 ×
               </button>
@@ -637,14 +644,14 @@ export const TodoView = forwardRef<TodoViewHandle, {
                   onClick={onOpenSettings}
                   className="w-full flex items-center gap-2 px-2 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl transition-colors"
                 >
-                  <Settings size={16} className="text-gray-400" /> 设置
+                  <Settings size={16} className="text-gray-400" /> {t('common.settings')}
                 </button>
               )}
               <button
                 onClick={() => onListsDrawerOpenChange(false)}
                 className="w-full flex items-center gap-2 px-2 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white/70 rounded-xl transition-colors"
               >
-                <Check size={16} className="text-gray-400" /> 完成
+                <Check size={16} className="text-gray-400" /> {t('common.done')}
               </button>
             </div>
           </aside>
@@ -697,6 +704,7 @@ export function QuickAddSheet({
   onCreate: (data: typeof QUICK_ADD_CREATE) => void
 }) {
   const sheetRef = useRef<HTMLDivElement | null>(null)
+  const t = useT()
   const [title, setTitle] = useState('')
   const [listId, setListId] = useState(defaultListId)
   const [dueDate, setDueDate] = useState('')
@@ -749,8 +757,8 @@ export function QuickAddSheet({
           <div className="w-10 h-1 rounded-full bg-gray-300" />
         </div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold text-gray-800">新建待办</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl" aria-label="关闭">
+          <h2 className="text-base font-semibold text-gray-800">{t('todo.quickAdd.title')}</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl" aria-label={t('common.close')}>
             ×
           </button>
         </div>
@@ -758,7 +766,7 @@ export function QuickAddSheet({
         <input
           autoFocus
           className="tt-input text-base mb-3"
-          placeholder="要做什么？"
+          placeholder={t('todo.quickAdd.placeholder')}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
@@ -768,7 +776,7 @@ export function QuickAddSheet({
 
         <div className="grid grid-cols-2 gap-2 mb-3">
           <label className="text-xs text-gray-500">
-            <span className="block mb-1">清单</span>
+            <span className="block mb-1">{t('todo.quickAdd.list')}</span>
             <select className="tt-input" value={listId} onChange={(e) => setListId(e.target.value)}>
               {lists.map((l) => (
                 <option key={l.id} value={l.id}>{l.display_name}</option>
@@ -776,15 +784,15 @@ export function QuickAddSheet({
             </select>
           </label>
           <label className="text-xs text-gray-500">
-            <span className="block mb-1">截止日期</span>
+            <span className="block mb-1">{t('todo.quickAdd.dueDate')}</span>
             <DueDateQuickPicker value={dueDate} onChange={setDueDate} />
           </label>
         </div>
 
         <div className="mb-3">
-          <p className="text-xs text-gray-500 mb-1.5">重要性</p>
+          <p className="text-xs text-gray-500 mb-1.5">{t('todo.quickAdd.importance')}</p>
           <div className="grid grid-cols-3 gap-2">
-            {([['high', '重要'], ['normal', '普通'], ['low', '次要']] as const).map(([k, label]) => (
+            {([['high', 'todo.imp.high'], ['normal', 'todo.imp.normal'], ['low', 'todo.imp.low']] as const).map(([k, labelKey]) => (
               <button
                 key={k}
                 onClick={() => setImportance(k)}
@@ -795,7 +803,7 @@ export function QuickAddSheet({
                     : 'border-gray-200 bg-white/70 text-gray-600',
                 )}
               >
-                {label}
+                {t(labelKey)}
               </button>
             ))}
           </div>
@@ -806,68 +814,68 @@ export function QuickAddSheet({
           onClick={() => setMoreOpen((v) => !v)}
           className="w-full flex items-center justify-between px-3 py-2 mb-3 rounded-xl bg-white/70 border border-black/5 text-sm text-gray-600 active:bg-black/[0.04] transition-colors"
         >
-          <span>更多选项{tags.length > 0 || body || plannedDate || startDate || alarmAt ? ' · 已填写' : ''}</span>
+          <span>{t('todo.quickAdd.moreOptions')}{tags.length > 0 || body || plannedDate || startDate || alarmAt ? t('todo.quickAdd.moreFilled') : ''}</span>
           <ChevronDown size={15} className={clsx('text-gray-400 transition-transform', moreOpen && 'rotate-180')} />
         </button>
         {moreOpen && (
           <div className="flex flex-col gap-3 mb-3">
             <label className="text-xs text-gray-500">
-              <span className="block mb-1">备注</span>
-              <textarea className="tt-input min-h-[56px] resize-y" value={body} onChange={(e) => setBody(e.target.value)} placeholder="可选" />
+              <span className="block mb-1">{t('todo.quickAdd.body')}</span>
+              <textarea className="tt-input min-h-[56px] resize-y" value={body} onChange={(e) => setBody(e.target.value)} placeholder={t('todo.quickAdd.optional')} />
             </label>
 
             <div className="grid grid-cols-2 gap-2">
               <label className="text-xs text-gray-500">
-                <span className="block mb-1">状态</span>
+                <span className="block mb-1">{t('todo.quickAdd.status')}</span>
                 <select className="tt-input" value={status} onChange={(e) => setStatus(e.target.value)}>
-                  <option value="notStarted">未开始</option>
-                  <option value="inProgress">进行中</option>
-                  <option value="waitingOnOthers">等待他人</option>
-                  <option value="deferred">已推迟</option>
+                  <option value="notStarted">{t('todo.status.notStarted')}</option>
+                  <option value="inProgress">{t('todo.status.inProgress')}</option>
+                  <option value="waitingOnOthers">{t('todo.status.waitingOnOthers')}</option>
+                  <option value="deferred">{t('todo.status.deferred')}</option>
                 </select>
               </label>
               <label className="text-xs text-gray-500">
-                <span className="block mb-1">复杂度</span>
+                <span className="block mb-1">{t('todo.quickAdd.complexity')}</span>
                 <select className="tt-input" value={complexity} onChange={(e) => setComplexity(e.target.value as 'simple' | 'medium' | 'hard')}>
-                  <option value="simple">简单</option>
-                  <option value="medium">中等</option>
-                  <option value="hard">复杂</option>
+                  <option value="simple">{t('todo.complexity.simple')}</option>
+                  <option value="medium">{t('todo.complexity.medium')}</option>
+                  <option value="hard">{t('todo.complexity.hard')}</option>
                 </select>
               </label>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <label className="text-xs text-gray-500">
-                <span className="block mb-1">计划日期</span>
+                <span className="block mb-1">{t('todo.quickAdd.plannedDate')}</span>
                 <DueDateQuickPicker value={plannedDate} onChange={setPlannedDate} />
               </label>
               <label className="text-xs text-gray-500">
-                <span className="block mb-1">开始日期</span>
+                <span className="block mb-1">{t('todo.quickAdd.startDate')}</span>
                 <input type="date" className="tt-input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </label>
             </div>
 
             <label className="text-xs text-gray-500">
-              <span className="block mb-1">标签（逗号分隔）</span>
+              <span className="block mb-1">{t('todo.quickAdd.tagsHint')}</span>
               <input
                 className="tt-input"
                 value={tagsText}
                 onChange={(e) => setTagsText(e.target.value)}
-                placeholder="工作, 学习…"
+                placeholder={t('todo.quickAdd.tagsPlaceholder')}
               />
               {allTags.length > 0 && (
                 <span className="flex flex-wrap gap-1 mt-1.5">
-                  {allTags.map((t) => (
+                  {allTags.map((tg) => (
                     <button
-                      key={t}
+                      key={tg}
                       type="button"
-                      onClick={() => toggleTag(t)}
+                      onClick={() => toggleTag(tg)}
                       className={clsx(
                         'text-[11px] px-2 py-0.5 rounded-full border transition',
-                        tags.includes(t) ? 'bg-pink-50 border-pink-300 text-pink-600' : 'bg-white border-gray-200 text-gray-500',
+                        tags.includes(tg) ? 'bg-pink-50 border-pink-300 text-pink-600' : 'bg-white border-gray-200 text-gray-500',
                       )}
                     >
-                      {t}
+                      {tg}
                     </button>
                   ))}
                 </span>
@@ -875,7 +883,7 @@ export function QuickAddSheet({
             </label>
 
             <label className="text-xs text-gray-500">
-              <span className="block mb-1">闹钟（到点弹系统通知）</span>
+              <span className="block mb-1">{t('todo.quickAdd.alarmHint')}</span>
               <input type="datetime-local" className="tt-input" value={alarmAt} onChange={(e) => setAlarmAt(e.target.value)} />
             </label>
           </div>
@@ -886,7 +894,7 @@ export function QuickAddSheet({
           disabled={!canSave}
           className="w-full py-3 text-[15px] font-semibold bg-pink-500 text-white rounded-2xl active:bg-pink-600 disabled:opacity-40 transition-colors"
         >
-          添加待办
+          {t('todo.quickAdd.submit')}
         </button>
       </div>
     </div>
@@ -909,11 +917,12 @@ function TodoStatsDrawer({
   onGoDetail: (id: string) => void
 }) {
   const drawerRef = useRef<HTMLDivElement | null>(null)
+  const t = useT()
   useEffect(() => {
     animDrawerIn(drawerRef.current, 1)
   }, [])
   const today = todayStr()
-  const listNameOf = (id: string) => lists.find((l) => l.id === id)?.display_name ?? '未命名清单'
+  const listNameOf = (id: string) => lists.find((l) => l.id === id)?.display_name ?? t('todo.stats.unnamedList')
   const { data: stats } = useQuery({ queryKey: ['todoStats', null], queryFn: () => getTodoStats(undefined) })
   const { data: open = [] } = useQuery({
     queryKey: ['todos', null, 'incomplete', 'due_importance'],
@@ -939,12 +948,12 @@ function TodoStatsDrawer({
   }
 
   const rows: { icon: React.ReactNode; label: string; count: number; tone: string; items?: Todo[] }[] = [
-    { icon: <Inbox size={15} />, label: '未完成', count: stats?.incomplete ?? open.length, tone: 'text-gray-500' },
-    { icon: <AlertTriangle size={15} />, label: '已过期', count: overdue.length, tone: 'text-red-500', items: overdue },
-    { icon: <Clock size={15} />, label: '今天截止', count: dueToday.length, tone: 'text-orange-500', items: dueToday },
-    { icon: <Clock size={15} />, label: '7 天内到期', count: dueSoon.length, tone: 'text-amber-500', items: dueSoon },
-    { icon: <Flame size={15} />, label: '重要', count: important.length, tone: 'text-rose-500', items: important },
-    { icon: <Star size={15} />, label: '今日计划', count: plannedToday.length, tone: 'text-pink-500', items: plannedToday },
+    { icon: <Inbox size={15} />, label: t('todo.stats.open'), count: stats?.incomplete ?? open.length, tone: 'text-gray-500' },
+    { icon: <AlertTriangle size={15} />, label: t('todo.due.overdue'), count: overdue.length, tone: 'text-red-500', items: overdue },
+    { icon: <Clock size={15} />, label: t('todo.due.today'), count: dueToday.length, tone: 'text-orange-500', items: dueToday },
+    { icon: <Clock size={15} />, label: t('todo.stats.dueSoon'), count: dueSoon.length, tone: 'text-amber-500', items: dueSoon },
+    { icon: <Flame size={15} />, label: t('todo.imp.high'), count: important.length, tone: 'text-rose-500', items: important },
+    { icon: <Star size={15} />, label: t('todo.plan.today'), count: plannedToday.length, tone: 'text-pink-500', items: plannedToday },
   ]
 
   return (
@@ -953,10 +962,10 @@ function TodoStatsDrawer({
       <aside ref={drawerRef} className="glass-sheet absolute inset-y-0 right-0 w-[300px] max-w-[85vw] rounded-l-3xl flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
           <div className="min-w-0">
-            <h2 className="text-base font-bold text-gray-800">待办统计</h2>
-            <p className="text-[11px] text-gray-400 truncate">范围：全部清单 · 当前查看「{currentListName}」</p>
+            <h2 className="text-base font-bold text-gray-800">{t('todo.stats.title')}</h2>
+            <p className="text-[11px] text-gray-400 truncate">{t('todo.stats.scope', { name: currentListName })}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl flex-shrink-0" aria-label="关闭">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-full text-xl flex-shrink-0" aria-label={t('common.close')}>
             ×
           </button>
         </div>
@@ -975,7 +984,7 @@ function TodoStatsDrawer({
             <div className="rounded-2xl bg-emerald-50/80 border border-emerald-100 px-3 py-2.5">
               <p className="flex items-center gap-1.5 text-[11px] text-gray-400">
                 <Check size={15} className="text-emerald-500" />
-                今日已完成
+                {t('todo.stats.doneToday')}
               </p>
               <p className="text-xl font-bold text-emerald-600 tabular-nums mt-0.5">{todayDone.length}</p>
             </div>
@@ -984,18 +993,18 @@ function TodoStatsDrawer({
           {/* 即将到期/重要的具体条目：点一条直接打开其详情 */}
           {(dueToday.length > 0 || overdue.length > 0) && (
             <div className="mt-4">
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-1.5">需要立刻关注</p>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-1.5">{t('todo.stats.attention')}</p>
               <div className="flex flex-col gap-1">
-                {[...overdue, ...dueToday].slice(0, 5).map((t) => (
+                {[...overdue, ...dueToday].slice(0, 5).map((td) => (
                   <button
-                    key={t.id}
-                    onClick={() => onGoDetail(t.id)}
+                    key={td.id}
+                    onClick={() => onGoDetail(td.id)}
                     className="flex items-center gap-2 text-left px-2.5 py-2 rounded-xl bg-white/80 border border-black/5 active:bg-pink-50 transition-colors"
                   >
-                    <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', overdue.includes(t) ? 'bg-red-500' : 'bg-orange-400')} />
-                    <span className="text-[13px] text-gray-700 truncate flex-1">{t.title}</span>
-                    <span className={clsx('text-[10px] flex-shrink-0', overdue.includes(t) ? 'text-red-500 font-medium' : 'text-gray-400')}>
-                      {overdue.includes(t) ? '已过期' : '今天'}
+                    <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', overdue.includes(td) ? 'bg-red-500' : 'bg-orange-400')} />
+                    <span className="text-[13px] text-gray-700 truncate flex-1">{td.title}</span>
+                    <span className={clsx('text-[10px] flex-shrink-0', overdue.includes(td) ? 'text-red-500 font-medium' : 'text-gray-400')}>
+                      {overdue.includes(td) ? t('todo.due.overdue') : t('common.today')}
                     </span>
                   </button>
                 ))}
@@ -1005,7 +1014,7 @@ function TodoStatsDrawer({
 
           {byList.size > 0 && (
             <div className="mt-4">
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-1.5">各清单未完成</p>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-1.5">{t('todo.stats.byList')}</p>
               <div className="flex flex-col gap-1 px-1">
                 {[...byList.entries()].map(([lid, arr]) => (
                   <div key={lid} className="flex items-center gap-2 text-[13px]">
@@ -1041,6 +1050,7 @@ function TodoListManager({
   roomy?: boolean
 }) {
   const qc = useQueryClient()
+  const t = useT()
   const [creatingList, setCreatingList] = useState(false)
   const [newListName, setNewListName] = useState('')
   const [renamingListId, setRenamingListId] = useState<string | null>(null)
@@ -1085,7 +1095,7 @@ function TodoListManager({
           selectedList === null ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
         )}
       >
-        <span className="flex items-center gap-1.5"><Inbox size={14} /> 全部</span>
+        <span className="flex items-center gap-1.5"><Inbox size={14} /> {t('common.all')}</span>
         {statsIncomplete !== undefined && <span className="text-xs text-gray-400">{statsIncomplete}</span>}
       </button>
       {lists.map((l) => {
@@ -1143,19 +1153,19 @@ function TodoListManager({
               <button
                 onClick={(e) => { e.stopPropagation(); onDefaultList(isDefault ? null : l.id) }}
                 className={clsx('text-gray-300 hover:text-amber-400', isDefault ? 'text-amber-400' : roomy ? '' : 'opacity-0 group-hover:opacity-100')}
-                title={isDefault ? '取消默认' : '设为默认列表'}
+                title={isDefault ? t('todo.lists.unsetDefault') : t('todo.lists.setDefault')}
               >
                 <Star size={12} fill={isDefault ? 'currentColor' : 'none'} />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setRenamingListId(l.id); setRenameDraft(l.display_name) }}
                 className={clsx('text-gray-400 hover:text-pink-500', !roomy && 'opacity-0 group-hover:opacity-100')}
-                title="重命名"
+                title={t('todo.lists.rename')}
               >
                 <Pencil size={12} />
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); if (confirm(`删除列表「${l.display_name}」及其所有待办？`)) deleteListMut.mutate(l.id) }}
+                onClick={(e) => { e.stopPropagation(); if (confirm(t('todo.lists.deleteConfirm', { name: l.display_name }))) deleteListMut.mutate(l.id) }}
                 className={clsx('text-gray-400 hover:text-red-500', !roomy && 'opacity-0 group-hover:opacity-100')}
               >
                 <Trash2 size={12} />
@@ -1176,12 +1186,12 @@ function TodoListManager({
               if (e.key === 'Enter' && newListName.trim()) { createListMut.mutate(newListName.trim()); setNewListName(''); setCreatingList(false) }
               if (e.key === 'Escape') { setCreatingList(false); setNewListName('') }
             }}
-            placeholder="列表名"
+            placeholder={t('todo.lists.namePlaceholder')}
           />
         </div>
       ) : (
         <button onClick={() => setCreatingList(true)} className={clsx('flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 mt-1 rounded-xl hover:bg-black/[0.03]', roomy ? 'px-2.5 py-3' : 'px-2 py-1.5')}>
-          <ListPlus size={14} /> 新建列表
+          <ListPlus size={14} /> {t('todo.lists.create')}
         </button>
       )}
     </div>
@@ -1343,14 +1353,15 @@ function TodoRow({ todo, listName, isDone, overdue, selected, leaving, onSelect,
   onToggle: () => void
   onOpenNotes?: () => void
 }) {
+  const t = useT()
   const dueState = useMemo(() => {
     if (!todo.due_date) return null
     const today = new Date(new Date().toDateString()).getTime()
     const due = new Date(todo.due_date).getTime()
     const diff = Math.round((due - today) / 86400000)
-    if (diff < 0) return { label: '已过期', cls: 'bg-red-100 text-red-600' }
-    if (diff === 0) return { label: '今天截止', cls: 'bg-orange-100 text-orange-600' }
-    if (diff === 1) return { label: '明天截止', cls: 'bg-amber-100 text-amber-600' }
+    if (diff < 0) return { labelKey: 'todo.due.overdue' as TxKey, cls: 'bg-red-100 text-red-600' }
+    if (diff === 0) return { labelKey: 'todo.due.today' as TxKey, cls: 'bg-orange-100 text-orange-600' }
+    if (diff === 1) return { labelKey: 'todo.due.tomorrow' as TxKey, cls: 'bg-amber-100 text-amber-600' }
     return null
   }, [todo.due_date])
 
@@ -1386,15 +1397,15 @@ function TodoRow({ todo, listName, isDone, overdue, selected, leaving, onSelect,
         <div className="flex flex-wrap gap-1 mt-1">
           {todo.complexity && (
             <span className={clsx('text-[10px] px-1.5 py-0.5 rounded', COMPLEXITY_TAG_CLS[todo.complexity] ?? COMPLEXITY_TAG_CLS.medium)}>
-              {COMPLEXITY_LABEL[todo.complexity] ?? todo.complexity}
+              {COMPLEXITY_KEY[todo.complexity] ? t(COMPLEXITY_KEY[todo.complexity]) : todo.complexity}
             </span>
           )}
           <span className={clsx('text-[10px] px-1.5 py-0.5 rounded', IMPORTANCE_TAG_CLS[todo.importance] ?? IMPORTANCE_TAG_CLS.normal)}>
-            {IMPORTANCE_LABEL[todo.importance] ?? todo.importance}
+            {IMPORTANCE_KEY[todo.importance] ? t(IMPORTANCE_KEY[todo.importance]) : todo.importance}
           </span>
           {!isDone && todo.status && todo.status !== 'notStarted' && (
             <span className={clsx('text-[10px] px-1.5 py-0.5 rounded', STATUS_TAG_CLS[todo.status] ?? STATUS_TAG_CLS.notStarted)}>
-              {STATUS_LABEL[todo.status] ?? todo.status}
+              {STATUS_KEY[todo.status] ? t(STATUS_KEY[todo.status]) : todo.status}
             </span>
           )}
           {(todo.tags ?? []).map((tag) => (
@@ -1406,14 +1417,16 @@ function TodoRow({ todo, listName, isDone, overdue, selected, leaving, onSelect,
         {listName && !isDone && <span className="text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">{listName}</span>}
         {todo.due_date && !isDone && (
           <span className={clsx('text-[10px] px-1.5 py-0.5 rounded', dueState ? dueState.cls : 'bg-gray-100 text-gray-500')}>
-            {dueState ? `${dueState.label} · ${todo.due_date.slice(5)}` : todo.due_date.slice(5)}
+            {dueState
+              ? t('todo.due.badge', { label: t(dueState.labelKey), date: todo.due_date.slice(5) })
+              : todo.due_date.slice(5)}
           </span>
         )}
         {plannedToday && !isDone && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-pink-50 text-pink-600">今日计划</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-pink-50 text-pink-600">{t('todo.plan.today')}</span>
         )}
         {plannedTomorrow && !isDone && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-600">明日计划</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-600">{t('todo.plan.tomorrow')}</span>
         )}
       </div>
     </div>

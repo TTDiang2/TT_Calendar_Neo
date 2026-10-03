@@ -2,17 +2,18 @@ import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { Todo, TodoList } from '../../adapt/types'
-import { COMPLEXITY_LABELS, IMPORTANCE_LABELS, STATUS_LABELS, todayStr } from '../../adapt/todoLogic'
-import { TodoMiniCard } from './TodoMiniCard'
+import { todayStr } from '../../adapt/todoLogic'
+import { useT, type TxKey } from '../../i18n'
+import { TodoMiniCard, CARD_COMPLEXITY_KEYS, CARD_IMPORTANCE_KEYS, CARD_STATUS_KEYS } from './TodoMiniCard'
 
 type Dim = 'status' | 'planned' | 'importance' | 'complexity' | 'tag'
 
-const DIMS: { key: Dim; label: string }[] = [
-  { key: 'status', label: '按状态' },
-  { key: 'planned', label: '按计划日期' },
-  { key: 'importance', label: '按重要性' },
-  { key: 'complexity', label: '按复杂度' },
-  { key: 'tag', label: '按标签' },
+const DIMS: { key: Dim; labelKey: TxKey }[] = [
+  { key: 'status', labelKey: 'todo.kanban.dim.status' },
+  { key: 'planned', labelKey: 'todo.kanban.dim.planned' },
+  { key: 'importance', labelKey: 'todo.kanban.dim.importance' },
+  { key: 'complexity', labelKey: 'todo.kanban.dim.complexity' },
+  { key: 'tag', labelKey: 'todo.kanban.dim.tag' },
 ]
 
 interface Props {
@@ -83,7 +84,7 @@ function tagHash(s: string): number {
   return h
 }
 
-function buildColumns(openTodos: Todo[], dim: Dim, today: string): Column[] {
+function buildColumns(openTodos: Todo[], dim: Dim, today: string, t: (key: TxKey, params?: Record<string, string | number>) => string): Column[] {
   const map = new Map<string, Column>()
 
   const col = (key: string, title: string, tone?: string, headCls?: string): Column => {
@@ -95,33 +96,41 @@ function buildColumns(openTodos: Todo[], dim: Dim, today: string): Column[] {
     return c
   }
 
-  for (const t of openTodos) {
+  for (const td of openTodos) {
     switch (dim) {
-      case 'status':
-        col(t.status, STATUS_LABELS[t.status] ?? t.status, STATUS_TONE[t.status]).items.push(t)
-        break
-      case 'planned': {
-        if (t.planned_date && t.planned_date < today) break
-        const key = t.planned_date ?? '__none__'
-        // 标题带具体日期，用户不用算「后天是几号」
-        const title = t.planned_date === today ? `今天 · ${t.planned_date.slice(5)}` : t.planned_date ?? '未计划'
-        const { tone, headCls } = plannedTone(key, today)
-        col(key, title, tone, headCls).items.push(t)
+      case 'status': {
+        const key = CARD_STATUS_KEYS[td.status]
+        col(td.status, key ? t(key) : td.status, STATUS_TONE[td.status]).items.push(td)
         break
       }
-      case 'importance':
-        col(t.importance, IMPORTANCE_LABELS[t.importance] ?? t.importance, IMPORTANCE_TONE[t.importance]).items.push(t)
+      case 'planned': {
+        if (td.planned_date && td.planned_date < today) break
+        const key = td.planned_date ?? '__none__'
+        // 标题带具体日期，用户不用算「后天是几号」（date 是 MM-DD 数据串）
+        const title = td.planned_date
+          ? (td.planned_date === today ? t('todo.kanban.todayCol', { date: td.planned_date.slice(5) }) : td.planned_date)
+          : t('todo.kanban.unplanned')
+        const { tone, headCls } = plannedTone(key, today)
+        col(key, title, tone, headCls).items.push(td)
         break
-      case 'complexity':
-        col(t.complexity, COMPLEXITY_LABELS[t.complexity] ?? t.complexity, COMPLEXITY_TONE[t.complexity]).items.push(t)
+      }
+      case 'importance': {
+        const key = CARD_IMPORTANCE_KEYS[td.importance]
+        col(td.importance, key ? t(key) : td.importance, IMPORTANCE_TONE[td.importance]).items.push(td)
         break
+      }
+      case 'complexity': {
+        const key = CARD_COMPLEXITY_KEYS[td.complexity]
+        col(td.complexity, key ? t(key) : td.complexity, COMPLEXITY_TONE[td.complexity]).items.push(td)
+        break
+      }
       case 'tag': {
-        const tags = t.tags ?? []
-        if (tags.length === 0) col('__none__', '无标签').items.push(t)
+        const tags = td.tags ?? []
+        if (tags.length === 0) col('__none__', t('todo.kanban.untagged')).items.push(td)
         else
           for (const tag of tags) {
             const p = TAG_PALETTE[tagHash(tag) % TAG_PALETTE.length]
-            col(tag, `#${tag}`, p.bg, p.head).items.push(t)
+            col(tag, `#${tag}`, p.bg, p.head).items.push(td)
           }
         break
       }
@@ -152,13 +161,14 @@ function buildColumns(openTodos: Todo[], dim: Dim, today: string): Column[] {
 const COMPLETED_RENDER_LIMIT = 50
 
 export function TodoKanbanView({ openTodos, completedTodos, completedCount, lists, selectedTodoId, onSelect, onToggle, onUpdate }: Props) {
+  const t = useT()
   const [dim, setDim] = useState<Dim>('status')
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<string | null>(null)
   const [showCompletedCol, setShowCompletedCol] = useState(false)
 
   const today = todayStr()
-  const columns = useMemo(() => buildColumns(openTodos, dim, today), [openTodos, dim, today])
+  const columns = useMemo(() => buildColumns(openTodos, dim, today, t), [openTodos, dim, today, t])
   const listName = useMemo(() => {
     const m = new Map(lists.map((l) => [l.id, l.display_name]))
     return (t: Todo) => m.get(t.list_id)
@@ -175,9 +185,9 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
   }
 
   // 已完成卡片的副标题：完成时间比所属列表更有信息量（列表名仍前置）
-  const doneSub = (t: Todo): string => {
-    const ln = listName(t)
-    const ca = t.completed_at ? `完成于 ${t.completed_at.slice(5, 10)}` : null
+  const doneSub = (td: Todo): string => {
+    const ln = listName(td)
+    const ca = td.completed_at ? t('todo.kanban.doneAt', { date: td.completed_at.slice(5, 10) }) : null
     return [ln, ca].filter(Boolean).join(' · ')
   }
 
@@ -195,12 +205,12 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
                   dim === d.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700',
                 )}
               >
-                {d.label}
+                {t(d.labelKey)}
               </button>
             ))}
           </div>
         </div>
-        {droppable && <span className="hidden md:inline text-xs text-gray-400">拖动卡片到其他列即可改变状态；勾选圆形按钮直接完成</span>}
+        {droppable && <span className="hidden md:inline text-xs text-gray-400">{t('todo.kanban.dragHint')}</span>}
       </div>
 
       <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4 snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none]">
@@ -249,7 +259,7 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
                   </div>
                 ))}
                 {c.items.length === 0 && (
-                  <div className="flex-1 flex items-center justify-center text-xs text-gray-300 py-6">空</div>
+                  <div className="flex-1 flex items-center justify-center text-xs text-gray-300 py-6">{t('todo.kanban.emptyCol')}</div>
                 )}
               </div>
             </div>
@@ -271,13 +281,13 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
                     className="px-3 py-2 flex items-center justify-between border-b border-black/5 flex-shrink-0 cursor-pointer hover:bg-emerald-100/60 rounded-t-xl transition-colors"
                   >
                     <span className="text-sm font-medium text-gray-600 truncate">
-                      已完成 <span className="text-emerald-600 font-semibold">{completedCount}</span>
+                      {t('todo.kanban.completedCol', { n: completedCount })}
                     </span>
                     <ChevronRight size={14} className="text-gray-400" />
                   </button>
                   <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1.5 min-h-0">
                     {completedTodos.length === 0 && (
-                      <div className="flex-1 flex items-center justify-center text-xs text-gray-300 py-6">加载中…</div>
+                      <div className="flex-1 flex items-center justify-center text-xs text-gray-300 py-6">{t('common.loading')}</div>
                     )}
                     {completedTodos.slice(0, COMPLETED_RENDER_LIMIT).map((t) => (
                       <TodoMiniCard
@@ -291,7 +301,7 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
                     ))}
                     {completedTodos.length > COMPLETED_RENDER_LIMIT && (
                       <div className="text-[10px] text-gray-400 text-center py-2 border-t border-black/5">
-                        已显示最近 {COMPLETED_RENDER_LIMIT} / 共 {completedCount} 条
+                        {t('todo.kanban.shownOf', { shown: COMPLETED_RENDER_LIMIT, total: completedCount })}
                       </div>
                     )}
                   </div>
@@ -301,11 +311,11 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
                 <button
                   onClick={() => setShowCompletedCol(true)}
                   className="flex-1 flex flex-col items-center gap-1.5 py-3 cursor-pointer hover:bg-emerald-100/50 transition-colors"
-                  aria-label={`展开已完成列（共 ${completedCount} 条）`}
+                  aria-label={t('todo.kanban.expandCompleted', { n: completedCount })}
                 >
                   <CheckCircle2 size={15} className="text-emerald-500" />
                   <span className="text-xs font-semibold text-emerald-700">{completedCount}</span>
-                  <span className="text-[10px] text-gray-500 [writing-mode:vertical-rl] tracking-widest">已完成</span>
+                  <span className="text-[10px] text-gray-500 [writing-mode:vertical-rl] tracking-widest">{t('todo.status.completed')}</span>
                   <ChevronLeft size={12} className="text-gray-400 mt-auto" />
                 </button>
               )}
@@ -313,7 +323,7 @@ export function TodoKanbanView({ openTodos, completedTodos, completedCount, list
           )}
 
           {columns.length === 0 && (
-            <div className="text-sm text-gray-300 flex items-center px-8">暂无待办</div>
+            <div className="text-sm text-gray-300 flex items-center px-8">{t('todo.empty.none')}</div>
           )}
         </div>
       </div>

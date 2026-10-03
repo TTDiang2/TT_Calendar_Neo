@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { CheckCircle2, Crosshair } from 'lucide-react'
 import type { Todo, TodoList } from '../../adapt/types'
-import { ganttRange, STATUS_LABELS } from '../../adapt/todoLogic'
+import { ganttRange } from '../../adapt/todoLogic'
 import { useIsMobile } from '../../hooks/useMedia'
+import { fmtMonthName, useLang, useT } from '../../i18n'
+import { CARD_STATUS_KEYS } from './TodoMiniCard'
 
 interface Props {
   todos: Todo[]
@@ -54,6 +56,8 @@ function barClass(t: Todo, r: { overdue: boolean; completed: boolean }): string 
 }
 
 export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props) {
+  const t = useT()
+  const lang = useLang()
   const today = new Date().toISOString().slice(0, 10)
   const isMobile = useIsMobile()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -86,6 +90,8 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
     const min = Math.min(...starts)
     const max = Math.max(...ends, dayIndex(today)) + 2
     const span = max - min
+    // 月份刻度一律 Intl 产出（规范 §3），各语言形态由 locale 决定
+    const monthLabel = (d: Date) => fmtMonthName(lang, d, 'short')
     // 手机：先试自适应——泳道宽度除得开（≥8px/天）就整图一屏呈现；
     // 除不开（超长跨度）才回落固定 10px/天 + 横向滚动；
     // 桌面：维持原「按视口算列宽」的逻辑
@@ -96,7 +102,7 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
       const weekendColsM: number[] = []
       for (let i = 0; i <= span; i += 1) {
         const d = new Date((min + i) * DAY)
-        if (d.getDate() === 1 || i === 0) monthsM.push({ start: i, label: `${d.getMonth() + 1} 月` })
+        if (d.getDate() === 1 || i === 0) monthsM.push({ start: i, label: monthLabel(d) })
         if (d.getDay() === 0 || d.getDay() === 6) weekendColsM.push(i)
       }
       return { t0: min, totalDays: span + 1, dayW, months: monthsM, weekendCols: weekendColsM }
@@ -106,11 +112,11 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
     const weekendCols: number[] = []
     for (let i = 0; i <= span; i += 1) {
       const d = new Date((min + i) * DAY)
-      if (d.getDate() === 1 || i === 0) months.push({ start: i, label: `${d.getMonth() + 1} 月` })
+      if (d.getDate() === 1 || i === 0) months.push({ start: i, label: monthLabel(d) })
       if (d.getDay() === 0 || d.getDay() === 6) weekendCols.push(i)
     }
     return { t0: min, totalDays: span + 1, dayW: w, months, weekendCols }
-  }, [rows, today, viewW, isMobile])
+  }, [rows, today, viewW, isMobile, lang])
 
   const labelW = isMobile ? M_LABEL_W : LABEL_W
   const rowH = isMobile ? M_ROW_H : ROW_H
@@ -139,7 +145,7 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
   }, [lists])
 
   if (rows.length === 0) {
-    return <div className="h-full flex items-center justify-center text-sm text-gray-300">暂无待办</div>
+    return <div className="h-full flex items-center justify-center text-sm text-gray-300">{t('todo.empty.none')}</div>
   }
 
   const showDayNums = !isMobile && geo.dayW >= 12
@@ -155,7 +161,7 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
           onClick={scrollToday}
           className="absolute right-2 top-1 z-30 flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-rose-500 bg-white/90 border border-rose-100 rounded-full shadow-md active:bg-rose-50 transition-colors"
         >
-          <Crosshair size={12} /> 今天
+          <Crosshair size={12} /> {t('common.today')}
         </button>
       )}
       <div ref={scrollRef} className="h-full overflow-auto pb-4">
@@ -180,7 +186,7 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
                     className="absolute top-0 bottom-0 flex items-center text-[10px] text-rose-500 font-semibold whitespace-nowrap"
                     style={{ left: todayX, transform: `translateX(${todayX < 24 ? 0 : todayX > laneW - 24 ? '-100%' : '-50%'})` }}
                   >
-                    今天 {todayDayNum} 日
+                    {t('todo.gantt.todayCursor', { n: todayDayNum })}
                   </div>
                 </>
               ) : (
@@ -225,16 +231,16 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
               style={{ left: labelW + todayX, top: 0, height: rows.length * rowH }}
             />
 
-            {rows.map(({ t, r }) => {
+            {rows.map(({ t: td, r }) => {
               const x = (dayIndex(r.start) - geo.t0) * geo.dayW
               const w = Math.max((dayIndex(r.end) - dayIndex(r.start) + 1) * geo.dayW - 2, geo.dayW - 2)
-              const selected = selectedTodoId === t.id
-              const ln = listName(t.list_id)
+              const selected = selectedTodoId === td.id
+              const ln = listName(td.list_id)
               return (
                 <div
-                  key={t.id}
+                  key={td.id}
                   className={clsx('flex border-b border-gray-50 hover:bg-pink-50/30 cursor-pointer relative z-[5]', selected && 'bg-pink-50/60')}
-                  onClick={() => onSelect(t.id)}
+                  onClick={() => onSelect(td.id)}
                   style={{ height: rowH }}
                 >
                   <div
@@ -251,12 +257,12 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
                         <div className="flex items-center gap-1 min-w-0">
                           {r.completed && <CheckCircle2 size={11} className="text-emerald-500 flex-shrink-0" />}
                           <span className={clsx('text-[11px] leading-tight truncate', r.completed ? 'text-gray-400 line-through' : 'text-gray-700')}>
-                            {t.title}
+                            {td.title}
                           </span>
                         </div>
                         <div className="flex items-center gap-1 text-[9px] text-gray-400 leading-none">
                           <span className="tabular-nums">{r.start.slice(5)} → {r.end.slice(5)}</span>
-                          {r.overdue && <span className="text-red-500 font-medium">逾期</span>}
+                          {r.overdue && <span className="text-red-500 font-medium">{t('todo.gantt.overdueShort')}</span>}
                           {ln && <span className="truncate">{ln}</span>}
                         </div>
                       </>
@@ -264,7 +270,7 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
                       <>
                         {r.completed && <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0" />}
                         <span className={clsx('text-xs truncate', r.completed ? 'text-gray-400 line-through' : 'text-gray-700')}>
-                          {t.title}
+                          {td.title}
                         </span>
                         {ln && <span className="text-[10px] text-gray-300 flex-shrink-0 ml-auto">{ln}</span>}
                       </>
@@ -275,13 +281,17 @@ export function TodoGanttView({ todos, lists, selectedTodoId, onSelect }: Props)
                       className={clsx(
                         'absolute rounded-full border flex items-center px-1.5 overflow-hidden whitespace-nowrap shadow-sm',
                         isMobile ? 'text-[10px] font-medium' : 'text-[9px] text-white',
-                        barClass(t, r),
+                        barClass(td, r),
                         selected && 'ring-2 ring-pink-400 ring-offset-1',
                       )}
                       style={{ left: x, width: w, top: (rowH - barH) / 2, height: barH }}
-                      title={`${r.start} → ${r.end}${r.overdue ? '（已过期）' : ''} · ${STATUS_LABELS[t.status] ?? t.status}`}
+                      title={t('todo.gantt.barTitle', {
+                        range: `${r.start} → ${r.end}`,
+                        overdue: r.overdue ? t('todo.gantt.overdueSuffix') : '',
+                        status: CARD_STATUS_KEYS[td.status] ? t(CARD_STATUS_KEYS[td.status]) : td.status,
+                      })}
                     >
-                      {r.overdue && <span className="font-medium">逾期中</span>}
+                      {r.overdue && <span className="font-medium">{t('todo.gantt.overdueBar')}</span>}
                     </div>
                   </div>
                 </div>

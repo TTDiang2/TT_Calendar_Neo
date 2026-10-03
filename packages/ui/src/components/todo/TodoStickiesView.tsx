@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import clsx from 'clsx'
 import { StickyNote } from 'lucide-react'
 import type { Todo } from '../../adapt/types'
+import { useT } from '../../i18n'
 
 const PALETTE = [
   'bg-[#fdf6b8]', // 经典黄
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export function TodoStickiesView({ todos, selectedTodoId, onSelect, onOpenNotes }: Props) {
+  const t = useT()
   const stickies = useMemo(
     () =>
       todos.map((t) => {
@@ -44,8 +46,8 @@ export function TodoStickiesView({ todos, selectedTodoId, onSelect, onOpenNotes 
     return (
       <div className="h-full flex flex-col items-center justify-center gap-2 text-stone-400">
         <StickyNote size={28} strokeWidth={1.5} className="opacity-40" />
-        <p className="text-sm">墙上一张便签都没有</p>
-        <p className="text-xs text-stone-300">点「新建待办」贴上第一张</p>
+        <p className="text-sm">{t('todo.stickies.empty')}</p>
+        <p className="text-xs text-stone-300">{t('todo.stickies.emptyHint')}</p>
       </div>
     )
   }
@@ -64,7 +66,7 @@ export function TodoStickiesView({ todos, selectedTodoId, onSelect, onOpenNotes 
               key={todo.id}
               onClick={() => onSelect(todo.id)}
               onDoubleClick={onOpenNotes ? () => onOpenNotes(todo.id) : undefined}
-              title="双击查看 / 编辑备注"
+              title={t('todo.stickies.dblClickHint')}
               style={{ transform: `rotate(${rotate}deg)` }}
               className={clsx(
                 'relative mb-3 md:mb-5 break-inside-avoid rounded-xl md:rounded-[2px] px-3 pt-5 pb-3 md:px-4 md:pt-6 md:pb-4 cursor-pointer',

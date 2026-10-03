@@ -18,14 +18,7 @@
   "packages/ui/src/components/StatsView.tsx",
   "packages/ui/src/components/TodoDetailPanel.tsx",
   "packages/ui/src/components/TodoEditor.tsx",
-  "packages/ui/src/components/TodoView.tsx",
   "packages/ui/src/components/WidgetsView.tsx",
   "packages/ui/src/components/dialogs.tsx",
-  "packages/ui/src/components/todo/TodoGanttView.tsx",
-  "packages/ui/src/components/todo/TodoJarView.tsx",
-  "packages/ui/src/components/todo/TodoKanbanView.tsx",
-  "packages/ui/src/components/todo/TodoMatrixView.tsx",
-  "packages/ui/src/components/todo/TodoMiniCard.tsx",
-  "packages/ui/src/components/todo/TodoStickiesView.tsx",
   "packages/ui/src/components/widgets/cards.tsx"
 ]
