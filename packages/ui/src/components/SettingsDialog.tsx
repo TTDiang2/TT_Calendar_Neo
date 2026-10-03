@@ -11,7 +11,7 @@ import {
   type SyncResult,
 } from '../adapt/api'
 import type { Layer } from '../adapt/types'
-import { LANGS, LANG_META, chooseLang, activeLang, useLang, useT, type Lang } from '../i18n'
+import { LANGS, LANG_META, chooseLang, useLang, useT, type Lang } from '../i18n'
 
 interface Props {
   layers: Layer[]
