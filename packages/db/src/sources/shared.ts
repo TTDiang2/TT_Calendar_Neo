@@ -217,7 +217,7 @@ interface TzReading {
 }
 
 // Intl formatToParts 每次约百微秒，逐行换算 5000 行会吃掉大半导入预算。
-// 偏移按「时区 + UTC 小时桶」缓存：IANA 的 DST 切换都落在 UTC 整点，
+// 偏移按「时区 + UTC 小时桶」缓存：IANA 多数时区的 DST 切换落在 UTC 整点（例外如 Australia/Lord_Howe 在半点切换，秒级 stamp 最坏偏 ≤30 分钟，日期粒度不受影响），
 // 同一小时桶内的读数必然相同（备份时间戳批量换算的命中近乎 100%）。
 const tzReadingCache = new Map<string, TzReading>()
 

@@ -162,7 +162,7 @@ for (const d of drivers) {
         expect(r.errors).toHaveLength(2)
         expect(r.warnings).toHaveLength(13)
 
-        // 忙度重算：全部插入完成后一次（逐行 createTodo 会是 16 次）
+        // 忙度重算：全部插入完成后一次（逐行 createTodo 会是 18 次）
         expect(counter.calls()).toBe(1)
 
         const todos = ctx.backend.getTodos({ status: 'all' })
