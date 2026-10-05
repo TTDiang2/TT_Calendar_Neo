@@ -2,8 +2,8 @@
  * 教程状态机与存储测试（智者 P1/P2 验收项：前进/回退/跳过/完成/持久化/老用户路径）。
  * jsdom 不测定位（placement 纯函数另测）；这里钉死行为语义。
  */
-import { act, cleanup, render, waitFor } from '@testing-library/react'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, render } from '@testing-library/react'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TourProvider, useTour, TARGET_WAIT_TIMEOUT } from '../engine'
 import type { TourApi } from '../types'
 import { _resetTourStoreForTest, shouldAutoStart, isTourDone, completeOnboarding, requestRewatch } from '../store'
@@ -47,7 +47,7 @@ function makeApi(): TourApi & { calls: string[] } {
 }
 
 /** 渲染一个暴露状态机句柄的探针（jsdom 真跑 useReducer 状态机） */
-function Probe({ api, autoStart }: { api: TourApi; autoStart: boolean }) {
+function Probe({ api: _api, autoStart: _autoStart }: { api: TourApi; autoStart: boolean }) {
   const tour = useTour()
   return (
     <div>
