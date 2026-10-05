@@ -370,8 +370,11 @@ export const ru: DeepPartialDict<Dict> = {
     },
     csv: {
       done: 'Импортировано {inserted}, создано списков: {lists}',
+      ticktickDone: 'Обнаружена резервная копия TickTick: импортировано {inserted}, создано списков: {lists}',
+      warningRows: { one: ', {n} предупреждение', few: ', {n} предупреждения', many: ', {n} предупреждений', other: ', {n} предупреждений' },
       errorRows: { one: ', ошибок в строках: {n}', few: ', ошибок в строках: {n}', many: ', ошибок в строках: {n}', other: ', ошибок в строках: {n}' },
       failed: 'Ошибка импорта: {msg}',
+      dupHint: '. Повторный импорт создаст дубликаты задач',
     },
     stats: {
       title: 'Статистика задач',

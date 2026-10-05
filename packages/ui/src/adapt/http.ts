@@ -243,7 +243,13 @@ export function createHttpBackend(apiBase = '/api'): BackendAdapter {
         headers: { 'Content-Type': 'text/csv' },
         body: text,
       })
-      return r.json() as Promise<{ inserted: number; lists_created: number; errors: string[] }>
+      return r.json() as Promise<{
+        inserted: number
+        lists_created: number
+        errors: string[]
+        warnings: string[]
+        source: 'ticktick' | 'generic'
+      }>
     },
 
     // ----- 多端同步 -----

@@ -377,8 +377,11 @@ export const ko: DeepPartialDict<Dict> = {
     },
     csv: {
       done: '{inserted}개를 가져왔습니다. 목록 {lists}개를 새로 만들었습니다',
+      ticktickDone: 'TickTick 백업 인식: {inserted}개를 가져왔고 목록 {lists}개를 새로 만들었습니다',
+      warningRows: { other: ', 경고 {n}건' },
       errorRows: { other: ', {n}행 오류' },
       failed: '가져오기 실패: {msg}',
+      dupHint: '. 다시 가져오면 작업이 중복됩니다',
     },
     stats: {
       title: '할 일 통계',

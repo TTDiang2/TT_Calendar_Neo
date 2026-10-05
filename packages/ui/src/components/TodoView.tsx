@@ -282,12 +282,18 @@ export const TodoView = forwardRef<TodoViewHandle, {
 
   const csvMut = useMutation({
     mutationFn: importTodosCsv,
-    onSuccess: (r: { inserted: number; lists_created: number; errors: string[] }) => {
+    // 返回结构由 adapt/api 的 importTodosCsv 契约给出（source 由数据面 detect 路由决定）
+    onSuccess: (r: { inserted: number; lists_created: number; errors: string[]; warnings: string[]; source: 'ticktick' | 'generic' }) => {
       invalidate()
-      setCsvResult(
-        t('todo.csv.done', { inserted: r.inserted, lists: r.lists_created })
-        + (r.errors.length ? tPlural('todo.csv.errorRows', r.errors.length) : ''),
-      )
+      const base =
+        r.source === 'ticktick'
+          ? t('todo.csv.ticktickDone', { inserted: r.inserted, lists: r.lists_created })
+          : t('todo.csv.done', { inserted: r.inserted, lists: r.lists_created })
+      const tail =
+        (r.warnings.length ? tPlural('todo.csv.warningRows', r.warnings.length) : '')
+        + (r.errors.length ? tPlural('todo.csv.errorRows', r.errors.length) : '')
+      // v1 不做去重：滴答备份重复导入会产生重复任务，固定提示一句
+      setCsvResult(base + tail + (r.source === 'ticktick' ? t('todo.csv.dupHint') : ''))
     },
     onError: (e: unknown) => setCsvResult(t('todo.csv.failed', { msg: e instanceof Error ? e.message : 'unknown' })),
   })

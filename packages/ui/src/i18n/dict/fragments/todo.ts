@@ -227,10 +227,16 @@ export const todo = {
     /** CSV 导入结果条（inserted/lists 为服务端计数；两数字并存无法用复数） */
     csv: {
       done: '导入 {inserted} 条，新建 {lists} 个列表',
+      /** 滴答清单备份识别命中时的结果条（数据面 detect 路由决定用哪条） */
+      ticktickDone: '识别到滴答清单备份：导入 {inserted} 条，新建 {lists} 个列表',
+      /** 尾随警告子句（含句读，数字做主语 → 复数；拼在 done/ticktickDone 之后） */
+      warningRows: { other: '，{n} 条警告' },
       /** 尾随错误子句（含句读，数字做主语 → 复数；拼在 done 之后） */
       errorRows: { other: '，{n} 行错误' },
       /** 导入失败提示（msg 为后端错误消息原样插入） */
       failed: '导入失败: {msg}',
+      /** 滴答备份尾随提示（v1 不做去重，拼在结果条最尾） */
+      dupHint: '；重复导入会产生重复任务',
     },
     /** 手机端待办统计抽屉 */
     stats: {
@@ -392,8 +398,11 @@ export const todo = {
     },
     csv: {
       done: 'Imported {inserted}, created {lists} lists',
+      ticktickDone: 'TickTick backup detected: imported {inserted}, created {lists} lists',
+      warningRows: { one: ', 1 warning', other: ', {n} warnings' },
       errorRows: { one: ', 1 row failed', other: ', {n} rows failed' },
       failed: 'Import failed: {msg}',
+      dupHint: '; importing again will create duplicate tasks',
     },
     stats: {
       title: 'To-do stats',

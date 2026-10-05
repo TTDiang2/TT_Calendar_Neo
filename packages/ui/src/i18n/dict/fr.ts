@@ -377,8 +377,11 @@ export const fr: DeepPartialDict<Dict> = {
     },
     csv: {
       done: '{inserted} tâches importées, {lists} listes créées',
+      ticktickDone: 'Sauvegarde TickTick détectée : {inserted} tâches importées, {lists} listes créées',
+      warningRows: { one: ', {n} avertissement', many: ', {n} avertissements', other: ', {n} avertissements' },
       errorRows: { one: ', {n} ligne en erreur', many: ', {n} lignes en erreur', other: ', {n} lignes en erreur' },
       failed: 'Échec de l’import : {msg}',
+      dupHint: ' ; un nouvel import créera des tâches en double',
     },
     stats: {
       title: 'Statistiques des tâches',

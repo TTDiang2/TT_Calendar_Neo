@@ -370,8 +370,11 @@ export const zhHant: DeepPartialDict<Dict> = {
     },
     csv: {
       done: '匯入 {inserted} 條，新增 {lists} 個列表',
+      ticktickDone: '識別到滴答清單備份：匯入 {inserted} 條，新增 {lists} 個列表',
+      warningRows: { other: '，{n} 條警告' },
       errorRows: { other: '，{n} 行錯誤' },
       failed: '匯入失敗: {msg}',
+      dupHint: '；重複匯入會產生重複任務',
     },
     stats: {
       title: '待辦統計',

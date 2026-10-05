@@ -375,8 +375,11 @@ export const ja: DeepPartialDict<Dict> = {
     },
     csv: {
       done: '{inserted}件を取り込み、リストを{lists}件作成しました',
+      ticktickDone: 'TickTickバックアップを認識：{inserted}件を取り込み、リストを{lists}件作成しました',
+      warningRows: { other: '、{n}件の警告' },
       errorRows: { other: '、{n}行エラー' },
       failed: '取り込みに失敗しました: {msg}',
+      dupHint: '。繰り返し取り込むとタスクが重複します',
     },
     stats: {
       title: 'ToDo統計',

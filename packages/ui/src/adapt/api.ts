@@ -224,7 +224,13 @@ export interface BackendAdapter {
   }): Promise<Todo>
   updateTodo(id: string, data: Record<string, unknown>): Promise<Todo>
   deleteTodo(id: string): Promise<{ ok: boolean }>
-  importTodosCsv(file: File): Promise<{ inserted: number; lists_created: number; errors: string[] }>
+  importTodosCsv(file: File): Promise<{
+    inserted: number
+    lists_created: number
+    errors: string[]
+    warnings: string[]
+    source: 'ticktick' | 'generic'
+  }>
 
   // 多端同步
   getSyncStatus(): Promise<SyncStatus>

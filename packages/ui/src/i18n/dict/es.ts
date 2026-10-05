@@ -370,8 +370,11 @@ export const es: DeepPartialDict<Dict> = {
     },
     csv: {
       done: '{inserted} importadas, {lists} listas creadas',
+      ticktickDone: 'Copia de seguridad de TickTick detectada: {inserted} importadas, {lists} listas creadas',
+      warningRows: { one: ', {n} aviso', many: ', {n} avisos', other: ', {n} avisos' },
       errorRows: { one: ', {n} fila con error', many: ', {n} filas con error', other: ', {n} filas con error' },
       failed: 'Error al importar: {msg}',
+      dupHint: '; importar de nuevo creará tareas duplicadas',
     },
     stats: {
       title: 'Estadísticas de tareas',
