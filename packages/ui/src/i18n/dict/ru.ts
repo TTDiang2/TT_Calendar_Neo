@@ -940,8 +940,7 @@ export const ru: DeepPartialDict<Dict> = {
     rewatch: 'Пройти обзор заново',
   },
   engine: {
-    loadingFallback: 'Поиск позиции…',
-    skippedToast: 'Обзор пропущен — повторить можно в настройках',
+    loadingFallback: 'Поиск позиции…'
   },
   },
 }

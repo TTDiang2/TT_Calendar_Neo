@@ -945,7 +945,6 @@ export const ko: DeepPartialDict<Dict> = {
   },
   engine: {
     loadingFallback: '위치를 찾는 중…',
-    skippedToast: '둘러보기를 건너뛰었어요(설정에서 재시청 가능)',
   },
   },
 }

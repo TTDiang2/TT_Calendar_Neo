@@ -943,7 +943,6 @@ export const ja: DeepPartialDict<Dict> = {
   },
   engine: {
     loadingFallback: '位置を特定しています…',
-    skippedToast: 'ツアーをスキップしました（設定から再視聴可）',
   },
   },
 }

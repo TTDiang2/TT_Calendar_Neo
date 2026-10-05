@@ -937,8 +937,7 @@ export const zhHant: DeepPartialDict<Dict> = {
     rewatch: '重看新手導覽',
   },
   engine: {
-    loadingFallback: '正在定位指引位置…',
-    skippedToast: '導覽已略過，可在設定中重看',
+    loadingFallback: '正在定位指引位置…'
   },
   },
 }

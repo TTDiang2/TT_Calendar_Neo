@@ -979,8 +979,7 @@ export const fr: DeepPartialDict<Dict> = {
     rewatch: 'Revoir le tutoriel',
   },
   engine: {
-    loadingFallback: 'Repérage…',
-    skippedToast: 'Visite passée — à revoir dans Réglages',
+    loadingFallback: 'Repérage…'
   },
   },
 }

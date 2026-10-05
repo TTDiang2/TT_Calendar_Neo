@@ -105,6 +105,12 @@ export function TourProvider({ api, autoStart, children }: { api: TourApi; autoS
     if (state.status === 'running') endedRef.current = false
   }, [state.status])
 
+  // 越界兜底（智者终审必改1）：教程进行中跨 768px 断口 → visibleSteps 变短、index
+  // 越界 → step=null。绝不静默消失：收口为 done（写标记+restore），UI 正常退场。
+  useEffect(() => {
+    if (state.status === 'running' && !visibleSteps[state.index]) dispatch({ type: 'end' })
+  }, [state.status, state.index, visibleSteps])
+
   // 自动开（AppGate 决定 autoStart=本次会话刚 onboarding 且 !tourDone；首帧后 600ms）
   useEffect(() => {
     if (!autoStart) return
@@ -242,15 +248,18 @@ function TourPortal({ api }: { api: TourApi }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 步骤对象来自静态表，按 id 驱动足够
   }, [stepId, api])
 
-  // hands-on：撤盖板 + 目标 capture click 推进（放行真实点击——点日期的真实反馈即教学内容）
+  // hands-on：撤盖板 + 目标 capture click 推进（放行真实点击——点日期的真实反馈即教学内容）。
+  // next 经 ref 取用（智者终审：跨断口后不残留过期闭包——推进恒用最新 max）
   const handsOn = step?.advanceOnTargetClick === true
+  const nextRef = useRef(next)
+  nextRef.current = next
   useEffect(() => {
     if (!handsOn || !step?.target || !wait.ready) return
     const el = document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`)
     if (!el) return
-    el.addEventListener('click', next, true)
-    return () => el.removeEventListener('click', next, true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- next 引用随 visibleSteps 变化，但语义恒为「推进」
+    const onClick = (): void => nextRef.current()
+    el.addEventListener('click', onClick, true)
+    return () => el.removeEventListener('click', onClick, true)
   }, [handsOn, step?.target, wait.ready])
 
   // Esc = 打开/关闭跳过确认（a11y：行内二次确认防误触）

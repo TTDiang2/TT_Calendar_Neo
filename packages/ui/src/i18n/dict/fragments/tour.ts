@@ -65,7 +65,6 @@ export const tour = {
     /** 引擎状态（无目标时的降级横幅等） */
     engine: {
       loadingFallback: '正在定位指引位置…',
-      skippedToast: '教程已跳过，可在设置中重看',
     },
   },
   en: {
@@ -123,7 +122,6 @@ export const tour = {
     },
     engine: {
       loadingFallback: 'Locating…',
-      skippedToast: 'Tour skipped — replay it in Settings',
     },
   },
 } as const
