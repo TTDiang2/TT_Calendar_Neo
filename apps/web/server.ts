@@ -22,6 +22,10 @@ import {
   refreshSubscriptionOnBackend,
   refreshDueOnBackend,
   importTodosCsvOnBackend,
+  fetchTodoistSnapshot,
+  importTodoistOnBackend,
+  todoistPreview,
+  TodoistAuthError,
 } from '@tt-calendar/db'
 
 export interface DataServerOptions {
@@ -90,6 +94,31 @@ export function startDataServer(opts: DataServerOptions): { port: number; close:
         send(res, 500, { detail: e instanceof Error ? e.message : String(e) })
       }
       return
+    }
+
+    // Todoist 导入（API token 路线）：JSON body {token, confirm}。
+    // token 用完即弃：只在本次请求闭包里存活，不写 meta/config/日志（零持久化）。
+    // confirm=false → 只拉预览返回 {preview, warnings}，零落库；confirm=true →
+    // 重拉快照再落库返回完整结果。零状态：服务端不保存任何 Todoist 凭据。
+    if (seg[0] === 'todo' && seg[1] === 'import' && seg[2] === 'todoist' && method === 'POST') {
+      const todoistBody = (await readBody(req)) as { token?: unknown; confirm?: unknown } | undefined
+      const token = typeof todoistBody?.token === 'string' ? todoistBody.token.trim() : ''
+      const confirm = todoistBody?.confirm === true
+      try {
+        if (!token) return send(res, 400, { detail: '缺少 Todoist API token' })
+        const { snapshot, warnings } = await fetchTodoistSnapshot(token)
+        if (!confirm) {
+          // 预览：token 用完即丢，零落库
+          return send(res, 200, { preview: todoistPreview(snapshot), warnings })
+        }
+        return send(res, 200, importTodoistOnBackend(be, snapshot))
+      } catch (e) {
+        if (e instanceof TodoistAuthError) {
+          return send(res, 401, { detail: e.message, code: 'todoist_auth' })
+        }
+        send(res, 502, { detail: e instanceof Error ? e.message : String(e) })
+        return
+      }
     }
 
     const body = (await readBody(req)) as Record<string, unknown> | undefined

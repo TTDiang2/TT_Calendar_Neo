@@ -833,6 +833,21 @@ export const fr: DeepPartialDict<Dict> = {
       resolvedDone: 'Liaison terminée : {report}',
     },
 
+    todoist: {
+      sectionTitle: 'Import Todoist',
+      desc: 'Importez vos projets, tâches et tâches terminées (étiquettes incluses) depuis Todoist via un token API. Le token ne sert qu’à cet import et est supprimé ensuite ; il n’est jamais stocké.',
+      tokenLabel: 'Token API',
+      tokenPlaceholder: 'Collez votre token API (Todoist → Paramètres → Integrations → Developer)',
+      previewBtn: 'Récupérer l’aperçu',
+      previewing: 'Récupération…',
+      confirmBtn: 'Confirmer l’import',
+      importing: 'Import en cours…',
+      previewResult: 'Prêt à importer {projects} projets · {tasks} tâches · {completed} tâches terminées',
+      result: '{inserted} tâches importées, {created} listes créées',
+      emptyToken: 'Collez d’abord votre token API',
+      authError: 'Le token est invalide ou expiré. Recopiez-le dans Todoist → Paramètres → Integrations → Developer.',
+      dupHint: 'Un nouvel import créera des tâches en double',
+    },
     privacy: {
       sectionTitle: 'Politique de confidentialité',
       intro: 'Vos données vous appartiennent entièrement : toutes les données sont conservées localement sur cet appareil. L’app ne contient ni publicité ni composant de traçage tiers, et ne collecte, ne transmet ni ne vend aucune donnée personnelle.',

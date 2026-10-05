@@ -14,6 +14,12 @@ import { GitHubDataRepo } from '@tt-calendar/db/sync/github'
 import { SyncFacade } from '@tt-calendar/db/sync/facade'
 import { runJisiluImport, refreshSubscriptionOnBackend, refreshDueOnBackend } from '@tt-calendar/db/sources/jisilu'
 import { importTodosCsvOnBackend } from '@tt-calendar/db/sources/csv-todos'
+import {
+  fetchTodoistSnapshot,
+  importTodoistOnBackend,
+  todoistPreview,
+  TodoistAuthError,
+} from '@tt-calendar/db/sources/todoist'
 import { i18n } from './i18n-worker'
 import './polyfills'
 
@@ -158,6 +164,23 @@ export class LocalDbCore {
       importTodosCsv: async (file: unknown) => {
         if (!(file instanceof Blob)) throw new Error(i18n.t('mobile.dbcore.csvFileMissing'))
         return importTodosCsvOnBackend(handle.backend, await file.text())
+      },
+      // Todoist 导入：手机本地模式 WebView 直连 api.todoist.com（CORS 已实测放行，
+      // 若失败明确报错不做代理）。token 只在本次调用的闭包里存活，用后即弃不落盘；
+      // confirm=false 只拉预览返回 {preview, warnings}，confirm=true 重拉后落库。
+      importFromTodoist: async (...a: unknown[]) => {
+        const token = String(a[0] ?? '').trim()
+        const confirm = a[1] === true
+        if (!token) throw new Error(i18n.t('settings.todoist.emptyToken')) // 空/空白拦截不发请求
+        try {
+          const { snapshot, warnings } = await fetchTodoistSnapshot(token)
+          if (!confirm) return { preview: todoistPreview(snapshot), warnings }
+          return importTodoistOnBackend(handle.backend, snapshot)
+        } catch (e) {
+          // 401/403：按当前语言重排引导文案（数据面 message 是后端语言兜底）
+          if (e instanceof TodoistAuthError) throw new Error(i18n.t('settings.todoist.authError'))
+          throw e
+        }
       },
     })
     this.table = table

@@ -8,6 +8,7 @@ import {
   getTodoBusyConfig, setTodoBusyConfig, recomputeTodoBusy, type TodoBusyConfig,
   getTodoReminderConfig, setTodoReminderConfig, type TodoReminderConfig,
   getSyncConfig, getSyncStatus, saveSyncConfig, testSync, syncNow, resolveSync,
+  importFromTodoist, type TodoistImportResult, type TodoistPreviewResult,
   type SyncResult, type SyncNotice,
 } from '../adapt/api'
 
@@ -82,6 +83,117 @@ function TourSection({ onClose }: { onClose: () => void }) {
   )
 }
 
+/**
+ * Todoist 导入分区（20261005 API token 路线）：拉取预览 → 确认导入，两步都由
+ * 数据服务按 token 现拉现用。token 硬纪律：空/空白前端拦截不发请求；token 只在
+ * 输入框与请求期间持有（组件卸载即消失），确认导入完成后 setToken('')——不写
+ * 任何持久层。重复导入会产生重复任务（v1 不做去重），导入后固定提示一句。
+ */
+function TodoistImportSection() {
+  const qc = useQueryClient()
+  const t = useT()
+  const [token, setToken] = useState('')
+  const [preview, setPreview] = useState<TodoistPreviewResult | null>(null)
+  const [result, setResult] = useState<TodoistImportResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<'preview' | 'confirm' | null>(null)
+
+  const run = async (confirm: boolean) => {
+    const tk = token.trim()
+    if (!tk) {
+      setError(t('settings.todoist.emptyToken')) // 空/空白拦截：不发请求
+      return
+    }
+    setBusy(confirm ? 'confirm' : 'preview')
+    setError(null)
+    try {
+      const r = await importFromTodoist(tk, confirm)
+      if ('source' in r) {
+        setResult(r) // confirm=true：完整落库报告
+        setPreview(null)
+        qc.invalidateQueries()
+      } else {
+        setPreview(r) // confirm=false：{preview, warnings}
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null)
+      if (confirm) setToken('') // 用后即弃：确认导入完成即清空（预览保留，确认导入还要用）
+    }
+  }
+
+  return (
+    <section>
+      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('settings.todoist.sectionTitle')}</h3>
+      <p className="text-xs text-gray-400 mb-2">{t('settings.todoist.desc')}</p>
+      <div className="flex flex-col gap-2">
+        <Field label={t('settings.todoist.tokenLabel')}>
+          <input
+            type="password"
+            autoComplete="off"
+            className="tt-input w-full"
+            placeholder={t('settings.todoist.tokenPlaceholder')}
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+          />
+        </Field>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => run(false)}
+            disabled={busy !== null}
+            className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-40"
+          >
+            {busy === 'preview' ? t('settings.todoist.previewing') : t('settings.todoist.previewBtn')}
+          </button>
+          <button
+            onClick={() => run(true)}
+            disabled={busy !== null || !preview}
+            className="px-4 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-40"
+          >
+            {busy === 'confirm' ? t('settings.todoist.importing') : t('settings.todoist.confirmBtn')}
+          </button>
+          {error && <span className="text-sm text-red-500">{error}</span>}
+        </div>
+        {preview && (
+          <div className="rounded-md bg-gray-50 border border-gray-100 p-3 text-sm space-y-1">
+            <p className="text-gray-700">
+              {t('settings.todoist.previewResult', {
+                projects: preview.preview.projects,
+                tasks: preview.preview.tasks,
+                completed: preview.preview.completed,
+              })}
+            </p>
+            {preview.warnings.map((w, i) => (
+              <p key={i} className="text-xs text-amber-600">{w}</p>
+            ))}
+          </div>
+        )}
+        {result && (
+          <div className="rounded-md bg-gray-50 border border-gray-100 p-3 text-sm space-y-1">
+            <p className="text-green-600">{t('settings.todoist.result', { inserted: result.inserted, created: result.lists_created })}</p>
+            <p className="text-amber-600">{t('settings.todoist.dupHint')}</p>
+            {result.warnings.length > 0 && (
+              <div className="text-xs text-amber-600">
+                {result.warnings.map((w, i) => (
+                  <p key={i}>{w}</p>
+                ))}
+              </div>
+            )}
+            {result.errors.length > 0 && (
+              <div className="text-xs text-red-500">
+                {result.errors.map((e, i) => (
+                  <p key={i}>{e}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export function SettingsDialog({ layers, onToggleLayer, onClose }: Props) {
   const t = useT()
   const customLayers = layers.filter((l) => l.layer_id.startsWith('custom_'))
@@ -91,6 +203,7 @@ export function SettingsDialog({ layers, onToggleLayer, onClose }: Props) {
       <div className="flex flex-col gap-5">
         <LanguageSection />
         <TourSection onClose={onClose} />
+        <TodoistImportSection />
         <section>
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('settings.layers.sectionTitle')}</h3>
           {customLayers.length === 0 ? (

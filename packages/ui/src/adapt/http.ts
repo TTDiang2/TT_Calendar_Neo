@@ -10,7 +10,7 @@
  */
 
 import { activeLang, makeI18n } from '../i18n'
-import type { BackendAdapter } from './api'
+import type { BackendAdapter, TodoistImportOutcome } from './api'
 import type {
   CalEvent,
   CountdownItem,
@@ -250,6 +250,27 @@ export function createHttpBackend(apiBase = '/api'): BackendAdapter {
         warnings: string[]
         source: 'ticktick' | 'generic'
       }>
+    },
+    async importFromTodoist(token, confirm) {
+      // token 只进这一次请求体，本适配层不缓存不落盘（confirm=true 时服务端重拉落库）
+      const r = await fetch(`${apiBase}/todo/import/todoist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, confirm }),
+      })
+      const d = (await r.json().catch(() => null)) as
+        | { detail?: string; code?: string }
+        | TodoistImportOutcome
+        | null
+      if (!r.ok) {
+        // 401：数据服务的 detail 是后端语言兜底文案，这里按当前语言重排（照 syncNow 先例）
+        if (r.status === 401) {
+          throw new Error(makeI18n(activeLang()).t('settings.todoist.authError'))
+        }
+        const detail = (d as { detail?: string } | null)?.detail
+        throw new Error(detail ?? `${r.status} /todo/import/todoist`)
+      }
+      return d as TodoistImportOutcome
     },
 
     // ----- 多端同步 -----

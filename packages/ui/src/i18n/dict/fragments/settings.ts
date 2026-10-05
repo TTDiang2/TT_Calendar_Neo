@@ -128,6 +128,36 @@ export const settings = {
       resolvedDone: '绑定完成：{report}',
     },
 
+    /** ── Todoist 导入分区（API token 路线；token 用后即弃不落盘） ── */
+    todoist: {
+      /** 分区标题 */
+      sectionTitle: 'Todoist 导入',
+      /** 分区顶部说明：一次性导入范围 + token 安全承诺 */
+      desc: '通过 Todoist API token 一次性导入你的项目、任务与已完成（含标签）。token 仅本次导入使用，导入完成即清除，不会存储。',
+      /** 表单标签：token 密码框 */
+      tokenLabel: 'API token',
+      /** token 密码框占位符 */
+      tokenPlaceholder: '粘贴 API token（Todoist 设置 → Integrations → Developer）',
+      /** 拉取预览按钮（confirm=false，零落库） */
+      previewBtn: '拉取预览',
+      /** 拉取进行中的按钮文案 */
+      previewing: '拉取中…',
+      /** 确认导入按钮（confirm=true，重拉后落库） */
+      confirmBtn: '确认导入',
+      /** 导入进行中的按钮文案 */
+      importing: '导入中…',
+      /** 预览结果行：三计数（纯数字无名词，不做复数） */
+      previewResult: '将导入 {projects} 个项目 · {tasks} 个任务 · {completed} 个已完成',
+      /** 导入结果行：插入数 + 新建清单数 */
+      result: '已导入 {inserted} 条任务，新建 {created} 个清单',
+      /** 空/空白 token 的前端拦截文案 */
+      emptyToken: '请先粘贴 API token',
+      /** 401/403 引导文案（传输层按当前语言重排，覆盖数据面的后端语言兜底） */
+      authError: 'token 无效或已过期，请在 Todoist 设置 → Integrations → Developer 重新复制',
+      /** 确认导入结果下方的固定提示（v1 不做去重） */
+      dupHint: '重复导入会产生重复任务',
+    },
+
     /** ── 隐私政策分区 ───────────────────────────────────── */
     privacy: {
       /** 分区标题 */
@@ -233,6 +263,22 @@ export const settings = {
       report: 'Pulled {pulled} · Pushed {pushed} · Conflicts {conflicts} · Deleted {deleted}',
       reportWarning: ' ({warning})',
       resolvedDone: 'Binding complete: {report}',
+    },
+
+    todoist: {
+      sectionTitle: 'Todoist import',
+      desc: 'Import your Todoist projects, tasks, and completed tasks (labels included) once via an API token. The token is used only for this import and is discarded afterwards — it is never stored.',
+      tokenLabel: 'API token',
+      tokenPlaceholder: 'Paste your API token (Todoist settings → Integrations → Developer)',
+      previewBtn: 'Fetch preview',
+      previewing: 'Fetching…',
+      confirmBtn: 'Import now',
+      importing: 'Importing…',
+      previewResult: 'Ready to import {projects} projects · {tasks} tasks · {completed} completed',
+      result: 'Imported {inserted} tasks and created {created} lists',
+      emptyToken: 'Paste your API token first',
+      authError: 'The token is invalid or expired. Re-copy it in Todoist settings → Integrations → Developer.',
+      dupHint: 'Importing again will create duplicate tasks',
     },
 
     privacy: {

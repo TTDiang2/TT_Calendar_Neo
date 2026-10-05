@@ -119,6 +119,34 @@ export interface Subscription {
   created_at: string | null
 }
 
+// ----- Todoist 导入（API token 路线；token 仅本次请求使用，任何传输层都不持久化） -----
+
+/** 拉取预览计数（confirm=false 的返回主体） */
+export interface TodoistPreview {
+  projects: number
+  tasks: number
+  completed: number
+}
+
+/** 预览结果（confirm=false）：{preview, warnings}，token 用完即丢、零落库 */
+export interface TodoistPreviewResult {
+  preview: TodoistPreview
+  warnings: string[]
+}
+
+/** 导入结果（confirm=true）：完整落库报告 */
+export interface TodoistImportResult {
+  inserted: number
+  lists_created: number
+  errors: string[]
+  warnings: string[]
+  source: 'todoist'
+  preview?: TodoistPreview
+}
+
+/** confirm=false → TodoistPreviewResult；confirm=true → TodoistImportResult（以 source 字段判别） */
+export type TodoistImportOutcome = TodoistPreviewResult | TodoistImportResult
+
 // ----- 后端适配器接口（= 旧 client.ts 的全部导出函数签名） -----
 
 export interface BackendAdapter {
@@ -231,6 +259,9 @@ export interface BackendAdapter {
     warnings: string[]
     source: 'ticktick' | 'generic'
   }>
+
+  // Todoist 导入（API token；前端空/空白 token 拦截不发请求，导入完成后 UI setToken('')）
+  importFromTodoist(token: string, confirm: boolean): Promise<TodoistImportOutcome>
 
   // 多端同步
   getSyncStatus(): Promise<SyncStatus>
@@ -376,6 +407,8 @@ export const createTodo = (data: {
 export const updateTodo = (id: string, data: Record<string, unknown>) => getBackend().updateTodo(id, data)
 export const deleteTodo = (id: string) => getBackend().deleteTodo(id)
 export const importTodosCsv = (file: File) => getBackend().importTodosCsv(file)
+export const importFromTodoist = (token: string, confirm: boolean) =>
+  getBackend().importFromTodoist(token, confirm)
 
 export const getSyncStatus = () => getBackend().getSyncStatus()
 export const getSyncConfig = () => getBackend().getSyncConfig()
