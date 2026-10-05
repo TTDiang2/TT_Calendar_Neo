@@ -1315,6 +1315,88 @@ export class SqliteBackend {
     return { ok: true }
   }
 
+  /**
+   * 批量导入待办（CSV 备份导入专用路径，2026-10 滴答清单导入硬伤 3）。
+   *
+   * 与 createTodo 的分工（createTodo 冻结不碰）：
+   *  - created_at / completed_at / sort_order 透传入库：备份迁移要保留原时间线，
+   *    createTodo 既不接受这三样，还会把 completed 状态的完成时间强制为 now
+   *  - 单事务：全部插入要么全成要么全败（better-sqlite3 与 sql.js shim 都支持
+   *    db.transaction；万一宿主不支持事务，把 transaction 换成直接调用 insertAll
+   *    即降级为顺序插入，行为除原子性外不变）
+   *  - 忙度重算只在全部插入完成后对受影响日期并集做一次
+   *    （逐行 createTodo 每行触发一次全表读+重算 = O(N²)，5000 行会分钟级冻结）
+   *
+   * 实现说明：不走 drizzle 逐行 .insert()（每行重建 SQL 方言对象，5000 行时是
+   * 主要开销），改用一条预编译 INSERT 循环绑定参数，列清单照抄 todo 表 schema。
+   *
+   * @returns 成功插入的行数（全成或抛错，不存在部分成功）
+   */
+  importTodosBatch(
+    rows: ReadonlyArray<{
+      list_id: string
+      title: string
+      body?: string | null
+      importance?: string
+      status?: string
+      due_date?: string | null
+      planned_date?: string | null
+      start_date?: string | null
+      tags?: string[] | null
+      repeat?: string | null
+      created_at?: string | null
+      completed_at?: string | null
+      sort_order?: number | null
+    }>,
+  ): number {
+    const affected = new Set<string>()
+    const client = (
+      this.db as unknown as { $client: { prepare(sql: string): { run(...params: unknown[]): unknown } } }
+    ).$client
+    const stmt = client.prepare(
+      `INSERT INTO todo (
+         id, list_id, title, body, status, importance, due_date,
+         created_at, completed_at, sort_order, start_date, complexity, tags,
+         planned_date, alarm_at, repeat, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    const insertAll = (): void => {
+      for (const row of rows) {
+        // 直传 completed 状态但没带完成时间的补 now（保持 createTodo 的染色不变量：
+        // 既不进 done 也不进 predict 的 completed 行是统计黑洞）
+        const completedAt = row.completed_at || (row.status === 'completed' ? now() : null)
+        // created_at 缺省补 now（与建表默认 datetime('now','localtime') 同语义）
+        const createdAt = row.created_at || now()
+        stmt.run(
+          crypto.randomUUID(),
+          row.list_id,
+          row.title,
+          row.body ?? null,
+          row.status ?? 'notStarted',
+          row.importance ?? 'normal',
+          row.due_date ?? null,
+          createdAt,
+          completedAt,
+          row.sort_order ?? 0,
+          row.start_date ?? null,
+          'medium',
+          row.tags ? JSON.stringify(row.tags) : null,
+          row.planned_date ?? null,
+          null, // alarm_at：备份源无闹钟概念
+          row.repeat ?? null,
+          now(),
+        )
+        for (const d of [row.due_date, row.planned_date, completedAt ? completedAt.slice(0, 10) : null]) {
+          if (d) affected.add(d)
+        }
+      }
+    }
+    this.db.transaction(insertAll)
+    // 一次重算所有受影响日期（due/planned/completed 的并集）
+    this.recomputeBusyForDates([...affected])
+    return rows.length
+  }
+
   // ----- 订阅（本地 CRUD；网络抓取在 app 层） -----
 
   getSubscriptions(): Subscription[] {

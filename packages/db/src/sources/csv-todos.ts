@@ -1,6 +1,10 @@
 /**
  * 待办 CSV 导入（纯解析 + 落库编排，零网络依赖）。
  *
+ * 入口先做数据源识别（裁决 11：UI 零双入口，识别放数据面）：
+ * 命中滴答清单备份（taskId+parentId 表头）即路由 sources/ticktick.ts 专用解析器，
+ * 否则走本文件的 generic 路径（行为与 2026-10 之前完全一致）。
+ *
  * CSV 格式约定（首行表头，UTF-8，BOM 容忍）：
  *   title（必填）, list（清单名，缺省「导入」）, importance(high/normal/low),
  *   status, due_date, planned_date, start_date（YYYY-MM-DD）,
@@ -14,82 +18,13 @@
  */
 
 import type { SqliteBackend } from '../backend'
+import type { CsvImportResult } from './shared'
+import { parseCsv } from './shared'
+import { detectTickTickCsv, importTickTickCsvOnBackend } from './ticktick'
 
-export interface CsvTodoRow {
-  list: string
-  title: string
-  importance?: string
-  status?: string
-  due_date?: string | null
-  planned_date?: string | null
-  start_date?: string | null
-  tags?: string[] | null
-  body?: string | null
-}
-
-export interface CsvImportResult {
-  inserted: number
-  lists_created: number
-  errors: string[]
-}
-
-/** 解析 CSV 文本为二维数组（支持引号内逗号/换行、BOM、CRLF） */
-export function parseCsv(text: string): string[][] {
-  const src = text.replace(/^\uFEFF/, '')
-  const rows: string[][] = []
-  let row: string[] = []
-  let field = ''
-  let inQuotes = false
-  let i = 0
-  while (i < src.length) {
-    const c = src[i]!
-    if (inQuotes) {
-      if (c === '"') {
-        if (src[i + 1] === '"') {
-          field += '"'
-          i += 2
-          continue
-        }
-        inQuotes = false
-        i++
-        continue
-      }
-      field += c
-      i++
-      continue
-    }
-    if (c === '"') {
-      inQuotes = true
-      i++
-      continue
-    }
-    if (c === ',') {
-      row.push(field)
-      field = ''
-      i++
-      continue
-    }
-    if (c === '\r') {
-      i++
-      continue
-    }
-    if (c === '\n') {
-      row.push(field)
-      rows.push(row)
-      row = []
-      field = ''
-      i++
-      continue
-    }
-    field += c
-    i++
-  }
-  if (field.length > 0 || row.length > 0) {
-    row.push(field)
-    rows.push(row)
-  }
-  return rows.filter((r) => r.some((cell) => cell.trim() !== ''))
-}
+// parseCsv / CsvImportResult 的本体在 shared.ts（滴答与 generic 两条路径共用），这里保持既有导出面
+export { parseCsv } from './shared'
+export type { CsvImportResult } from './shared'
 
 const COLUMN_ALIASES: Record<string, string[]> = {
   list: ['list', 'list_name', '清单', '列表'],
@@ -113,10 +48,16 @@ function parseDateCell(cell: string, lineNo: number, col: string, errors: string
   return null
 }
 
-/** 解析并导入 CSV 待办（清单自动创建，坏行跳过并报行号） */
+/** 解析并导入 CSV 待办（清单自动创建，坏行跳过并报行号；滴答清单备份自动路由专用解析器） */
 export function importTodosCsvOnBackend(backend: SqliteBackend, text: string): CsvImportResult {
   const rows = parseCsv(text)
-  if (rows.length === 0) return { inserted: 0, lists_created: 0, errors: ['文件为空'] }
+  // 数据面单一入口：先识别滴答清单备份，命中即整体路由（generic 路径不碰这份文件）
+  if (detectTickTickCsv(rows)) {
+    return importTickTickCsvOnBackend(backend, text)
+  }
+  if (rows.length === 0) {
+    return { inserted: 0, lists_created: 0, errors: ['文件为空'], warnings: [], source: 'generic' }
+  }
 
   const header = rows[0]!.map((c) => c.trim().toLowerCase())
   const colIndex: Record<string, number> = {}
@@ -125,7 +66,7 @@ export function importTodosCsvOnBackend(backend: SqliteBackend, text: string): C
     if (idx >= 0) colIndex[key] = idx
   }
   if (colIndex['title'] === undefined) {
-    return { inserted: 0, lists_created: 0, errors: ['缺少 title（标题）列'] }
+    return { inserted: 0, lists_created: 0, errors: ['缺少 title（标题）列'], warnings: [], source: 'generic' }
   }
 
   const errors: string[] = []
@@ -196,5 +137,5 @@ export function importTodosCsvOnBackend(backend: SqliteBackend, text: string): C
     inserted += 1
   }
 
-  return { inserted, lists_created: listsCreated, errors }
+  return { inserted, lists_created: listsCreated, errors, warnings: [], source: 'generic' }
 }
