@@ -241,10 +241,14 @@ export function importTickTickCsvOnBackend(backend: SqliteBackend, text: string)
       warnings.push(`第${lineNo}行：未知优先级「${pRaw}」，按普通处理`)
     }
 
-    // Status：1=已完成（Completed Time → completed_at）；2=已归档按已完成 + warning；0/空=未开始
+    // Status：1=已完成（Completed Time → completed_at）；2=已归档按已完成 + warning；
+    // -1=已放弃按未开始导入 + warning（复活为待办需告知用户）；0/空=未开始；
+    // 其他未知值一律按未开始 + warning（与未知优先级的警告对称，绝不静默）
     const sRaw = get(cells, 'status').trim()
     const completed = sRaw === '1' || sRaw === '2'
     if (sRaw === '2') warnings.push(`第${lineNo}行：状态「2」（已归档/可能已放弃）按已完成导入`)
+    else if (sRaw === '-1') warnings.push(`第${lineNo}行：状态「-1」（已放弃）按未开始导入`)
+    else if (sRaw !== '' && sRaw !== '0' && sRaw !== '1') warnings.push(`第${lineNo}行：未知状态「${sRaw}」按未开始导入`)
     const completedRaw = get(cells, 'completed').trim()
     let completedAt: string | undefined
     if (completed) {

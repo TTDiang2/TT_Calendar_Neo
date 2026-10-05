@@ -155,18 +155,26 @@ for (const d of drivers) {
         const counter = countBusyRecompute(ctx)
         const r = importTodosCsvOnBackend(ctx.backend, TICKTICK_FIXTURE)
 
-        // 路由与计数：18 数据行 − 重复折叠 1 − 缺标题 1 = 16；清单 3（工作/收件箱/个人）
+        // 路由与计数：20 数据行 − 重复折叠 1 − 缺标题 1 = 18；清单 3（工作/收件箱/个人）
         expect(r.source).toBe('ticktick')
-        expect(r.inserted).toBe(16)
+        expect(r.inserted).toBe(18)
         expect(r.lists_created).toBe(3)
         expect(r.errors).toHaveLength(2)
-        expect(r.warnings).toHaveLength(11)
+        expect(r.warnings).toHaveLength(13)
 
         // 忙度重算：全部插入完成后一次（逐行 createTodo 会是 16 次）
         expect(counter.calls()).toBe(1)
 
         const todos = ctx.backend.getTodos({ status: 'all' })
-        expect(todos).toHaveLength(16)
+        expect(todos).toHaveLength(18)
+
+        // Status -1 / 未知状态：按未开始导入 + warning（智者终审 C3，与未知优先级对称）
+        const abandoned = todos.find((x) => x.title === '已放弃事项')
+        expect(abandoned?.status).toBe('notStarted')
+        expect(r.warnings.some((w) => w.includes('已放弃') && w.includes('按未开始'))).toBe(true)
+        const unknownStatus = todos.find((x) => x.title === '未知状态事项')
+        expect(unknownStatus?.status).toBe('notStarted')
+        expect(r.warnings.some((w) => w.includes('未知状态「x」'))).toBe(true)
 
         // created_at / completed_at / sort_order 透传真落库（时区换算到 Asia/Shanghai）
         const weekly = byTitle(todos, '写周报')

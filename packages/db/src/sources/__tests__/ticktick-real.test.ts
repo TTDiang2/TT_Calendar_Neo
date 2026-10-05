@@ -4,7 +4,8 @@
  *  - preamble 3 行（Date/Version/Status，Status 值为多行引号字段）
  *  - 表头英文，多 Kind/projectKind 两列；List Name 可含 emoji（👋欢迎）
  *  - Repeat 无 RRULE: 前缀（FREQ=DAILY;INTERVAL=1）
- *  - Reminder 是 ISO 8601 duration 负偏移（-P0DT15H0M0S）——v1 丢弃计 errors
+ *  - Reminder 是 ISO 8601 duration 负偏移（-P0DT15H0M0S）——v1 静默忽略（不解析、
+ *    不告警、不进 alarm_at），导入报告的 errors 不会提及它
  *  - Status 枚举含 -1 Abandoned；Order 为负大数
  * 本文件钉死这些真实形态不被未来重构破坏。
  */
@@ -52,6 +53,7 @@ describe('真实 dida365 导出回归', () => {
     expect(t!.repeat).toBe('daily')
     expect(t!.due_date).toBe('2026-10-05') // UTC 10-04T16:00 +08 → 本地 10-05
     expect(t!.status).toBe('notStarted')
+    expect(t!.sort_order).toBe(-3298534883328) // 真实 25 列表头下 Order 列透传
   })
 
   it('整理季度报表：已完成 + completed_at 本地化落库 + Reminder duration 丢弃不崩', () => {

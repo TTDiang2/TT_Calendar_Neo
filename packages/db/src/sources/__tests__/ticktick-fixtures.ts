@@ -221,6 +221,18 @@ pushRow('间隔双周', {
   Repeat: 'RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO', Status: '0', Timezone: SH, taskId: 'task-17',
 })
 
+// Status -1（已放弃）→ 按未开始导入 + warning（智者终审 C3）
+pushRow('已放弃事项', {
+  'Folder Name': 'Folder A', 'List Name': '工作', Title: '已放弃事项',
+  Status: '-1', Timezone: SH, taskId: 'task-18',
+})
+
+// 未知状态 'x' → 按未开始导入 + warning（与未知优先级警告对称）
+pushRow('未知状态事项', {
+  'Folder Name': 'Folder A', 'List Name': '工作', Title: '未知状态事项',
+  Status: 'x', Timezone: SH, taskId: 'task-19',
+})
+
 export const TICKTICK_FIXTURE = lines.join('\n')
 
 /** PREAMBLE 行数（表头物理行号 = preamble 行数 + 1） */
