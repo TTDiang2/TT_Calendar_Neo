@@ -22,6 +22,7 @@ import { stats } from './fragments/stats'
 import { settings } from './fragments/settings'
 import { app } from './fragments/app'
 import { mobile } from './fragments/mobile'
+import { tour } from './fragments/tour'
 
 export const zhCN = {
   common: common.zh,
@@ -43,6 +44,7 @@ export const zhCN = {
   settings: settings.zh,
   app: app.zh,
   mobile: mobile.zh,
+  tour: tour.zh,
 } as const
 
 export type Dict = typeof zhCN

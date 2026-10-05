@@ -24,6 +24,9 @@ import { useSwipeTabs } from './hooks/useSwipeNav'
 import { useT, useLang, fmtDate, fmtMonthName, I18nProvider, useHasChosenLang } from './i18n'
 import type { TxKey } from './i18n'
 import { LanguagePickerScreen } from './components/LanguagePickerScreen'
+import { WelcomeScreen } from './components/WelcomeScreen'
+import { TourProvider, hasOnboarded, shouldAutoStart, onTourStoreChange, type TourApi } from './tour'
+import { useSyncExternalStore } from 'react'
 // 协议常量（非文案）：旧 sidecar 并发同步报错的消息子串，见 fragments/app.ts 头部 TODO-REVIEW
 import { SYNC_IN_PROGRESS_MARK } from './i18n/dict/fragments/app'
 import {
@@ -76,6 +79,7 @@ function RightDetailDrawer(props: {
       <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={props.onClose} />
       <aside
         ref={panelRef}
+        data-tour="right-drawer"
         className="glass-sheet absolute inset-y-0 right-0 w-[300px] max-w-[85vw] rounded-l-3xl overflow-y-auto"
       >
         {/* 顶部安全区：抽屉是 fixed/absolute 定位，不吃 #root 的 safe-area padding，
@@ -243,10 +247,17 @@ export default function App() {
   )
 }
 
-/** 选择门：未确认语言 → 语言选择页；确认 → 主界面 */
+/**
+ * 选择门三态（20261005 教程定稿）：语言页 → 欢迎屏（仅新装用户）→ 主界面。
+ * 存量升级用户首帧即 chosen=true（有 tt.lang）——isNewInstall=false，永不触达
+ * 欢迎屏与自动教程（智者硬伤 A：onboarded 只能经「语言页→欢迎屏」路径写入）。
+ */
 function AppGate() {
   const chosen = useHasChosenLang()
+  const isNewInstall = useRef(chosen === false).current
+  const onboarded = useSyncExternalStore(onTourStoreChange, hasOnboarded, () => hasOnboarded())
   if (!chosen) return <LanguagePickerScreen />
+  if (isNewInstall && !onboarded) return <WelcomeScreen />
   return <AppInner />
 }
 
@@ -710,7 +721,69 @@ function AppInner() {
 
   const monthData2 = mode === 'year' || !monthData || !('days' in monthData) ? null : monthData
 
+  // ── 新手教程（20261005 智者定稿）──────────────────────────────────────────
+  // tourApi 与 UI 共用同一组 setter（单一事实来源）；before 均为幂等绝对断言。
+  // setTodoView 用 setTodoViewState（不写 todo-view 持久化），快照/恢复负责善后。
+  const tourSnapshotRef = useRef<{ topTab: TopTab; mode: ViewMode; todoView: TodoViewMode; savedTodoView: string | null } | null>(null)
+  const tourLatestRef = useRef({ topTab, mode, todoView })
+  tourLatestRef.current = { topTab, mode, todoView }
+  const tourApi = useMemo<TourApi>(() => {
+    const closeAllOverlays = (): void => {
+      setDialog(null)
+      setAddSheetDate(null)
+      setCtxMenu(null)
+      setMobileLayersOpen(false)
+      setRightDrawerOpen(false)
+      setTodoListsOpen(false)
+      setTodoDetailOpen(false)
+      setStatsScopeOpen(false)
+      setStatsMilestonesOpen(false)
+    }
+    return {
+      resetToHome: () => {
+        closeAllOverlays()
+        setTopTab('calendar')
+        setMode('month')
+      },
+      goTab: setTopTab,
+      setMode,
+      setTodoView: setTodoViewState,
+      openLayers: () => setMobileLayersOpen(true),
+      closeLayers: () => setMobileLayersOpen(false),
+      openRight: () => setRightDrawerOpen(true),
+      closeRight: () => setRightDrawerOpen(false),
+      openSettings: () => setDialog({ kind: 'settings' }),
+      closeDialog: () => setDialog(null),
+      snapshot: () => {
+        tourSnapshotRef.current = {
+          ...tourLatestRef.current,
+          savedTodoView: localStorage.getItem('todo-view'),
+        }
+      },
+      restore: () => {
+        const snap = tourSnapshotRef.current
+        if (!snap) return
+        setTopTab(snap.topTab)
+        setMode(snap.mode)
+        setTodoViewState(snap.todoView)
+        if (snap.savedTodoView !== null) {
+          try {
+            localStorage.setItem('todo-view', snap.savedTodoView)
+          } catch {
+            /* 隐私模式等 */
+          }
+        }
+        closeAllOverlays()
+        tourSnapshotRef.current = null
+      },
+    }
+    // setter 为 setState 稳定引用；最新视图值经 tourLatestRef 桥接——api 引用恒定
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const tourAutoStart = useSyncExternalStore(onTourStoreChange, shouldAutoStart, () => shouldAutoStart())
+
   return (
+    <TourProvider api={tourApi} autoStart={tourAutoStart}>
     <div className="h-full flex flex-col ambient-root">
       <div className="ambient-content flex flex-col flex-1 min-h-0">
       {exitSync && (
@@ -968,11 +1041,11 @@ function AppInner() {
         gestureRef={dockGesture}
         leftAction={
           topTab === 'calendar' ? (
-            { icon: <Layers size={20} />, label: t('app.dock.layers'), onPress: () => setMobileLayersOpen(true) }
+            { icon: <Layers size={20} />, label: t('app.dock.layers'), onPress: () => setMobileLayersOpen(true), tourId: 'dock-left' }
           ) : topTab === 'todo' ? (
-            { icon: <FolderOpen size={20} />, label: t('app.dock.todoLists'), onPress: () => setTodoListsOpen(true) }
+            { icon: <FolderOpen size={20} />, label: t('app.dock.todoLists'), onPress: () => setTodoListsOpen(true), tourId: 'dock-left' }
           ) : topTab === 'stats' ? (
-            { icon: <SlidersHorizontal size={20} />, label: t('app.dock.statsScope'), onPress: () => setStatsScopeOpen(true) }
+            { icon: <SlidersHorizontal size={20} />, label: t('app.dock.statsScope'), onPress: () => setStatsScopeOpen(true), tourId: 'dock-left' }
           ) : undefined
         }
         rightAction={
@@ -983,12 +1056,13 @@ function AppInner() {
               onPress: () => {
                 if (mode !== 'year') setRightDrawerOpen(true)
               },
+              tourId: 'dock-right',
             }
           ) : topTab === 'todo' ? (
             /* 20260917 任务书 1.2-3：dock 右按钮改为待办统计（右抽屉不再承担新建/编辑） */
-            { icon: <Trophy size={20} />, label: t('app.dock.todoStats'), onPress: () => todoViewRef.current?.openStats() }
+            { icon: <Trophy size={20} />, label: t('app.dock.todoStats'), onPress: () => todoViewRef.current?.openStats(), tourId: 'dock-right' }
           ) : topTab === 'stats' ? (
-            { icon: <Trophy size={20} />, label: t('app.dock.milestones'), onPress: () => setStatsMilestonesOpen(true) }
+            { icon: <Trophy size={20} />, label: t('app.dock.milestones'), onPress: () => setStatsMilestonesOpen(true), tourId: 'dock-right' }
           ) : undefined
         }
       />
@@ -1005,6 +1079,7 @@ function AppInner() {
               else setAddSheetDate(selectedDate ?? todayStr())
             } else todoViewRef.current?.openQuickAdd()
           }}
+          data-tour="fab-new"
           className="md:hidden fixed right-4 z-30 w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 text-white shadow-xl shadow-pink-500/40 flex items-center justify-center active:scale-90 transition-transform"
           style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom, 0px))' }}
           aria-label={t('app.fabNew')}
@@ -1112,5 +1187,6 @@ function AppInner() {
       )}
       </div>
     </div>
+    </TourProvider>
   )
 }

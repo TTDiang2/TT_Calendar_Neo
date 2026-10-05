@@ -26,6 +26,8 @@ export interface DockSideAction {
   icon: React.ReactNode
   label: string
   onPress: () => void
+  /** 新手教程锚点（dock 左右按钮：dock-left / dock-right） */
+  tourId?: string
 }
 
 /** 手势进行中的指示器进度（-1..1，×一个 tab 位）；App 的切页手势每帧写入 */
@@ -98,7 +100,7 @@ export function BottomTabBar({
     >
       <div className="glass-dock rounded-full flex items-center gap-1 pl-1.5 pr-1.5 h-16 max-w-[calc(100vw-1rem)]">
         <DockSideButton action={leftAction} />
-        <div className="relative flex items-center flex-1 self-stretch my-1.5" style={{ minWidth: 192 }}>
+        <div className="relative flex items-center flex-1 self-stretch my-1.5" style={{ minWidth: 192 }} data-tour="dock-tabs">
           {/* 选中指示圆片：宽度 = 1/3 容器，translateX 按位次平移；手势中跟手连续移动 */}
           <span
             ref={pillRef}
@@ -116,6 +118,7 @@ export function BottomTabBar({
               <button
                 key={tab.key}
                 onClick={() => onChange(tab.key)}
+              data-tour={`dock-tab-${tab.key}`}
                 className="pressable relative z-10 flex flex-col items-center justify-center gap-0.5 flex-1 self-stretch py-1"
                 aria-current={on ? 'page' : undefined}
                 aria-label={t(tab.labelKey)}
@@ -151,6 +154,7 @@ function DockSideButton({ action }: { action?: DockSideAction }) {
   return (
     <button
       onClick={action.onPress}
+      data-tour={action.tourId}
       className="pressable flex items-center justify-center w-11 h-11 flex-shrink-0 rounded-full bg-white/60 border border-white/70 text-gray-600 shadow-sm active:bg-pink-50 active:text-pink-600 transition-colors"
       aria-label={action.label}
       title={action.label}

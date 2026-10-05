@@ -63,7 +63,7 @@ function MobileMonthGrid({
   )
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 gap-1.5">
+    <div className="flex-1 flex flex-col min-h-0 gap-1.5" data-tour="month-grid-mobile">
       <div className="flex flex-col min-h-0 glass-card rounded-3xl p-2 pt-1 flex-shrink-0">
         <div className="grid grid-cols-7 mb-0.5 flex-shrink-0">
           {/* 星期窄表头：Intl 产出（锚点 2023-01-02 是周一，i 偏移即得周一开头顺序），禁手写数组（规范 §3） */}
@@ -207,7 +207,7 @@ function DesktopMonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleC
   const showAgenda = !!todayDay
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 gap-1.5 md:gap-0">
+    <div className="flex-1 flex flex-col min-h-0 gap-1.5 md:gap-0" data-tour="month-grid-desktop">
       {/* 桌面保持铺满无卡片（玻璃卡片语言仅用于 <md，本组件在手机分支已被 MobileMonthGrid 接管） */}
       <div className="flex flex-col min-h-0 md:contents">
         <div className="grid grid-cols-7 gap-1 mb-2 md:mb-1 flex-shrink-0">

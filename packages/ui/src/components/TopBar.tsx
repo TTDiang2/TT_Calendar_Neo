@@ -54,7 +54,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
        桌面（md+）：md:flex-nowrap 合并单行（tab → 标题/导航 → 模式 → 操作） */
     <header className="glass-topbar flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 md:px-4 py-1.5 md:py-0 md:h-14 md:flex-nowrap flex-shrink-0">
       {/* 一级 tab：仅桌面显示（手机用底部标签栏，避免双份导航） */}
-      <div className="hidden md:inline-flex rounded-xl border border-white/70 p-0.5 bg-white/50 md:mr-3 flex-shrink-0">
+      <div className="hidden md:inline-flex rounded-xl border border-white/70 p-0.5 bg-white/50 md:mr-3 flex-shrink-0" data-tour="topbar-tabs">
         {TOP_TABS.map((tab) => (
           <button
             key={tab.key}
@@ -124,7 +124,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
           {/* 模式切换：手机最后一行整行横滚，桌面保持原位置（移动端胶囊化加大触点）。
               mobileHidden 的视图（周）只在桌面出现 */}
           <div className="order-4 md:order-3 w-full md:w-auto md:ml-4 -mx-2 px-2 md:mx-0 md:px-0 overflow-x-auto flex-shrink-0">
-            <div className="inline-flex rounded-full border border-white/70 p-0.5 bg-white/50">
+            <div className="inline-flex rounded-full border border-white/70 p-0.5 bg-white/50" data-tour="mode-pills">
               {MODES.map((m) => (
                 <button
                   key={m.key}
@@ -168,7 +168,7 @@ export function TopBar({ title, topTab, mode, todoView, onTopTabChange, onModeCh
           </div>
 
           <div className="order-4 md:order-3 w-full md:w-auto md:ml-4 -mx-2 px-2 md:mx-0 md:px-0 overflow-x-auto flex-shrink-0">
-            <div className="inline-flex rounded-full border border-white/70 p-0.5 bg-white/50">
+            <div className="inline-flex rounded-full border border-white/70 p-0.5 bg-white/50" data-tour="todo-view-pills">
               {TODO_MODES.map((m) => (
                 <button
                   key={m.key}

@@ -20,7 +20,7 @@ interface Props {
 /* 桌面：固定左侧栏（md+ 才显示，手机上由 App 渲染 MobileLayersDrawer） */
 export function Sidebar({ layers, onToggle, countdown }: Props) {
   return (
-    <aside className="hidden md:flex w-60 bg-white/55 border-r border-white/60 flex-shrink-0 p-4 overflow-y-auto flex-col">
+    <aside data-tour="sidebar-desktop" className="hidden md:flex w-60 bg-white/55 border-r border-white/60 flex-shrink-0 p-4 overflow-y-auto flex-col">
       <LayerTree layers={layers} onToggle={onToggle} countdown={countdown} />
     </aside>
   )
@@ -48,7 +48,7 @@ export function MobileLayersDrawer({
   }, [open])
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 md:hidden">
+    <div className="fixed inset-0 z-50 md:hidden" data-tour="layers-drawer">
       <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={onClose} />
       <aside
         ref={panelRef}

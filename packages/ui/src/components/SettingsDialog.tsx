@@ -28,6 +28,7 @@ function syncNoticeText(t: I18n['t'], tPlural: I18n['tPlural'], notice: SyncNoti
 }
 import type { Layer } from '../adapt/types'
 import { LANGS, LANG_META, chooseLang, useLang, useT, useTPlural, type I18n, type Lang } from '../i18n'
+import { requestRewatch } from '../tour'
 
 interface Props {
   layers: Layer[]
@@ -63,6 +64,24 @@ function LanguageSection() {
   )
 }
 
+/** 教程重看行（20261005）：请求重看后关闭设置弹窗，教程 600ms 后从第 1 步开始 */
+function TourSection({ onClose }: { onClose: () => void }) {
+  const t = useT()
+  return (
+    <section>
+      <button
+        onClick={() => {
+          requestRewatch()
+          onClose()
+        }}
+        className="w-full px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/60 text-sm text-pink-600 hover:bg-pink-100 transition text-left"
+      >
+        {t('tour.settings.rewatch')}
+      </button>
+    </section>
+  )
+}
+
 export function SettingsDialog({ layers, onToggleLayer, onClose }: Props) {
   const t = useT()
   const customLayers = layers.filter((l) => l.layer_id.startsWith('custom_'))
@@ -71,6 +90,7 @@ export function SettingsDialog({ layers, onToggleLayer, onClose }: Props) {
     <Modal title={t('common.settings')} onClose={onClose} width={720}>
       <div className="flex flex-col gap-5">
         <LanguageSection />
+        <TourSection onClose={onClose} />
         <section>
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('settings.layers.sectionTitle')}</h3>
           {customLayers.length === 0 ? (
@@ -417,7 +437,7 @@ function SyncConfigSection() {
 
   return (
     <section>
-      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('settings.sync.sectionTitle')}</h3>
+      <h3 data-tour="sync-section" className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('settings.sync.sectionTitle')}</h3>
       <p className="text-xs text-gray-400 mb-2">
         {t('settings.sync.desc')}
       </p>

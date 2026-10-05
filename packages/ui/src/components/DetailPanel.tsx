@@ -69,7 +69,7 @@ export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetCol
       )
     }
     return (
-      <aside className="hidden lg:block w-72 bg-white/55 border-l border-white/60 p-4 overflow-y-auto">
+      <aside data-tour="detail-panel-desktop" className="hidden lg:block w-72 bg-white/55 border-l border-white/60 p-4 overflow-y-auto">
         <p className="text-sm text-gray-400">{t('dialogs.detail.panelEmpty')}</p>
       </aside>
     )

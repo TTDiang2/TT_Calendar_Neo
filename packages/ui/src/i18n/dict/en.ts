@@ -23,6 +23,7 @@ import { stats } from './fragments/stats'
 import { settings } from './fragments/settings'
 import { app } from './fragments/app'
 import { mobile } from './fragments/mobile'
+import { tour } from './fragments/tour'
 
 export const en: DeepPartialDict<Dict> = {
   common: common.en,
@@ -44,4 +45,5 @@ export const en: DeepPartialDict<Dict> = {
   settings: settings.en,
   app: app.en,
   mobile: mobile.en,
+  tour: tour.en,
 }
