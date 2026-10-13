@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, CheckSquare, Circle, Clock3, Flame, Gauge, Palette, X } from 'lucide-react'
 import clsx from 'clsx'
-import type { Todo } from '../../adapt/types'
+import type { Layer, Todo } from '../../adapt/types'
 import { useViewData } from '../../hooks/useApi'
 import { getCountdownList, getTodoStats, getTodos, updateTodo } from '../../adapt/api'
 import {
@@ -23,6 +23,8 @@ import {
 import { animCountUp } from '../../anim'
 import { lunarText } from '../../adapt/labels'
 import { layerLabel } from '../../adapt/layerLabel'
+
+const EMPTY_LAYERS: Layer[] = []
 import { fmtDate, fmtWeekday, useLang, useT, useTPlural } from '../../i18n'
 
 // ---------- 共享数据钩子（同 key 复用 react-query 缓存，多卡片同源零开销） ----------
@@ -267,7 +269,8 @@ export function DotsWidget({ editing, onRemove }: { editing?: boolean; onRemove?
   const { data } = useMonth(currentMonthKey())
   const today = todayStr()
   const day = data && 'days' in data ? data.days.find((d) => d.date === today) : null
-  const layers = data?.layers ?? []
+  // 空数组兜底引用恒定（EMPTY_LAYERS），否则 entries 的 useMemo 依赖逐帧失稳
+  const layers = useMemo(() => data?.layers ?? EMPTY_LAYERS, [data])
   const entries = useMemo(() => {
     if (!day) return []
     const out: { title: string; color: string | null; layer: string }[] = []

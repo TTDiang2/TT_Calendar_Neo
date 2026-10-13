@@ -20,8 +20,8 @@ data/local/
 *.log
 logs/
 
-# pnpm 临时目录（被安全策略拦截安装时会残留）
-_tmp_*/
+# pnpm 临时目录（被安全策略拦截安装时会残留）；也匹配残留的 0 字节文件
+_tmp_*
 # 构建前移走的旧 dist（clean-dist.cjs 改名，非删除）
 _trash_*/
 
@@ -40,3 +40,6 @@ Thumbs.db
 .env.local
 .env.*.local
 secrets.json
+
+# 个人一键启动脚本（含本机 Node 路径，保留在磁盘但不入库）
+/*.bat

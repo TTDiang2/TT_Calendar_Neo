@@ -5,6 +5,8 @@
  * 默认屏显已移除：黑底日志条在正常使用中遮挡界面（2026-09-14 用户反馈）。
  * Worker realm（无 document）纯 console。
  * 这些日志只在 openLocalDb / SqlJsSqlite.open 的启动路径上打点，运行期为零开销。
+ * 与 apps/mobile/src/boot-log.ts 已分叉：那边多 15s 看门狗自动显形（真机卡死
+ * 定位用），本侧是零屏显的最小副本。改 console 行格式 / #bootlog 样式须两侧同步。
  */
 export function bootLog(...parts: unknown[]): void {
   const line = parts

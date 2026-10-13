@@ -66,7 +66,7 @@ export function YearView({ yearData, layers, selectedDate, onSelectDate }: Props
                 ))}
                 {days.map((day) => {
                   const { d } = parseDate(day.date)
-                  const color = miniCellColor(day, layerById)
+                  const color = miniCellColor(day, layerById, busyConfig)
                   const isSel = selectedDate === day.date
                   return (
                     <button

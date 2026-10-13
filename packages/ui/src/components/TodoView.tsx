@@ -481,7 +481,6 @@ export const TodoView = forwardRef<TodoViewHandle, {
               )}
               {filteredIncomplete.map((t) => {
                 const listName = lists.find((l) => l.id === t.list_id)?.display_name
-                const overdue = t.due_date && new Date(t.due_date) < new Date(new Date().toDateString())
                 return (
                   <div
                     key={t.id}
@@ -519,7 +518,6 @@ export const TodoView = forwardRef<TodoViewHandle, {
                       todo={t}
                       listName={listName}
                       isDone={false}
-                      overdue={!!overdue}
                       selected={selectedTodoId === t.id}
                       leaving={leavingIds.has(t.id)}
                       onSelect={() => setSelectedTodoId(t.id)}
@@ -550,7 +548,6 @@ export const TodoView = forwardRef<TodoViewHandle, {
                             todo={t}
                             listName={listName}
                             isDone={true}
-                            overdue={false}
                             selected={selectedTodoId === t.id}
                             leaving={leavingIds.has(t.id)}
                             onSelect={() => setSelectedTodoId(t.id)}
@@ -1348,11 +1345,10 @@ function FilterSelect({ label, value, options, onChange }: {
   )
 }
 
-function TodoRow({ todo, listName, isDone, overdue, selected, leaving, onSelect, onToggle, onOpenNotes }: {
+function TodoRow({ todo, listName, isDone, selected, leaving, onSelect, onToggle, onOpenNotes }: {
   todo: Todo
   listName?: string
   isDone: boolean
-  overdue: boolean
   selected: boolean
   leaving?: boolean
   onSelect: () => void

@@ -4,8 +4,8 @@
  * - ':memory:' / 新库：直接得到完整 schema
  * - 旧 Python 库：表已存在则全部跳过，零改动兼容
  *
- * 后续 schema 演进用 drizzle-kit generate 生成增量迁移（packages/db/drizzle/），
- * 不要往这份基线里追加 ALTER。
+ * schema 演进走「基线 + ENSURE_COLUMNS 补列」这条既定通道：
+ * 新表改 BASELINE，加列登记 ENSURE_COLUMNS，不要往基线里追加 ALTER。
  */
 
 import type Database from 'better-sqlite3'

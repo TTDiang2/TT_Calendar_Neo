@@ -20,9 +20,6 @@ import type {
   StatsSummary,
   Todo,
   TodoList,
-  TodoSort,
-  TodoStatusFilter,
-  ViewMode,
   YearData,
 } from './types'
 

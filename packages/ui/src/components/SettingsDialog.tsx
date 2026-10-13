@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { Trash2 } from 'lucide-react'
 import { Modal, Field } from './ui/Modal'
 import {
-  toggleLayer, updateLayerConfig, deleteLayer,
+  deleteLayer,
   getTodoBusyConfig, setTodoBusyConfig, recomputeTodoBusy, type TodoBusyConfig,
   getTodoReminderConfig, setTodoReminderConfig, type TodoReminderConfig,
   getSyncConfig, getSyncStatus, saveSyncConfig, testSync, syncNow, resolveSync,

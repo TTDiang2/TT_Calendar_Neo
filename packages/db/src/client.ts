@@ -29,6 +29,3 @@ export function openDb({ path }: OpenOptions): { db: Db; sqlite: Database.Databa
   const db = drizzle(sqlite, { schema })
   return { db, sqlite }
 }
-
-/** drizzle-kit 配置读取用：仅元信息，不打开连接 */
-export const SCHEMA_TABLES = Object.keys(schema)

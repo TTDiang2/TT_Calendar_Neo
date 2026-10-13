@@ -12,6 +12,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { pathToFileURL } from 'node:url'
 import {
   openDb,
   SqliteBackend,
@@ -27,18 +28,49 @@ import {
   todoistPreview,
   TodoistAuthError,
 } from '@tt-calendar/db'
+import type { TodoSort, TodoStatusFilter } from '@tt-calendar/contracts'
 
 export interface DataServerOptions {
   /** SQLite 文件路径 */
   dbPath: string
-  /** 监听端口，默认 8766 */
+  /** 监听端口，默认 8766；传 0 由系统分配（测试用） */
   port?: number
+}
+
+export interface DataServerHandle {
+  /** 实际监听端口（port=0 时为系统分配值，ready 之后可读） */
+  port: number
+  ready: Promise<void>
+  close: () => Promise<void>
+}
+
+/**
+ * 跨源 Origin 白名单。绑定 127.0.0.1 并不能挡住浏览器：用户开着任意网页时，
+ * 该页可以直接 fetch http://127.0.0.1:8766 读写全部日历数据（跨源请求是否
+ * 能读响应由 CORS 决定，但「写」类请求即使 CORS 拒绝也已送达——所以必须在
+ * 服务端校验 Origin 而不是只靠响应头）。
+ * 放行范围 = 本项目自己的前端：
+ * - localhost/127.0.0.1 任意端口：三端 vite dev（5173/5174/5175）
+ * - tauri.localhost / tauri://：桌面壳生产模式（API_BASE 直连 8767，Windows
+ *   壳 origin 是 http://tauri.localhost，macOS 是 tauri://localhost）
+ * - *.vicp.fun：用户自己的内网穿透域名（web vite.config 的 allowedHosts）
+ * 无 Origin 头的请求（同源 GET、curl、Node 工具）放行——浏览器跨源请求
+ * 必带 Origin，非浏览器客户端不属本威胁模型。
+ */
+const ALLOWED_ORIGIN: RegExp[] = [
+  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/,
+  /^https?:\/\/tauri\.localhost$/,
+  /^tauri:\/\//,
+  /^https?:\/\/[a-z0-9-]+\.vicp\.fun$/,
+]
+
+function originAllowed(origin: string): boolean {
+  return ALLOWED_ORIGIN.some((re) => re.test(origin))
 }
 
 function send(res: ServerResponse, code: number, payload: unknown): void {
   res.statusCode = code
   res.setHeader('Content-Type', 'application/json')
-  res.setHeader('Access-Control-Allow-Origin', '*')
   res.end(JSON.stringify(payload))
 }
 
@@ -61,7 +93,7 @@ async function readRawBody(req: IncomingMessage): Promise<string> {
 }
 
 /** 启动本地数据服务，返回关闭句柄 */
-export function startDataServer(opts: DataServerOptions): { port: number; close: () => Promise<void> } {
+export function startDataServer(opts: DataServerOptions): DataServerHandle {
   const { db, sqlite } = openDb({ path: opts.dbPath })
   const be = new SqliteBackend(db)
   const facade = new SyncFacade({
@@ -69,12 +101,22 @@ export function startDataServer(opts: DataServerOptions): { port: number; close:
     svc: new SyncService(db),
     makeRemote: (cfg) => new GitHubDataRepo(cfg),
   })
-  const port = opts.port ?? 8766
+  let port = opts.port ?? 8766
 
   const server = createServer(async (req, res) => {
-    // 统一 CORS 预检（同源 vite 代理其实用不到，但直接 8766 访问时有用）
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    // Origin 门禁（见 ALLOWED_ORIGIN 注释）：非白名单跨源请求一律 403，
+    // 预检也不例外。白名单 Origin 回写 ACAO 放行真正的跨端调用方（桌面壳）。
+    const origin = req.headers.origin
+    if (origin !== undefined && !originAllowed(origin)) {
+      send(res, 403, { detail: 'origin not allowed' })
+      return
+    }
+    if (origin !== undefined) {
+      res.setHeader('Access-Control-Allow-Origin', origin)
+      res.setHeader('Vary', 'Origin')
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    }
     if (req.method === 'OPTIONS') {
       res.statusCode = 204
       res.end()
@@ -129,9 +171,19 @@ export function startDataServer(opts: DataServerOptions): { port: number; close:
     }
   })
 
+  const ready = new Promise<void>((resolve) =>
+    server.once('listening', () => {
+      const addr = server.address()
+      if (addr && typeof addr === 'object') port = addr.port
+      resolve()
+    }),
+  )
   server.listen(port, '127.0.0.1')
   return {
-    port,
+    get port() {
+      return port
+    },
+    ready,
     close: () =>
       new Promise((r) => {
         server.close(() => r())
@@ -140,7 +192,10 @@ export function startDataServer(opts: DataServerOptions): { port: number; close:
   }
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+// body → 后端入参用 `as Parameters<typeof be.xxx>[0]` 断言而非 zod 校验：
+// 调用方只有本机白名单 Origin 的自家前端（见 ALLOWED_ORIGIN），body 由
+// HttpBackendAdapter 按 BackendAdapter 接口的 TS 类型组装，畸形 body 属
+// 程序 bug 而非攻击面；断言跟随真实方法签名，后端改签名时这里会 typecheck 报错。
 async function handle(
   seg: string[],
   method: string,
@@ -165,12 +220,12 @@ async function handle(
   if (a === 'layers') {
     if (!b) {
       if (method === 'GET') return ok(res, be.getLayers())
-      if (method === 'POST') return ok(res, be.createLayer(body as any))
+      if (method === 'POST') return ok(res, be.createLayer(body as Parameters<typeof be.createLayer>[0]))
       return bad(res)
     }
     if (method === 'DELETE') return ok(res, be.deleteLayer(b))
     if (method === 'PUT') {
-      if (c === 'config') return ok(res, be.updateLayerConfig(b, body as any))
+      if (c === 'config') return ok(res, be.updateLayerConfig(b, body as Parameters<typeof be.updateLayerConfig>[1]))
       if (c === 'sub-actions') return ok(res, be.getLayerSubActions(b))
       return ok(res, be.toggleLayer(b, Boolean(body?.enabled)))
     }
@@ -181,22 +236,22 @@ async function handle(
   // ----- 事件 -----
   if (a === 'events') {
     if (!b) {
-      if (method === 'POST') return ok(res, be.createEvent(body as any))
+      if (method === 'POST') return ok(res, be.createEvent(body as Parameters<typeof be.createEvent>[0]))
       return bad(res)
     }
     if (method === 'DELETE') return ok(res, be.deleteEvent(Number(b)))
-    if (method === 'PUT') return ok(res, be.updateEvent(Number(b), body as any))
+    if (method === 'PUT') return ok(res, be.updateEvent(Number(b), body as Parameters<typeof be.updateEvent>[1]))
     return bad(res)
   }
 
   // ----- 日程 -----
   if (a === 'schedule-items') {
     if (!b) {
-      if (method === 'POST') return ok(res, be.createScheduleItem(body as any))
+      if (method === 'POST') return ok(res, be.createScheduleItem(body as Parameters<typeof be.createScheduleItem>[0]))
       return bad(res)
     }
     if (method === 'DELETE') return ok(res, be.deleteScheduleItem(Number(b)))
-    if (method === 'PUT') return ok(res, be.updateScheduleItem(Number(b), body as any))
+    if (method === 'PUT') return ok(res, be.updateScheduleItem(Number(b), body as Parameters<typeof be.updateScheduleItem>[1]))
     if (method === 'GET') return ok(res, be.getScheduleItems(b))
     return bad(res)
   }
@@ -237,12 +292,12 @@ async function handle(
   if (a === 'countdown') {
     if (!b) {
       // getCountdownText 已随 i18n 重构移除（顶部倒数由 UI 层按语言组装）
-      if (method === 'POST') return ok(res, be.createCountdown(body as any))
+      if (method === 'POST') return ok(res, be.createCountdown(body as Parameters<typeof be.createCountdown>[0]))
       return bad(res)
     }
     if (b === 'list' && method === 'GET') return ok(res, be.getCountdownList())
     if (method === 'DELETE') return ok(res, be.deleteCountdown(Number(b)))
-    if (method === 'PUT') return ok(res, be.updateCountdown(Number(b), body as any))
+    if (method === 'PUT') return ok(res, be.updateCountdown(Number(b), body as Parameters<typeof be.updateCountdown>[1]))
     return bad(res)
   }
 
@@ -252,13 +307,13 @@ async function handle(
   // ----- 设置：忙度算法 / 每日提醒 -----
   if (a === 'settings' && b === 'todo-busy') {
     if (method === 'GET') return ok(res, be.getTodoBusyConfig())
-    if (method === 'PUT') return ok(res, be.setTodoBusyConfig(body as any))
+    if (method === 'PUT') return ok(res, be.setTodoBusyConfig(body as Parameters<typeof be.setTodoBusyConfig>[0]))
     if (c === 'recompute' && method === 'POST') return ok(res, be.recomputeTodoBusy())
     return bad(res)
   }
   if (a === 'settings' && b === 'todo-reminder') {
     if (method === 'GET') return ok(res, be.getTodoReminderConfig())
-    if (method === 'PUT') return ok(res, be.setTodoReminderConfig(body as any))
+    if (method === 'PUT') return ok(res, be.setTodoReminderConfig(body as Parameters<typeof be.setTodoReminderConfig>[0]))
     return bad(res)
   }
 
@@ -287,14 +342,14 @@ async function handle(
   }
   if (a === 'todo' && !b) {
     if (method === 'GET') {
-      return ok(res, be.getTodos({ list_id: qs.get('list_id') ?? undefined, status: (qs.get('status') as any) ?? undefined, sort: (qs.get('sort') as any) ?? undefined, limit: qs.get('limit') ? Number(qs.get('limit')) : undefined, completed_on: qs.get('completed_on') ?? undefined }))
+      return ok(res, be.getTodos({ list_id: qs.get('list_id') ?? undefined, status: (qs.get('status') as TodoStatusFilter | null) ?? undefined, sort: (qs.get('sort') as TodoSort | null) ?? undefined, limit: qs.get('limit') ? Number(qs.get('limit')) : undefined, completed_on: qs.get('completed_on') ?? undefined }))
     }
-    if (method === 'POST') return ok(res, be.createTodo(body as any))
+    if (method === 'POST') return ok(res, be.createTodo(body as Parameters<typeof be.createTodo>[0]))
     return bad(res)
   }
   if (a === 'todo' && b) {
     if (method === 'DELETE') return ok(res, be.deleteTodo(b))
-    if (method === 'PUT') return ok(res, be.updateTodo(b, body as any))
+    if (method === 'PUT') return ok(res, be.updateTodo(b, body as Parameters<typeof be.updateTodo>[1]))
     return bad(res)
   }
 
@@ -351,13 +406,16 @@ function bad(res: ServerResponse): void {
 // 直接运行：node --import tsx server.ts [--port 8766] [--db path]
 // 命令行参数优先于环境变量 —— .bat 里 `set PORT=8767` 的引号嵌套很容易写错，
 // 用 --port 传参在 Windows 上更稳。web 用 8766，desktop 用 8767，可同时运行。
-function cliArg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`)
-  return i >= 0 ? process.argv[i + 1] : undefined
-}
+// 直接运行守卫：被 import（server.test.ts / 桌面 sidecar 复用）时不自启，
+// 避免测试进程打开真实 calendar.db 的副作用。
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  function cliArg(name: string): string | undefined {
+    const i = process.argv.indexOf(`--${name}`)
+    return i >= 0 ? process.argv[i + 1] : undefined
+  }
 
-const dbPath = cliArg('db') ?? process.env.CAL_DB_PATH ?? 'E:/TT_Calendar_Neo/data/calendar.db'
-const port = Number(cliArg('port') ?? process.env.PORT ?? 8766)
-const { port: listeningPort } = startDataServer({ dbPath, port })
-// eslint-disable-next-line no-console
-console.log(`[data-server] listening on http://127.0.0.1:${listeningPort}  db=${dbPath}`)
+  const dbPath = cliArg('db') ?? process.env.CAL_DB_PATH ?? 'E:/TT_Calendar_Neo/data/calendar.db'
+  const port = Number(cliArg('port') ?? process.env.PORT ?? 8766)
+  const { port: listeningPort } = startDataServer({ dbPath, port })
+  console.log(`[data-server] listening on http://127.0.0.1:${listeningPort}  db=${dbPath}`)
+}

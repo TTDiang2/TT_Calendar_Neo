@@ -212,7 +212,6 @@ export function importTickTickCsvOnBackend(backend: SqliteBackend, text: string)
     }
 
     const tz = get(cells, 'timezone').trim() || undefined
-    const allDay = boolCell(get(cells, 'all_day'))
     const floating = boolCell(get(cells, 'floating'))
 
     // 日期换算收口走 shared.tsToLocalDate：全天/浮动只取日期部分，其余按 Timezone 换算

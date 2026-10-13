@@ -13,7 +13,6 @@ interface Props {
   layers: Layer[]
   onEditEvent: (date: string, event: CalEvent) => void
   onEditSchedule: (date: string) => void
-  onSetColoring: (date: string) => void
   onAddDot: (date: string) => void
   onAddColor: (date: string) => void
   /** 新建事件入口（手机没有双击新建，桌面也顺带受益） */
@@ -24,7 +23,7 @@ interface Props {
   onClose?: () => void
 }
 
-export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onSetColoring, onAddDot, onAddColor, onAddEvent, variant = 'panel', onClose }: Props) {
+export function DetailPanel({ day, layers, onEditEvent, onEditSchedule, onAddDot, onAddColor, onAddEvent, variant = 'panel', onClose }: Props) {
   const qc = useQueryClient()
   const t = useT()
   const lang = useLang()

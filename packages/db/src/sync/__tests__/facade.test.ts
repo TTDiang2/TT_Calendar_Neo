@@ -186,7 +186,6 @@ describe('SyncFacade 端到端（假远端）', () => {
       todo_list: [{ id: 'L1', display_name: '电脑清单', updated_at: '2026-09-01 10:00:00+08:00' }],
       todo: [{ id: 'T1', list_id: 'L1', title: '电脑上的待办', status: 'notStarted' }],
     }
-    let pushed = 0
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
       const u = String(url).replace('https://api.github.com', '')
       const [path] = u.split('?')
@@ -217,7 +216,6 @@ describe('SyncFacade 端到端（假远端）', () => {
       if (method === 'POST' && path.endsWith('/git/commits')) return new Response(JSON.stringify({ sha: 'nc', html_url: 'x' }))
       if (method === 'PATCH' && path.includes('/git/refs/heads/')) return new Response(JSON.stringify({}))
       if (method === 'POST' && path.endsWith('/git/refs')) return new Response(JSON.stringify({ sha: 'nc' }))
-      pushed += 1
       return new Response('nope', { status: 404 })
     })
     vi.stubGlobal('fetch', fetchMock)

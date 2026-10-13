@@ -9,6 +9,11 @@
  *
  * 若未来重新开启屏显：pointer-events-none 是硬要求——日志区悬浮在 UI 上，
  * 绝不能吞真机点击（否则验收动作本身会被污染，2026-09-13 智者审查 P0-1）。
+ *
+ * 注意：packages/db/src/local/boot-log.ts 是本文件的有意副本（避免 db 包
+ * 反向依赖 ui 取 i18n），且两侧已分叉——db 侧无看门狗、默认零屏显，只在
+ * openLocalDb 启动路径打点。改本文件的看门狗/缓冲逻辑不需要同步它，
+ * 但改「console 行格式 + #bootlog 样式」时两侧必须保持一致。
  */
 
 import { makeI18n, activeLang } from '@tt-calendar/ui'

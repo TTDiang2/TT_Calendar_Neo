@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // 冒烟测试：验证 ui 与数据适配层在 React + react-query 环境能正常 mount，
 // 不触发运行时崩溃（全仓渲染的地基）。完整视觉由 web 预览人工确认。
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'

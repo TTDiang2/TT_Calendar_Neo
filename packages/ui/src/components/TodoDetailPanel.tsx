@@ -97,7 +97,7 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
     const open = !!todo
     if (open && !prevOpenRef.current && !isDesktop) animDrawerIn(panelRef.current, 1)
     prevOpenRef.current = open
-  }, [todo?.id, isDesktop])
+  }, [todo, isDesktop])
 
   const formRef = useRef({ title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status, alarmAt, repeat })
   formRef.current = { title, body, importance, dueDate, plannedDate, startDate, complexity, tagsText, listId, status, alarmAt, repeat }
@@ -220,6 +220,10 @@ export const TodoDetailPanel = forwardRef<TodoDetailPanelRef, Props>(function To
       const leaving = prevTodoRef.current
       if (leaving) flushSave(leaving)
     }
+    // 依赖刻意收窄到 todo?.id：effect 语义是「编辑对象切换」（cleanup 落盘上一
+    // 个对象）；todo 对象引用变化（如 invalidate 重拉同一待办）不该触发 flush，
+    // 详见上方注释块
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todo?.id])
 
   if (!todo) {
@@ -714,8 +718,6 @@ export function DueDateQuickPicker({
     { key: 'monday', label: t('todoEditor.due.nextMonday'), val: monday },
   ]
   const matched = presets.find((p) => p.val === value)
-  const label = value ? (matched ? matched.label : value.slice(5)) : t('todoEditor.none')
-
   return (
     <select
       className="tt-input"

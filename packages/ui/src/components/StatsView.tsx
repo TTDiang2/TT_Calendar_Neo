@@ -37,6 +37,8 @@ import { useT, useTPlural, useLang, fmtDate, fmtNumber, fmtWeekday } from '../i1
 import type { I18n, Lang, TxKey } from '../i18n'
 import { animCountUp, animGrowBars, animDrawerIn, animRing, animStaggerChildren } from '../anim'
 
+const EMPTY_DAILY: { date: string; count: number }[] = []
+
 const SEGMENT_COLORS = [
   '#EC4899', '#F97316', '#10B981', '#3B82F6', '#8B5CF6',
   '#14B8A6', '#F59E0B', '#6366F1', '#EF4444', '#64748B',
@@ -164,7 +166,9 @@ export function StatsView({
   const scopeDrawerRef = useRef<HTMLDivElement | null>(null)
   const milestonesDrawerRef = useRef<HTMLDivElement | null>(null)
 
-  const daily = data?.daily_done ?? []
+  // 空数组兜底必须引用恒定（module 级 EMPTY_DAILY）：`?? []` 每渲染新建引用，
+  // 会让下游 useMemo（热力图/streaks）依赖失稳逐帧重算
+  const daily = useMemo(() => data?.daily_done ?? EMPTY_DAILY, [data])
   const busyPredict = data?.busy_predict ?? []
 
   // 里程碑推演
@@ -194,7 +198,7 @@ export function StatsView({
       if (full.length) return computeStreaks(full)
       return computeStreaks(daily.filter((d) => d.count > 0).map((d) => d.date))
     },
-    [data],
+    [data, daily],
   )
   // 20260917 任务书 1.2-4：充实度染色退场，分析页不再维护它的统计图
   // （充实度每日档位 / 高充实天数 chip / 热力图充实度切换均已移除）

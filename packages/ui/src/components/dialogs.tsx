@@ -22,7 +22,7 @@ import { COLORING_COLORS } from '../adapt/data'
 import { subscriptionLayerFilter } from '../adapt/subscription'
 import { layerLabel } from '../adapt/layerLabel'
 import { useT } from '../i18n'
-import type { CalEvent, Layer, Schedule, ScheduleItem, Todo } from '../adapt/types'
+import type { CalEvent, Layer, ScheduleItem, Todo } from '../adapt/types'
 
 // 充实度 5 档显示名走字典（contracts COLORING_LEVELS 的英文 key 小写映射），
 // 档位顺序与 COLORING_COLORS 一一对应

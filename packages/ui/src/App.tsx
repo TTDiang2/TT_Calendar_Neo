@@ -23,6 +23,8 @@ import { animDrawerIn, animEnter, animSheetUp, animSlideDirection, animSpringBac
 import { useSwipeTabs } from './hooks/useSwipeNav'
 import { useT, useLang, fmtDate, fmtMonthName, I18nProvider, useHasChosenLang } from './i18n'
 import type { TxKey } from './i18n'
+
+const EMPTY_LAYERS: Layer[] = []
 import { LanguagePickerScreen } from './components/LanguagePickerScreen'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { TourProvider, hasOnboarded, shouldAutoStart, onTourStoreChange, type TourApi } from './tour'
@@ -65,7 +67,6 @@ function RightDetailDrawer(props: {
   onClose: () => void
   onEditEvent: (date: string, event: CalEvent) => void
   onEditSchedule: (date: string) => void
-  onSetColoring: (date: string) => void
   onAddDot: (date: string) => void
   onAddColor: (date: string) => void
   onAddEvent: (date: string) => void
@@ -91,7 +92,6 @@ function RightDetailDrawer(props: {
             layers={props.layers}
             onEditEvent={props.onEditEvent}
             onEditSchedule={props.onEditSchedule}
-            onSetColoring={props.onSetColoring}
             onAddDot={props.onAddDot}
             onAddColor={props.onAddColor}
             onAddEvent={props.onAddEvent}
@@ -482,7 +482,9 @@ function AppInner() {
   const isMobile = useIsMobile()
   const effectiveTodoView = isMobile && todoView === 'kanban' ? 'list' : todoView
 
-  const layers = monthData?.layers ?? []
+  // 空数组兜底必须引用恒定（module 级 EMPTY_LAYERS）：`?? []` 每渲染新建引用，
+  // 会让 calLayers 的 useMemo 与下方迁移 effect 的依赖逐帧失稳
+  const layers = useMemo(() => monthData?.layers ?? EMPTY_LAYERS, [monthData])
 
   // 订阅来源的图层在手机端一律不呈现（20260917 任务书 1.2-2：代码保留、前端不露面）。
   // 判别式：jisilu_* 固定前缀 + 「订阅 display_name = 图层组名」约定（与 Sidebar 一致）
@@ -569,29 +571,34 @@ function AppInner() {
     toggleMutation.mutate({ layerId, enabled: !current.enabled })
   }
 
-  function navigate(delta: number) {
-    if (mode === 'countdown') return
-    if (mode === 'week') {
-      const d = new Date(dayAnchor + 'T00:00:00')
-      d.setDate(d.getDate() + delta * 7)
-      shiftAnchor(d)
-    } else if (mode === 'day') {
-      const d = new Date(dayAnchor + 'T00:00:00')
-      d.setDate(d.getDate() + delta)
-      shiftAnchor(d)
-    } else {
-      setMonthKey((k) => (mode === 'year' ? shiftYearKey(k, delta) : shiftMonthKey(k, delta)))
-    }
-  }
-
-  function shiftAnchor(d: Date) {
+  // 三个导航函数收敛为 useCallback：键盘监听 effect 要把它们列入依赖
+  // （exhaustive-deps），裸函数声明引用每渲染都变，会退化成每渲染重挂监听
+  const shiftAnchor = useCallback((d: Date) => {
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     setDayCursor(iso)
     // 同步 monthKey，保证日/周视图翻页后切回月视图月份也对齐
     setMonthKey(`${d.getFullYear()}-${d.getMonth() + 1}`)
-  }
+  }, [])
 
-  function goToday() {
+  const navigate = useCallback(
+    (delta: number) => {
+      if (mode === 'countdown') return
+      if (mode === 'week') {
+        const d = new Date(dayAnchor + 'T00:00:00')
+        d.setDate(d.getDate() + delta * 7)
+        shiftAnchor(d)
+      } else if (mode === 'day') {
+        const d = new Date(dayAnchor + 'T00:00:00')
+        d.setDate(d.getDate() + delta)
+        shiftAnchor(d)
+      } else {
+        setMonthKey((k) => (mode === 'year' ? shiftYearKey(k, delta) : shiftMonthKey(k, delta)))
+      }
+    },
+    [mode, dayAnchor, shiftAnchor],
+  )
+
+  const goToday = useCallback(() => {
     const now = new Date()
     const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     setMonthKey(`${now.getFullYear()}-${now.getMonth() + 1}`)
@@ -600,7 +607,7 @@ function AppInner() {
     } else {
       setSelectedDate(iso)
     }
-  }
+  }, [mode, shiftAnchor])
 
   const openEvent = useCallback((date: string, event: CalEvent | null = null) => {
     setDialog({ kind: 'event', date, event })
@@ -668,7 +675,7 @@ function AppInner() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dialog, ctxMenu, selectedDate, openEvent, mode, dayAnchor])
+  }, [dialog, ctxMenu, selectedDate, openEvent, mode, dayAnchor, navigate, goToday])
 
   // 桌面 TopBar 标题：日期串一律 Intl 组装（规范 §3），zh 为「2026年」「2026年10月」
   const title = useMemo(() => {
@@ -778,7 +785,6 @@ function AppInner() {
       },
     }
     // setter 为 setState 稳定引用；最新视图值经 tourLatestRef 桥接——api 引用恒定
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const tourAutoStart = useSyncExternalStore(onTourStoreChange, shouldAutoStart, () => shouldAutoStart())
 
@@ -989,7 +995,6 @@ function AppInner() {
                 layers={calLayers}
                 onEditEvent={openEvent}
                 onEditSchedule={(d) => setDialog({ kind: 'schedule', date: d })}
-                onSetColoring={(d) => setDialog({ kind: 'coloring', date: d })}
                 onAddDot={(d) => setDialog({ kind: 'dot', date: d })}
                 onAddColor={(d) => setDialog({ kind: 'color', date: d })}
                 onAddEvent={openEvent}
@@ -1008,7 +1013,6 @@ function AppInner() {
           onClose={() => setRightDrawerOpen(false)}
           onEditEvent={openEvent}
           onEditSchedule={(d) => setDialog({ kind: 'schedule', date: d })}
-          onSetColoring={(d) => setDialog({ kind: 'coloring', date: d })}
           onAddDot={(d) => setDialog({ kind: 'dot', date: d })}
           onAddColor={(d) => setDialog({ kind: 'color', date: d })}
           onAddEvent={openEvent}

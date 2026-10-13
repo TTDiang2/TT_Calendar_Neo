@@ -98,7 +98,6 @@ function MobileMonthGrid({
           layers={layers}
           isToday={agendaDay.date === today}
           className="flex-1 min-h-0"
-          onSelect={onSelect}
           onOpenDetail={onOpenDetail}
           onToggleTodo={(t, done) => toggleTodoMut.mutate({ id: t.id, data: { ...t, id: t.id, status: done ? 'completed' : 'notStarted' } })}
         />
@@ -253,7 +252,7 @@ function DesktopMonthGrid({ monthData, layers, selectedDate, onSelect, onDoubleC
 
       {/* 今日 agenda 仅 <md 显示（桌面月格子已铺满） */}
       {showAgenda && todayDay && (
-        <TodayAgenda day={todayDay} layers={layers} className="md:hidden flex-1 min-h-0" onSelect={onSelect} />
+        <TodayAgenda day={todayDay} layers={layers} className="md:hidden flex-1 min-h-0" />
       )}
     </div>
   )
@@ -270,7 +269,6 @@ function TodayAgenda({
   layers,
   isToday = true,
   className,
-  onSelect,
   onOpenDetail,
   onToggleTodo,
 }: {
@@ -279,7 +277,6 @@ function TodayAgenda({
   /** 显示的是否今天（false 时头部标出具体日期，提示用户已离开「今日」） */
   isToday?: boolean
   className?: string
-  onSelect?: (date: string) => void
   onOpenDetail?: (date: string) => void
   onToggleTodo?: (todo: Todo, done: boolean) => void
 }) {
