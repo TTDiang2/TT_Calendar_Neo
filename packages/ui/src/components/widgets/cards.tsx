@@ -24,8 +24,9 @@ import { animCountUp } from '../../anim'
 import { lunarText } from '../../adapt/labels'
 import { layerLabel } from '../../adapt/layerLabel'
 
-const EMPTY_LAYERS: Layer[] = []
 import { fmtDate, fmtWeekday, useLang, useT, useTPlural } from '../../i18n'
+
+const EMPTY_LAYERS: Layer[] = []
 
 // ---------- 共享数据钩子（同 key 复用 react-query 缓存，多卡片同源零开销） ----------
 

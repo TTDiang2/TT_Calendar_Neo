@@ -53,7 +53,10 @@ export interface DataServerHandle {
  * - localhost/127.0.0.1 任意端口：三端 vite dev（5173/5174/5175）
  * - tauri.localhost / tauri://：桌面壳生产模式（API_BASE 直连 8767，Windows
  *   壳 origin 是 http://tauri.localhost，macOS 是 tauri://localhost）
- * - *.vicp.fun：用户自己的内网穿透域名（web vite.config 的 allowedHosts）
+ * - *.vicp.fun：用户经内网穿透访问 vite 预览（vite.config allowedHosts 同款通配）。
+ *   注意 vicp.fun 是公共穿透服务，通配意味着「其他 vicp.fun 租户的页面」也在
+ *   门禁内——权衡：隧道子域会轮换，钉死精确主机名则换域名即断联；风险面
+ *   从「全网任意页面」收窄到「vicp.fun 租户页面」，可接受
  * 无 Origin 头的请求（同源 GET、curl、Node 工具）放行——浏览器跨源请求
  * 必带 Origin，非浏览器客户端不属本威胁模型。
  */
@@ -367,7 +370,7 @@ async function handle(
   if (a === 'sync') {
     if (b === 'status') return ok(res, f.getStatus())
     if (b === 'config' && method === 'GET') return ok(res, f.getConfig())
-    if (b === 'config' && method === 'PUT') return ok(res, f.saveConfig(body as never))
+    if (b === 'config' && method === 'PUT') return ok(res, f.saveConfig(body as Parameters<typeof f.saveConfig>[0]))
     if (b === 'test' && method === 'POST') return ok(res, await f.test())
     if (b === 'now' && method === 'POST') return ok(res, await f.sync('merge'))
     if (b === 'resolve' && method === 'POST')
@@ -379,12 +382,12 @@ async function handle(
   if (a === 'subscriptions') {
     if (!b) {
       if (method === 'GET') return ok(res, be.getSubscriptions())
-      if (method === 'POST') return ok(res, be.createSubscription(body as never))
+      if (method === 'POST') return ok(res, be.createSubscription(body as Parameters<typeof be.createSubscription>[0]))
       return bad(res)
     }
     if (b === 'refresh-due' && method === 'POST') return ok(res, await refreshDueOnBackend(be))
     if (method === 'DELETE') return ok(res, be.deleteSubscription(b))
-    if (method === 'PATCH') return ok(res, be.patchSubscription(b, body as never))
+    if (method === 'PATCH') return ok(res, be.patchSubscription(b, body as Parameters<typeof be.patchSubscription>[1]))
     if (method === 'POST' && c === 'refresh') {
       const sub = be.getSubscriptions().find((s) => s.id === b)
       if (!sub) return send(res, 404, { detail: '订阅不存在' })

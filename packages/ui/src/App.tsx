@@ -24,10 +24,11 @@ import { useSwipeTabs } from './hooks/useSwipeNav'
 import { useT, useLang, fmtDate, fmtMonthName, I18nProvider, useHasChosenLang } from './i18n'
 import type { TxKey } from './i18n'
 
-const EMPTY_LAYERS: Layer[] = []
 import { LanguagePickerScreen } from './components/LanguagePickerScreen'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { TourProvider, hasOnboarded, shouldAutoStart, onTourStoreChange, type TourApi } from './tour'
+
+const EMPTY_LAYERS: Layer[] = []
 import { useSyncExternalStore } from 'react'
 // 协议常量（非文案）：旧 sidecar 并发同步报错的消息子串，见 fragments/app.ts 头部 TODO-REVIEW
 import { SYNC_IN_PROGRESS_MARK } from './i18n/dict/fragments/app'
