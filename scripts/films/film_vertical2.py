@@ -12,7 +12,7 @@ from film_engine import (Film, Track, INK, MUTED, AMBER, GREEN, PURPLE, PINK, BL
 W, H, FPS, DUR = 1080, 1920, 30, 51.0
 DEV = r'E:\TT_Calendar_Neo\artifacts\preview\device'
 CROPS = r'E:\TT_Calendar_Neo\artifacts\preview\crops'
-SHOT_W = 640
+SHOT_W = 600
 SHOT_CY = 1010
 
 f = Film(W, H)
@@ -64,40 +64,41 @@ def frame(t):
     # ── M2 染色月历 4.56-11 ──
     if 4.4 <= t < 11.2:
         ain = outback(clamp01((t - 4.56) / 0.6))
-        f.phone_shot(img, f'{DEV}/01-月视图.png', W / 2, SHOT_CY, SHOT_W, alpha=ain,
-                     dx=(1 - ain) * 300)
+        aout = fade_out(t, 11.05, 0.3)
+        f.phone_shot(img, f'{DEV}/01-月视图.png', W / 2, SHOT_CY, SHOT_W,
+                     alpha=ain * aout, dx=(1 - ain) * 300)
         f.draw_text(img, '染色月历', W / 2, 230, 76, INK,
-                    alpha=ain * fade_in(t, 5.1))
+                    alpha=ain * aout * fade_in(t, 5.1))
         legend = [('忙 · 暖黄', AMBER, 5.6), ('沉淀 · 绿', GREEN, 6.1), ('纪念 · 紫', PURPLE, 6.6)]
-        for txt, col, t0 in legend:
-            k = outback(clamp01((t - t0) / 0.4))
+        for i, (txt, col, t0) in enumerate(legend):
+            k = outback(clamp01((t - t0) / 0.4)) * aout
             if k > 0.01:
-                x = W / 2 + 300 * math.sin((t0 - 5.6) * 1.05 + 1.57)
-                y = 1740
-                f.cell(img, x - 130, y, 30, col, k)
-                f.draw_text(img, txt, x + 40, y, 44, INK, bold=False,
-                            alpha=clamp01((t - t0) / 0.3))
+                gx = W / 2 + (i - 1) * 340
+                f.cell(img, gx - 130, 1748, 24, col, k)
+                f.draw_text(img, txt, gx + 55, 1748, 40, INK, bold=False,
+                            alpha=clamp01((t - t0) / 0.3) * aout)
 
     # ── M3 年视图 11-16 ──
     if 10.8 <= t < 16.2:
         ain = outback(clamp01((t - 11.1) / 0.55))
-        f.phone_shot(img, f'{DEV}/02-年视图.png', W / 2, SHOT_CY, SHOT_W, alpha=ain,
-                     dx=-(1 - ain) * 300)
+        aout = fade_out(t, 15.85, 0.3)
+        f.phone_shot(img, f'{DEV}/02-年视图.png', W / 2, SHOT_CY, SHOT_W,
+                     alpha=ain * aout, dx=-(1 - ain) * 300)
         f.draw_text(img, '十二个月，一眼看尽', W / 2, 230, 68, INK,
-                    alpha=ain * fade_in(t, 11.6))
+                    alpha=ain * aout * fade_in(t, 11.6))
         f.draw_text(img, '每一格，都是你真实度过的一天', W / 2, 320, 44, MUTED, bold=False,
-                    alpha=ain * fade_in(t, 12.1))
+                    alpha=ain * aout * fade_in(t, 12.1))
 
     # ── M4 待办三连 16-24 ──
     if 15.8 <= t < 24.2:
         f.draw_text(img, '待办：先做真正要紧的事', W / 2, 215, 68, INK,
                     alpha=fade_in(t, 16.1) * fade_out(t, 24.1))
         segs = [
-            (16.3, 19.3, f'{DEV}/04-待办列表.png', '列表 · 截止/计划/重要性三轴排序', 17.2, (810, 700)),
-            (19.3, 22.3, f'{DEV}/05-待办矩阵.png', '四象限 · 重要性 × 紧急度', 20.2, (810, 700)),
-            (22.3, 24.2, f'{DEV}/06-待办便签.png', '便签 · 墙上一目了然', 23.0, (810, 700)),
+            (16.3, 19.3, f'{DEV}/04-待办列表.png', '列表 · 截止/计划/重要性三轴排序', 17.2),
+            (19.3, 22.3, f'{DEV}/05-待办矩阵.png', '四象限 · 重要性 × 紧急度', 20.2),
+            (22.3, 24.2, f'{DEV}/06-待办便签.png', '便签 · 墙上一目了然', 23.0),
         ]
-        for t_in, t_out, path, label, t_stamp, (sx, sy) in segs:
+        for t_in, t_out, path, label, t_stamp in segs:
             ain = outback(clamp01((t - t_in) / 0.45))
             aout = 1 - outq(clamp01((t - (t_out - 0.3)) / 0.3))
             a = min(ain, aout)
@@ -107,51 +108,48 @@ def frame(t):
                 f.draw_text(img, label, W / 2, 1750, 48, MUTED, bold=False,
                             alpha=a * fade_in(t, t_in + 0.35))
                 sk = outelastic(clamp01((t - t_stamp) / 0.5))
-                f.stamp_check(img, sx, sy, sk, GREEN, r=84)
+                f.stamp_check(img, 798, 612, sk, GREEN, r=54)
 
     # ── M5 提醒与重复 24-29 ──
     if 23.8 <= t < 29.2:
         bg = fade_in(t, 24.1) * fade_out(t, 29.1)
         if bg > 0.01:
             f.phone_shot(img, f'{DEV}/04-待办列表.png', W / 2, SHOT_CY, SHOT_W - 120,
-                         alpha=0.35 * bg)
+                         alpha=0.22 * bg)
             n1 = outback(clamp01((t - 24.6) / 0.5))
             n2 = outback(clamp01((t - 26.2) / 0.5))
             f.notify_banner(img, W / 2, 560, bg * min(1, n1), '闹钟提醒',
                             '「复习线性代数」到点了', k=n1)
             f.notify_banner(img, W / 2, 730, bg * min(1, n2) * 0.9, '重复待办',
                             '每周跑步 · 完成后自动排下一期', k=n2)
-            rot = t * 1.6
-            f.cycle_arrows(img, W / 2, 1280, 130, rot, BLUE, alpha=bg * fade_in(t, 26.6))
-            f.draw_text(img, '到点必达 · 循环不息', W / 2, 1500, 56, INK,
+            f.draw_text(img, '到点必达 · 循环不息', W / 2, 1760, 56, INK,
                         alpha=bg * fade_in(t, 27.2))
 
     # ── M6 倒数日 29-34.5 ──
     if 28.8 <= t < 34.7:
         ain = outback(clamp01((t - 29.1) / 0.55))
-        f.phone_shot(img, f'{DEV}/09-倒数日.png', W / 2 - 170, SHOT_CY, SHOT_W - 140, alpha=ain,
-                     dx=-(1 - ain) * 260)
+        aout = fade_out(t, 34.4, 0.35)
+        f.phone_shot(img, f'{DEV}/09-倒数日.png', W / 2 - 170, SHOT_CY, SHOT_W - 140,
+                     alpha=ain * aout, dx=-(1 - ain) * 260)
         ck = outback(clamp01((t - 29.6) / 0.5)) * fade_out(t, 34.5)
         if ck > 0.01:
-            cx, cy = W / 2 + 240, SHOT_CY - 60
+            cx, cy = W / 2 + 265, SHOT_CY - 60
             f.card(img, (cx - 200, cy - 190, cx + 200, cy + 190), 56)
             f.draw_text(img, '距离发布', cx, cy - 120, 44, MUTED, bold=False, alpha=ck)
             n = int(round(47 - 7 * clamp01((t - 29.9) / (4.34 - 0.62))))
             f.draw_text(img, f'{n}', cx - 30, cy + 10, 190, PINK, alpha=ck)
             f.draw_text(img, '天', cx + 110, cy + 46, 64, INK, alpha=ck)
-            f.draw_text(img, '重要的日子，开始倒数', W / 2, 330, 62, INK,
+            f.draw_text(img, '重要的日子，开始倒数', W / 2, 300, 62, INK,
                         alpha=ck * fade_in(t, 30.4))
 
     # ── M7 洞察 34.5-41 ──
     if 34.3 <= t < 41.2:
         ain = outback(clamp01((t - 34.6) / 0.55))
-        f.phone_shot(img, f'{DEV}/08-分析页面.png', W / 2 + 210, SHOT_CY, SHOT_W - 150,
-                     alpha=ain, dx=(1 - ain) * 260)
-        # 左侧热力墙（对齐 sparkle 34.6+）
-        if ain > 0.01:
-            f.heat_wall(img, 240, SHOT_CY + 120, t, 34.9, cols=10, rows=7, cw=30, chh=26)
-            f.draw_text(img, '26 周热力 · 看见坚持', 240, SHOT_CY - 180, 46, INK,
-                        alpha=ain * fade_in(t, 35.4))
+        aout = fade_out(t, 41.0, 0.3)
+        f.phone_shot(img, f'{DEV}/08-分析页面.png', W / 2, SHOT_CY, SHOT_W - 40,
+                     alpha=ain * aout, dx=(1 - ain) * 260)
+        f.draw_text(img, '26 周热力 · 看见坚持', W / 2, 300, 62, INK,
+                    alpha=ain * aout * fade_in(t, 35.4))
         sk = outback(clamp01((t - 36.4) / 0.5)) * fade_out(t, 41.0)
         if sk > 0.01:
             f.card(img, (W / 2 - 260, 1560, W / 2 + 260, 1680), 60)
@@ -161,24 +159,24 @@ def frame(t):
     if 40.8 <= t < 46.2:
         s1 = fade_in(t, 41.1) * (1 - outq(clamp01((t - 43.3) / 0.3)))
         s2 = fade_in(t, 43.5) * fade_out(t, 46.1)
+        wa = max(fade_in(t, 41.6), s2) * fade_out(t, 46.0, 0.3)
         if s1 > 0.01:
             f.phone_shot(img, f'{DEV}/10-小组件1.png', W / 2, SHOT_CY, SHOT_W, alpha=s1,
                          dx=(1 - outback(clamp01((t - 41.1) / 0.5))) * 280)
         if s2 > 0.01:
             f.phone_shot(img, f'{DEV}/11-小组件2.png', W / 2, SHOT_CY, SHOT_W, alpha=s2,
                          dx=-(1 - outback(clamp01((t - 43.5) / 0.5))) * 280)
-        wa = max(fade_in(t, 41.6), s2) * fade_out(t, 46.1)
         if wa > 0.01:
-            f.draw_text(img, '桌面小组件', W / 2, 230, 68, INK, alpha=wa)
+            f.draw_text(img, '桌面小组件', W / 2, 220, 68, INK, alpha=wa)
             f.draw_text(img, '今日待办 · 倒数日 · 完成热力 · 一键打卡', W / 2, 1760, 44, MUTED,
                         bold=False, alpha=wa * fade_in(t, 42.0))
-            for i, (wname, k0, x, y, rot) in enumerate([
-                    ('w-heat.png', 41.8, 300, 500, -4), ('w-onetap.png', 42.3, 790, 470, 3),
-                    ('w-cd.png', 42.8, 250, 1480, 3)]):
-                k = outback(clamp01((t - k0) / 0.45))
+            for wname, k0, x, y, rot, sc in [
+                    ('w-heat.png', 41.9, 350, 520, -4, 0.46), ('w-onetap.png', 42.4, 790, 480, 3, 0.46),
+                    ('w-cd.png', 42.9, 300, 1360, 3, 0.5)]:
+                k = outback(clamp01((t - k0) / 0.45)) * wa
                 if k > 0.01:
                     sp = Image.open(f'{CROPS}/{wname}').convert('RGBA')
-                    sp = sp.resize((int(sp.width * 0.62 * k) + 2, int(sp.height * 0.62 * k) + 2), Image.BILINEAR)
+                    sp = sp.resize((int(sp.width * sc * k) + 2, int(sp.height * sc * k) + 2), Image.BILINEAR)
                     if rot: sp = sp.rotate(rot, resample=Image.BICUBIC, expand=True)
                     img.alpha_composite(sp, (int(x - sp.width / 2), int(y - sp.height / 2)))
 
@@ -193,8 +191,8 @@ def frame(t):
             a = outback(clamp01((t - t0) / 0.3)) * fade_out(t, 48.55, 0.3)
             if a > 0.01:
                 y = 640 + i * 240
-                f.cell(img, W / 2 - 330, y, 36, col, min(1, a * 1.4))
-                f.draw_text(img, txt, W / 2 + 40, y, 62, INK, alpha=a)
+                f.cell(img, W / 2 - 360, y, 34, col, min(1, a * 1.4))
+                f.draw_text(img, txt, W / 2 + 150, y, 58, INK, alpha=a)
 
     # ── M10 收束 48.6-51 ──
     ea = fade_in(t, 48.9, 0.6)

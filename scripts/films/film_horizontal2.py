@@ -11,7 +11,7 @@ from film_engine import (Film, Track, INK, MUTED, AMBER, GREEN, PURPLE, PINK, BL
 W, H, FPS, DUR = 1920, 1080, 30, 51.0
 DEV = r'E:\TT_Calendar_Neo\artifacts\preview\device'
 CROPS = r'E:\TT_Calendar_Neo\artifacts\preview\crops'
-SHOT_W = 450          # 竖截图在 1080 高画布的最大宽（高≈976）
+SHOT_W = 400          # 竖截图在 1080 高画布的宽（高≈867，上下留白合理）
 SHOT_CX, SHOT_CY = 430, 555
 RC = 1330             # 右侧文案轴
 
@@ -49,15 +49,16 @@ def frame(t):
     # M2 染色月历 4.56-11
     if 4.4 <= t < 11.2:
         ain = outback(clamp01((t - 4.56) / 0.6))
-        f.phone_shot(img, f'{DEV}/01-月视图.png', SHOT_CX, SHOT_CY, SHOT_W, alpha=ain,
-                     dx=(1 - ain) * 260)
-        la = ain * fade_in(t, 5.1)
+        aout = fade_out(t, 11.05, 0.3)
+        f.phone_shot(img, f'{DEV}/01-月视图.png', SHOT_CX, SHOT_CY, SHOT_W,
+                     alpha=ain * aout, dx=(1 - ain) * 260)
+        la = ain * aout * fade_in(t, 5.1)
         if la > 0:
             f.draw_text(img, '染色月历', RC, 320, 92, INK, alpha=la)
             for i, (txt, col, t0) in enumerate([('忙 · 暖黄', AMBER, 5.7),
                                                 ('沉淀 · 绿', GREEN, 6.2),
                                                 ('纪念 · 紫', PURPLE, 6.7)]):
-                k = outback(clamp01((t - t0) / 0.4))
+                k = outback(clamp01((t - t0) / 0.4)) * aout
                 if k > 0.01:
                     y = 470 + i * 120
                     f.cell(img, RC - 260, y, 34, col, k)
@@ -69,9 +70,10 @@ def frame(t):
     # M3 年视图 11-16
     if 10.8 <= t < 16.2:
         ain = outback(clamp01((t - 11.1) / 0.55))
-        f.phone_shot(img, f'{DEV}/02-年视图.png', SHOT_CX, SHOT_CY, SHOT_W, alpha=ain,
-                     dx=-(1 - ain) * 240)
-        la = ain * fade_in(t, 11.6)
+        aout = fade_out(t, 15.85, 0.3)
+        f.phone_shot(img, f'{DEV}/02-年视图.png', SHOT_CX, SHOT_CY, SHOT_W,
+                     alpha=ain * aout, dx=-(1 - ain) * 240)
+        la = ain * aout * fade_in(t, 11.6)
         if la > 0:
             f.draw_text(img, '十二个月', RC, 380, 100, INK, alpha=la)
             f.draw_text(img, '一眼看尽', RC, 500, 100, INK, alpha=la * fade_in(t, 12.1))
@@ -98,29 +100,29 @@ def frame(t):
                 f.draw_text(img, l2, RC, 540, 44, MUTED, bold=False,
                             alpha=a * fade_in(t, t_in + 0.5))
                 sk = outelastic(clamp01((t - t_stamp) / 0.5))
-                f.stamp_check(img, RC + 160, 720, sk, GREEN, r=74)
+                f.stamp_check(img, RC + 120, 690, sk, GREEN, r=50)
 
     # M5 提醒与重复 24-29
     if 23.8 <= t < 29.2:
         bg = fade_in(t, 24.1) * fade_out(t, 29.1)
         if bg > 0.01:
             f.phone_shot(img, f'{DEV}/04-待办列表.png', SHOT_CX, SHOT_CY, SHOT_W - 90,
-                         alpha=0.32 * bg)
+                         alpha=0.22 * bg)
             n1 = outback(clamp01((t - 24.6) / 0.5))
             n2 = outback(clamp01((t - 26.2) / 0.5))
             f.notify_banner(img, RC, 330, bg * min(1, n1), '闹钟提醒',
                             '「复习线性代数」到点了', k=n1)
             f.notify_banner(img, RC, 500, bg * min(1, n2) * 0.9, '重复待办',
                             '每周跑步 · 完成后自动排下一期', k=n2)
-            f.cycle_arrows(img, RC - 150, 760, 110, t * 1.6, BLUE, alpha=bg * fade_in(t, 26.6))
-            f.draw_text(img, '到点必达 · 循环不息', RC + 130, 760, 56, INK,
+            f.draw_text(img, '到点必达 · 循环不息', RC, 730, 56, INK,
                         alpha=bg * fade_in(t, 27.2))
 
     # M6 倒数日 29-34.5
     if 28.8 <= t < 34.7:
         ain = outback(clamp01((t - 29.1) / 0.55))
-        f.phone_shot(img, f'{DEV}/09-倒数日.png', SHOT_CX, SHOT_CY, SHOT_W - 60, alpha=ain,
-                     dx=-(1 - ain) * 240)
+        aout = fade_out(t, 34.4, 0.35)
+        f.phone_shot(img, f'{DEV}/09-倒数日.png', SHOT_CX, SHOT_CY, SHOT_W - 60,
+                     alpha=ain * aout, dx=-(1 - ain) * 240)
         ck = outback(clamp01((t - 29.6) / 0.5)) * fade_out(t, 34.5)
         if ck > 0.01:
             f.card(img, (RC - 240, 380, RC + 240, 760), 56)
@@ -134,12 +136,11 @@ def frame(t):
     # M7 洞察 34.5-41
     if 34.3 <= t < 41.2:
         ain = outback(clamp01((t - 34.6) / 0.55))
-        f.phone_shot(img, f'{DEV}/08-分析页面.png', SHOT_CX + 60, SHOT_CY, SHOT_W - 60,
-                     alpha=ain, dx=(1 - ain) * 240)
-        if ain > 0.01:
-            f.heat_wall(img, RC - 40, 620, t, 34.9, cols=14, rows=7, cw=30, chh=26)
-            f.draw_text(img, '26 周热力 · 看见坚持', RC - 40, 360, 58, INK,
-                        alpha=ain * fade_in(t, 35.4))
+        aout = fade_out(t, 41.0, 0.3)
+        f.phone_shot(img, f'{DEV}/08-分析页面.png', SHOT_CX, SHOT_CY, SHOT_W,
+                     alpha=ain * aout, dx=(1 - ain) * 240)
+        f.draw_text(img, '26 周热力 · 看见坚持', RC, 340, 58, INK,
+                    alpha=ain * aout * fade_in(t, 35.4))
         sk = outback(clamp01((t - 36.4) / 0.5)) * fade_out(t, 41.0)
         if sk > 0.01:
             f.card(img, (RC - 250, 790, RC + 250, 895), 52)
@@ -149,24 +150,24 @@ def frame(t):
     if 40.8 <= t < 46.2:
         s1 = fade_in(t, 41.1) * (1 - outq(clamp01((t - 43.3) / 0.3)))
         s2 = fade_in(t, 43.5) * fade_out(t, 46.1)
+        wa = max(fade_in(t, 41.6), s2) * fade_out(t, 46.0, 0.3)
         if s1 > 0.01:
             f.phone_shot(img, f'{DEV}/10-小组件1.png', SHOT_CX, SHOT_CY, SHOT_W, alpha=s1,
                          dx=(1 - outback(clamp01((t - 41.1) / 0.5))) * 240)
         if s2 > 0.01:
             f.phone_shot(img, f'{DEV}/11-小组件2.png', SHOT_CX, SHOT_CY, SHOT_W, alpha=s2,
                          dx=-(1 - outback(clamp01((t - 43.5) / 0.5))) * 240)
-        wa = max(fade_in(t, 41.6), s2) * fade_out(t, 46.1)
         if wa > 0.01:
-            f.draw_text(img, '桌面小组件', RC, 320, 88, INK, alpha=wa)
-            f.draw_text(img, '今日待办 · 倒数日 · 完成热力 · 一键打卡', RC, 430, 44, MUTED,
+            f.draw_text(img, '桌面小组件', RC, 300, 88, INK, alpha=wa)
+            f.draw_text(img, '今日待办 · 倒数日 · 完成热力 · 一键打卡', RC, 980, 44, MUTED,
                         bold=False, alpha=wa * fade_in(t, 42.0))
-            for wname, k0, x, y, rot in [('w-heat.png', 41.9, RC - 220, 660, -4),
-                                         ('w-onetap.png', 42.4, RC + 180, 640, 3),
-                                         ('w-cd.png', 42.9, RC - 100, 860, 3)]:
-                k = outback(clamp01((t - k0) / 0.45))
+            for wname, k0, x, y, rot, sc in [('w-heat.png', 41.9, RC - 240, 570, -4, 0.42),
+                                         ('w-onetap.png', 42.4, RC + 180, 555, 3, 0.44),
+                                         ('w-cd.png', 42.9, RC - 40, 800, 3, 0.44)]:
+                k = outback(clamp01((t - k0) / 0.45)) * wa
                 if k > 0.01:
                     sp = Image.open(f'{CROPS}/{wname}').convert('RGBA')
-                    sp = sp.resize((max(2, int(sp.width * 0.55 * k)), max(2, int(sp.height * 0.55 * k))),
+                    sp = sp.resize((max(2, int(sp.width * sc * k)), max(2, int(sp.height * sc * k))),
                                    Image.BILINEAR)
                     if rot: sp = sp.rotate(rot, resample=Image.BICUBIC, expand=True)
                     img.alpha_composite(sp, (int(x - sp.width / 2), int(y - sp.height / 2)))

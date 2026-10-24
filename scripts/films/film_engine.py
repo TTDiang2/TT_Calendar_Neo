@@ -294,28 +294,26 @@ class Film:
         return self.sprite(key, maker)
 
     def phone_shot(self, img, path, cx, cy, w, alpha=1.0, dx=0.0, rot=0.0, frame=True):
-        """真机截图 + 手机外框 + 阴影，中心 (cx+dx, cy)，可带旋转。"""
+        """真机截图 + 手机外框 + 阴影，中心 (cx+dx, cy)，可带旋转。
+        层序：阴影 → 深色机身（圆角）→ 圆角裁剪的截图贴入（圆角外露机身色，绝不露白）。"""
         if alpha <= 0.01: return
         shot = self.shot(path, w)
-        key = ('pframe', w)
+        key = ('pframe', path, w)
         def maker():
-            bw, rad = int(w * 0.022), int(w * 0.11)
+            bw, rad = max(6, int(w * 0.024)), int(w * 0.085)
             fw, fh = shot.width + bw * 2, shot.height + bw * 2
             fr = Image.new('RGBA', (fw + 80, fh + 80), (0, 0, 0, 0))
-            # 阴影
             sh = Image.new('RGBA', fr.size, (0, 0, 0, 0))
             ImageDraw.Draw(sh).rounded_rectangle(
-                [40 + 10, 40 + 26, 40 + fw + 10, 40 + fh + 26], rad + 8, fill=(60, 40, 100, 70))
-            sh = sh.filter(ImageFilter.GaussianBlur(18))
+                [40 + 12, 40 + 30, 40 + fw + 12, 40 + fh + 30], rad + 6, fill=(60, 40, 100, 80))
+            sh = sh.filter(ImageFilter.GaussianBlur(20))
             fr.alpha_composite(sh)
-            # 深色机身
-            ImageDraw.Draw(fr).rounded_rectangle(
-                [40, 40, 40 + fw, 40 + fh], rad + 4, fill=(28, 28, 30, 255))
-            fr.paste(shot, (40 + bw, 40 + bw))
+            body = Image.new('RGBA', (fw, fh), (0, 0, 0, 0))
+            ImageDraw.Draw(body).rounded_rectangle([0, 0, fw - 1, fh - 1], rad, fill=(24, 24, 27, 255))
+            fr.alpha_composite(body, (40, 40))
+            # 圆角裁剪截图后贴入（截图圆角外是机身色）
             mask = Image.new('L', shot.size, 0)
-            ImageDraw.Draw(mask).rounded_rectangle([0, 0, shot.width - 1, shot.height - 1], rad, fill=255)
-            fr.paste((255, 255, 255), (40 + bw, 40 + bw), Image.eval(mask, lambda x: 255 - x))
-            # 圆角裁截图
+            ImageDraw.Draw(mask).rounded_rectangle([0, 0, shot.width - 1, shot.height - 1], rad - bw // 2, fill=255)
             rounded = Image.new('RGBA', shot.size, (0, 0, 0, 0))
             rounded.paste(shot, (0, 0), mask)
             fr.alpha_composite(rounded, (40 + bw, 40 + bw))
