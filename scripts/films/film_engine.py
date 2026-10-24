@@ -192,6 +192,8 @@ class Film:
     # ── 圆角矩形卡（缓存按尺寸+圆角）──
     def card(self, img, box, radius, fill=(255, 255, 255, 235), outline=None, shadow=True):
         x0, y0, x1, y1 = [int(v) for v in box]
+        # Pillow rounded_rectangle 的边界 off-by-one：半径必须留出正矩形空间
+        radius = max(4, min(radius, (y1 - y0 - 2) // 2, (x1 - x0 - 2) // 2))
         key = ('card', x1 - x0, y1 - y0, radius, fill, outline is not None)
         def maker():
             pad_s = 30
@@ -281,3 +283,148 @@ class Film:
             rot = rot.copy()
             rot.putalpha(rot.getchannel('A').point(lambda v: int(v * alpha)))
         img.paste(rot, (int(x - size / 2), int(y - size / 2)), rot.getchannel('A'))
+
+    # ═══ v2：真机 UI 展示 ═══
+    def shot(self, path, w):
+        """真机截图按宽缩放缓存。"""
+        key = ('shot', path, w)
+        def maker():
+            return Image.open(path).convert('RGB').resize(
+                (w, int(Image.open(path).height * w / Image.open(path).width)), Image.LANCZOS)
+        return self.sprite(key, maker)
+
+    def phone_shot(self, img, path, cx, cy, w, alpha=1.0, dx=0.0, rot=0.0, frame=True):
+        """真机截图 + 手机外框 + 阴影，中心 (cx+dx, cy)，可带旋转。"""
+        if alpha <= 0.01: return
+        shot = self.shot(path, w)
+        key = ('pframe', w)
+        def maker():
+            bw, rad = int(w * 0.022), int(w * 0.11)
+            fw, fh = shot.width + bw * 2, shot.height + bw * 2
+            fr = Image.new('RGBA', (fw + 80, fh + 80), (0, 0, 0, 0))
+            # 阴影
+            sh = Image.new('RGBA', fr.size, (0, 0, 0, 0))
+            ImageDraw.Draw(sh).rounded_rectangle(
+                [40 + 10, 40 + 26, 40 + fw + 10, 40 + fh + 26], rad + 8, fill=(60, 40, 100, 70))
+            sh = sh.filter(ImageFilter.GaussianBlur(18))
+            fr.alpha_composite(sh)
+            # 深色机身
+            ImageDraw.Draw(fr).rounded_rectangle(
+                [40, 40, 40 + fw, 40 + fh], rad + 4, fill=(28, 28, 30, 255))
+            fr.paste(shot, (40 + bw, 40 + bw))
+            mask = Image.new('L', shot.size, 0)
+            ImageDraw.Draw(mask).rounded_rectangle([0, 0, shot.width - 1, shot.height - 1], rad, fill=255)
+            fr.paste((255, 255, 255), (40 + bw, 40 + bw), Image.eval(mask, lambda x: 255 - x))
+            # 圆角裁截图
+            rounded = Image.new('RGBA', shot.size, (0, 0, 0, 0))
+            rounded.paste(shot, (0, 0), mask)
+            fr.alpha_composite(rounded, (40 + bw, 40 + bw))
+            return fr
+        fr = self.sprite(key, maker) if frame else None
+        if fr is None:
+            out = shot.copy()
+            x, y = int(cx + dx - out.width / 2), int(cy - out.height / 2)
+        else:
+            out = fr
+            x, y = int(cx + dx - out.width / 2), int(cy - out.height / 2)
+        if abs(rot) > 0.01:
+            out = out.rotate(rot, resample=Image.BICUBIC, expand=True)
+            x, y = int(cx + dx - out.width / 2), int(cy - out.height / 2)
+        if alpha < 0.999:
+            out = out.copy()
+            out.putalpha(out.getchannel('A').point(lambda v: int(v * alpha)))
+        img.alpha_composite(out, (x, y))
+
+    def notify_banner(self, img, cx, top_y, alpha, title, body, icon_text='TT', k=1.0):
+        """iOS 通知横幅：毛玻璃白卡 + 小圆标 + 两行字。k: 弹入进度。"""
+        if alpha <= 0.01 or k <= 0.01: return
+        key = ('notify', title, body)
+        def maker():
+            W2, H2 = 660, 132
+            im = Image.new('RGBA', (W2, H2), (0, 0, 0, 0))
+            d = ImageDraw.Draw(im)
+            d.rounded_rectangle([0, 0, W2 - 1, H2 - 1], 34, fill=(255, 255, 255, 242))
+            d.ellipse([22, H2 / 2 - 30, 82, H2 / 2 + 30], fill=(236, 72, 153, 255))
+            f1 = ImageFont.truetype(r'C:\Windows\Fonts\msyhbd.ttc', 30)
+            f2 = ImageFont.truetype(r'C:\Windows\Fonts\msyh.ttc', 26)
+            d.text((106, 24), title, font=f1, fill=INK)
+            d.text((106, 68), body, font=f2, fill=(100, 116, 139))
+            return im
+        sp = self.sprite(key, maker)
+        if k < 1:
+            sp = sp.resize((max(2, int(sp.width * (0.7 + 0.3 * k))), max(2, int(sp.height * (0.7 + 0.3 * k)))), Image.BILINEAR)
+        if alpha < 0.999:
+            sp = sp.copy()
+            sp.putalpha(sp.getchannel('A').point(lambda v: int(v * alpha)))
+        img.alpha_composite(sp, (int(cx - sp.width / 2), int(top_y)))
+
+    def stamp_check(self, img, cx, cy, k, color=GREEN, r=90):
+        """对勾 stamp：圆 + 勾，弹性放大。"""
+        if k <= 0.01: return
+        key = ('stamp', color)
+        def maker():
+            ss = 4
+            R = r * ss
+            im = Image.new('RGBA', (R * 2 + 40 * ss, R * 2 + 40 * ss), (0, 0, 0, 0))
+            d = ImageDraw.Draw(im)
+            C = R + 20 * ss
+            for gr, ga in ((1.35, 36), (1.0, 255)):
+                d.ellipse([C - R * gr, C - R * gr, C + R * gr, C + R * gr],
+                          fill=color + (ga,) if gr > 1 else color + (255,))
+            pts = [(C - R * 0.42, C + R * 0.02), (C - R * 0.1, C + R * 0.36), (C + R * 0.46, C - R * 0.3)]
+            d.line(pts, fill=(255, 255, 255, 255), width=int(R * 0.22), joint='curve')
+            return im.resize(((r * 2 + 40), (r * 2 + 40)), Image.LANCZOS)
+        sp = self.sprite(key, maker)
+        size = int((r * 2 + 40) * (0.3 + 0.7 * k))
+        sp2 = sp.resize((size, size), Image.BILINEAR)
+        img.alpha_composite(sp2, (int(cx - size / 2), int(cy - size / 2)))
+
+    def heat_wall(self, img, cx, cy, t, t0, cols=26, rows=7, cw=34, chh=30, gap=6):
+        """26×7 GitHub 风热力墙逐格点亮（绿色渐层 + 少量 amber/purple）。"""
+        import random
+        rnd = random.Random(42)
+        vals = [[rnd.choice([0, 1, 1, 2, 2, 3, 4, 3, 2, 1]) for _ in range(cols)] for _ in range(rows)]
+        shades = [(226, 232, 240), (187, 227, 178), (110, 198, 124), (52, 168, 83), (22, 101, 52)]
+        total = cols * rows
+        for c in range(cols):
+            for r in range(rows):
+                idx = c * rows + r
+                k = clamp01((t - t0 - idx * 0.012) / 0.3)
+                if k <= 0: continue
+                v = vals[r][c]
+                col = shades[v]
+                if v == 0: col = shades[0]
+                x = cx + (c - cols / 2) * (cw + gap)
+                y = cy + (r - rows / 2) * (chh + gap)
+                d = 6 * int(v > 0)
+                ImageDraw.Draw(img, 'RGBA').rounded_rectangle(
+                    [x - cw / 2, y - chh / 2, x + cw / 2 + d, y + chh / 2], 6,
+                    fill=col + (int(255 * outback(k)),))
+        return vals
+
+    def cycle_arrows(self, img, cx, cy, r, rot, color=BLUE, alpha=1.0, width=14):
+        """循环箭头：两段弧 + 箭头头，绕中心旋转。"""
+        if alpha <= 0.01: return
+        key = ('cycle', r, color, round(rot / 0.8))
+        def maker():
+            ss = 4
+            R = r * ss
+            im = Image.new('RGBA', (R * 2 + 60 * ss, R * 2 + 60 * ss), (0, 0, 0, 0))
+            d = ImageDraw.Draw(im)
+            C = R + 30 * ss
+            for a0, a1, flip in ((200, 20, 1), (20, 160, -1)):
+                bbox = [C - R, C - R, C + R, C + R]
+                d.arc(bbox, a0, a1, fill=color + (255,), width=width * ss)
+                import math as _m
+                am = _m.radians((a0 + a1) / 2)
+                ax, ay = C + R * _m.cos(am), C + R * _m.sin(am)
+                sz = 26 * ss
+                d.polygon([(ax + sz * _m.cos(am + 2.6) * flip, ay + sz * _m.sin(am + 2.6) * flip),
+                           (ax + sz * _m.cos(am - 2.6) * flip, ay + sz * _m.sin(am - 2.6) * flip),
+                           (ax, ay)], fill=color + (255,))
+            return im.resize(((r * 2 + 60), (r * 2 + 60)), Image.LANCZOS)
+        sp = self.sprite(('cycle2', r, color, round(rot / 0.8)), maker)
+        if alpha < 0.999:
+            sp = sp.copy()
+            sp.putalpha(sp.getchannel('A').point(lambda v: int(v * alpha)))
+        img.alpha_composite(sp, (int(cx - sp.width / 2), int(cy - sp.height / 2)))
