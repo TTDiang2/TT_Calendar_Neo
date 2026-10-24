@@ -43,3 +43,4 @@ secrets.json
 
 # 个人一键启动脚本（含本机 Node 路径，保留在磁盘但不入库）
 /*.bat
+__pycache__/
