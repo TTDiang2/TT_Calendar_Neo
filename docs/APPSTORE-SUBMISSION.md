@@ -11,6 +11,60 @@
 
 ---
 
+## F. 1.1.0 提审记录（2026-10-24，全自动完成）
+
+**已提交审核** · 提交 id `bc89352a-6be0-45e3-9571-bf4d14c9e0f7` · 版本 1.1.0 · 构建 98 ·
+状态 `WAITING_FOR_REVIEW` · releaseType=AFTER_APPROVAL（过审自动发布，无需手动点）。
+
+### 本次上线的内容
+| 项 | 内容 |
+|---|---|
+| 版本号 | 1.0.0 → 1.1.0（tauri.conf.json），build 98 = CI run 编号 |
+| 商店元数据 | **8 语言全量**（zh-Hans 用 20261007 ASO 优化版**首次落 ASC**——线上此前一直是旧文案：名称 5 字符/关键词 50 字符；zh-Hant/en/ja/ko/fr/es/ru 新译），母本 `scripts/appstore/v110/metadata.json` |
+| App 名称/副标题 | 8 语言（zh-Hans 30 字符满编「TT日历·染色月历待办倒数日」；其他语言 TT Calendar/TTCalendar 品牌名 + 当地语言卖点） |
+| 截图 | **8 语言 × 9 张**（新增第 9 屏「一键搬家」专屏，原隐私屏顺延；营销文案按语言重渲染，App 内文暂为中文——真机 UI 全语言截图留待 v1.2） |
+| App 内活动 | 事件 id 6826484556（8 语言标题+描述+卡片图，图 `artifacts/asc/v110-event-card.png` 语言中立）；**注意：事件类型（Major Update）无 API 字段，需网页补选**，本次未挂入提审 |
+| 年龄分级/审核信息 | 沿用 1.0.0 同款答案与联系方式（ASC 自动继承） |
+| 预览视频 | **未随版本提交**（见下「预览视频踩坑」），文件留存 `artifacts/asc/v110-preview-{zh-Hans,en-US}.mp4` |
+
+### 发版工具链（scripts/appstore/，全程 API 自动化，可复用）
+- `release-v110.mjs create|screens|submit|status` —— 四阶段幂等发布：建版本+8语言元数据（appStoreVersionLocalizations + appInfoLocalizations）→ 批量传截图 → 挂构建+提审（reviewSubmissions 三步）。
+- `v110/metadata.json` —— 8 语言文案母本（含字符数校验过的名称/副标题/关键词/宣传文本/描述/新功能）。
+- `upload-v110-all.mjs` —— 截图批量上传驱动（每语言最多重试 4 次，网络抖动实测可靠）。
+- `upload-event-assets.mjs` / `upload-preview-videos.mjs` —— App 内活动卡片与预览视频上传。
+- `make-preview-video.py` —— ffmpeg 拼屏预览视频。
+- 新坑实录：①**名称/副标题要改「草稿 appInfo」**——建新版本后 ASC 自动生成第二份 appInfo（PREPARE_FOR_SUBMISSION），改线上那份（READY_FOR_SALE）会 409 name 锁死；②年龄分级端点在 `appInfos/{id}/ageRatingDeclaration`（资源 id == appInfoId）；③审核信息端点是单数 `appStoreVersions/{id}/appStoreReviewDetail`；④appInfoLocalizations 新建时 ASC 会自动给草稿 appInfo 播种 8 语言占位。
+
+### 预览视频踩坑（未随本次版本提交的原因）
+- 886×1920 H.264 High@4.0 CFR + 静音 AAC 的**硬切拼接**配方**已实测通过转码**（zh-Hant 一度 COMPLETE）；zoompan/xfade 滤镜链版本稳定 FAILED（坏时间戳嫌疑）。
+- 但 Apple 资产库在反复重验时状态随机翻转（COMPLETE→FAILED 无新上传也翻），提审校验会被瞬时 FAILED 卡住。本次决定不赌：删视频保提交。
+- **过审后可随时补传**（预览视频属于元数据，不需要新构建）；`make-preview-video.py` 改 concat 硬切即可，Ken Burns 版留档 `make-preview-video.py` git 历史。
+
+### 精选提名草稿（Featuring Nominations，网页操作：ASC → App → Featuring → Nominations，提前至少 2 周）
+```
+Title: TT Calendar 1.1 — a color-coded calendar that now speaks 8 languages
+Type: Major App Update
+Planned release: upon approval (late October 2026)
+
+Story: TT Calendar makes effort visible — a month calendar colored by what
+you actually got done, like a GitHub contribution graph for your life.
+v1.1 is our biggest update since launch:
+- Full UI localization into 8 languages (zh-Hans/zh-Hant/en/ja/ko/fr/es/ru)
+  with localized plural rules, lunar calendar terms and date formatting
+- One-tap migration from TickTick (CSV backup) and Todoist (API), including
+  completion history that keeps the heatmap continuous
+- A new 16-step guided onboarding tour, and interactive home-screen widgets
+  including a one-tap check-in widget (iOS 17 App Intents)
+Positioning: no ads, no IAP, no tracking; local-first data with optional
+end-to-end GitHub private-repo sync. Great fit for "Productivity, small but
+mighty" / back-to-school / New Year habit-tracking editorial moments.
+Assets: 9 localized screenshots per language, app preview video (in
+production), icon attached.
+Contact: ttdiang@outlook.com
+```
+
+---
+
 ## A. App Store Connect 文案
 
 ### 应用名称（≤30 字符）

@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const ROOT = join(HERE, '..', '..', '..')
+const ROOT = join(HERE, '..', '..')
 const META = JSON.parse(readFileSync(join(HERE, 'v110', 'metadata.json'), 'utf8'))
 const STATE_PATH = join(ROOT, 'artifacts', 'asc', 'v110-state.json')
 const TMP = join(ROOT, 'artifacts', 'asc', '_tmp-v110.json')
@@ -165,8 +165,8 @@ async function stageCreate() {
     }
   }
 
-  // --- 年龄分级 ---
-  const ard = api('GET', `/v1/appStoreVersions/${vid}/ageRatingDeclaration`)
+  // --- 年龄分级（挂在 appInfo 下，资源 id == appInfoId）---
+  const ard = api('GET', `/v1/appInfos/${APPINFO_ID}/ageRatingDeclaration`)
   if (ard.data?.id) {
     api('PATCH', `/v1/ageRatingDeclarations/${ard.data.id}`, {
       data: { type: 'ageRatingDeclarations', id: ard.data.id, attributes: AGE_ATTRS },
@@ -176,27 +176,20 @@ async function stageCreate() {
     console.log('[create] ⚠️ 版本未带 ageRatingDeclaration 资源，提交时看 readiness 报错再处理')
   }
 
-  // --- 审核信息（联系方式沿用 1.0.0 的，备注换 1.1.0 版）---
-  const details = api('GET', `/v1/appStoreVersions/${vid}/appStoreReviewDetails`)
+  // --- 审核信息（端点为单数 appStoreReviewDetail；1.1.0 建版本时 ASC 已自动继承联系方式）---
+  const details = api('GET', `/v1/appStoreVersions/${vid}/appStoreReviewDetail`)
   const notes = META.reviewNotes
-  const contact = {}
-  const OLD = '0256e99c-f213-44db-a096-05b217cfb621' // 1.0.0 的 review details，抄联系方式
-  try {
-    const old = api('GET', `/v1/appStoreReviewDetails/${OLD}`).data?.attributes ?? {}
-    for (const k of ['contactFirstName', 'contactLastName', 'contactPhone', 'contactEmail'])
-      if (old[k]) contact[k] = old[k]
-  } catch { /* 1.0.0 资源可能随版本只读，抄不到就跳过（提审 readiness 会点名） */ }
   if (details.data?.id) {
     api('PATCH', `/v1/appStoreReviewDetails/${details.data.id}`, {
-      data: { type: 'appStoreReviewDetails', id: details.data.id, attributes: { notes, ...contact } },
+      data: { type: 'appStoreReviewDetails', id: details.data.id, attributes: { notes } },
     })
-    console.log('[create] 审核备注已写入（含联系方式）')
+    console.log('[create] 审核备注已写入（联系方式由 ASC 自动继承）')
   } else {
     api('POST', '/v1/appStoreReviewDetails', {
-      data: { type: 'appStoreReviewDetails', attributes: { notes, demoAccountRequired: false, ...contact },
+      data: { type: 'appStoreReviewDetails', attributes: { notes, demoAccountRequired: false },
         relationships: { appStoreVersion: { data: { type: 'appStoreVersions', id: vid } } } },
     })
-    console.log('[create] 审核信息已创建（含联系方式）')
+    console.log('[create] 审核信息已创建')
   }
 
   saveState(st)
@@ -221,7 +214,7 @@ async function stageScreens() {
 // ---------- submit ----------
 async function waitValidBuild() {
   for (let i = 0; i < 60; i++) {
-    const builds = api('GET', `/v1/builds?filter[app]=${APP_ID}&filter[preReleaseVersionVersionString]=${V110}&sort=-uploadedDate&limit=5`).data ?? []
+    const builds = api('GET', `/v1/builds?filter[app]=${APP_ID}&sort=-uploadedDate&limit=10`).data ?? []
     if (builds.length) {
       const b = builds[0]
       const s = b.attributes.processingState
