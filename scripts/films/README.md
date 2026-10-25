@@ -21,6 +21,33 @@
 | 配乐 | **Node 手写合成器** → WAV 16bit | 振荡器+包络+混响+母带全套可代码化，见 film_music2.mjs |
 | 中文字体 | `C:/Windows/Fonts/msyhbd.ttc`(标题) `msyh.ttc`(正文) `simkai.ttf`(诗意句) | 楷体做情绪句、黑体做信息句 |
 | 质检 | Pillow 逐帧差分 + contact sheet | 见 §4，这是最值钱的一节 |
+| **真实操作实录** | **headless Chrome + CDP** | `cdp_record.mjs`：`Page.startScreencast` 抓帧 + `Runtime.evaluate` 驱动真实点击/打字（§1.5） |
+
+### 1.5 真实操作实录（宣传片的灵魂段落）
+
+IAB 浏览器没有录制能力（capabilities 只有 visibility）。正确路线是 **CDP 直连 headless Chrome**：
+
+```bash
+chrome.exe --headless=new --remote-debugging-port=9333 --user-data-dir=<临时目录> --window-size=430,1000 about:blank
+node cdp_record.mjs <take名>   # 内部连 CDP，输出 rec/<take>/f*.png + timestamps.tsv
+```
+
+- **帧流**：`Page.startScreencast {format:'png', everyFrame:true}` + 逐帧 `screencastFrameAck`；每帧的
+  `metadata.timestamp` 必须落盘（timestamps.tsv）——重采样**按真实时间戳**生成 ffconcat（duration=相邻帧
+  timestamp 差），绝不能按平均帧率展开（screencast 帧间隔不均，动作时刻会错位）。
+- **交互驱动**：helper 挂在 `window.__h`（clickTab/clickFab/typeTitle/completeFirst...），动作表
+  `[秒, js]` 绝对时间驱动。React 受控输入必须用 **native value setter**（直接赋 value 会被
+  value tracker 吞掉，按钮永远 disabled）。Playwright 高层 click 在此页会卡 actionability——
+  用 `Runtime.evaluate` 里 DOM click。
+- **首启动门禁**：`Page.addScriptToEvaluateOnNewDocument` 注入 `tt.lang / tt.onboarded-v1 /
+  tt.tour-done-v1` 三个 localStorage key。
+- **白屏帧**：视图切换时 React 重渲染会有一帧纯白（亮且无结构：mean>225 且 std<10）。
+  检测脚本输出 white.json（帧号→回退帧号），LiveSeg.frame_at 读它回退到白屏前最后一帧。
+  注意 white.json 与帧序列放同目录，别像我们一样存错目录查半小时。
+- **数据连续性是卖点**：一段里新建的待办在下一段真实存在、点掉后统计数字真的变化——
+  录制计划要利用这一点（B 段新建 → C 段点掉同一条 → D 段统计已变）。
+- **环境**：web 版 `apps/web`（数据服务 8766 + vite 5173/5199），演示数据
+  `node --import tsx apps/web/seed-demo.ts <db>`（Node 22，见项目记忆）。拍完杀干净后台进程。
 
 ## 2. 架构：引擎与影片严格分离
 
@@ -79,6 +106,8 @@ while t < DUR:
 #    ffmpeg 抽帧验证时必须单输入单输出，多输入的 -ss 映射会抽错帧（假警报教训）
 
 # ④ 成片终检：ffprobe 时长/规格 + 从 mp4 抽帧（不是从 frame() 函数！）目检
+#    ⚠️ 抽帧必须一条命令一个输入一个输出。多输入多输出的 -ss 映射会静默抽错帧，
+#    两次把正确的成片误判为错版——这是本项目踩过两次的头号假警报。
 ```
 
 ## 5. 坑速查表（每一行都真实踩过）
