@@ -4,7 +4,7 @@
 import { writeFileSync } from 'node:fs'
 
 const SR = 44100
-const DUR = 51.0
+const DUR = 54.0
 const BPM = 92
 const BEAT = 60 / BPM          // 0.6522
 const BAR = BEAT * 4           // 2.6087
@@ -107,6 +107,17 @@ function chime(t0, midi, vel = 0.3, rev = true) {
     add(start + i, s * 0.8, s)
   }
 }
+// ── pop（完成/添加时刻）──
+function pop(t0, vel = 0.5) {
+  const start = (t0 * SR) | 0, len = (0.12 * SR) | 0
+  for (let i = 0; i < len; i++) {
+    const tt = i / SR
+    const f = 520 - 260 * (tt / 0.12)
+    const env = Math.exp(-tt * 34) * Math.min(1, i / 24)
+    const s = Math.sin(2 * Math.PI * f * tt) * 0.5 * env * vel
+    add(start + i, s * 0.9, s)
+  }
+}
 // ── whoosh（幕间噪声扫频）──
 function whoosh(t0, dur = 0.9) {
   const start = (t0 * SR) | 0, len = (dur * SR) | 0
@@ -141,7 +152,7 @@ const CH = {
   Bb: { b: 22, p: [46, 53, 58, 62] },
   C:  { b: 24, p: [48, 55, 60, 64] },
 }
-const PROG = ['F','F','Dm','Dm','Bb','Bb','C','C','F','Dm','Bb','C','F','F','Bb','C','F','Dm','Bb','C']
+const PROG = ['F','F','Dm','Dm','Bb','Bb','C','C','F','Dm','Bb','C','F','F','Bb','C','F','Dm','Bb','C','Bb','C']
 const PENT = [65, 67, 69, 72, 74, 77, 79, 81, 84, 86]
 
 const T_BEAT = 4.56      // 鼓组进入（M2）
@@ -189,8 +200,10 @@ for (let bar = 0; bar < PROG.length; bar++) {
     if (full) hat(t0 + BAR - BEAT / 4, 0.3, true)   // 小节尾开镲
   }
 }
-// 幕间 whoosh
-for (const w of [4.3, 15.8, 28.8, 40.8, 49.7]) whoosh(w)
+// 幕间 whoosh（v3 时间轴）
+for (const w of [4.3, 10.2, 17.2, 23.2, 29.2, 40.2, 44.2, 48.2, 52.7]) whoosh(w)
+// pop：B 段添加（16.9）+ C 段点掉×3（19.9/21.7/23.0 由时间轴定）
+for (const p of [16.9, 19.6, 21.4, 22.9]) pop(p, 0.5)
 // 翻牌 tick（M6 内 29.8-33.6）
 for (let t = 29.9; t < 33.7; t += 0.62) tick(t, 0.5)
 // M7 sparkle 上行簇
