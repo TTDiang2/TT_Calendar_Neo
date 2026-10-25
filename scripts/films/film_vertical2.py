@@ -48,7 +48,6 @@ def shot_slide(img, path, t, t_in, t_out, label, sub=None, from_dx=340):
 def frame(t):
     img = f.base()
     bl = f.blobs(t, [PINK, (165, 200, 255), GREEN, (216, 180, 254)])
-    bl.putalpha(bl.getchannel('A').point(lambda a: int(a * 0.5)))
     img.alpha_composite(bl)
 
     # ── M1 开场 0-4.56 ──

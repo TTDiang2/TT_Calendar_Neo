@@ -61,9 +61,9 @@ class Film:
         self._sprites = {}
         # 颗粒/暗角：预合成 4 张全尺寸 RGBA，运行时只做两次 alpha 合成
         self._grain = []
-        for i in range(4):
-            g = Image.effect_noise((w // 2, h // 2), 26).resize((w, h))
-            self._grain.append(Image.merge('RGBA', (g, g, g, g.point(lambda x: 13))))
+        for i in range(8):
+            g = Image.effect_noise((w // 2, h // 2), 22).resize((w, h))
+            self._grain.append(Image.merge('RGBA', (g, g, g, g.point(lambda x: 6))))
         vig = Image.radial_gradient('L').resize((w, h)).point(lambda x: int(max(0, x - 110) * 0.55))
         self._vig = Image.merge('RGBA', (Image.new('L', (w, h), 20),
                                          Image.new('L', (w, h), 16),
@@ -155,12 +155,15 @@ class Film:
                     rr = r * ring
                     d.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], fill=col + (a,))
             img = img.filter(ImageFilter.GaussianBlur(w4 // 14))
-            return img.resize((self.w, self.h), Image.BILINEAR)
+            out = img.resize((self.w, self.h), Image.BILINEAR)
+            # alpha 预乘在缓存生成时完成（调用处不得原地修改缓存对象）
+            out.putalpha(out.getchannel('A').point(lambda a: int(a * 0.5)))
+            return out
         return self.sprite(key, maker)
 
     # ── 胶片颗粒 + 暗角（全部预合成，只做两次合成）──
-    def filmic(self, img, frame_idx, grain_alpha=13):
-        img.alpha_composite(self._grain[frame_idx % 4])
+    def filmic(self, img, frame_idx, grain_alpha=6):
+        img.alpha_composite(self._grain[(frame_idx // 2) % 8])
         img.alpha_composite(self._vig)
 
     # ── 染色月历格子：按颜色缓存开花精灵，按 k 缩放贴图 ──
